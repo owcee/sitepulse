@@ -15,6 +15,7 @@ import LoginScreen from './src/screens/auth/LoginScreen';
 import SignUpScreen from './src/screens/auth/SignUpScreen';
 import { onAuthStateChange, signOutUser } from './src/services/authService';
 import CreateNewProjectScreen from './src/screens/engineer/CreateNewProjectScreen';
+import { registerForPushNotifications, clearFCMToken } from './src/services/fcmService';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -26,6 +27,7 @@ export default function App() {
   // Handle logout
   const handleLogout = async () => {
     try {
+      await clearFCMToken(); // Clear push notification token
       await signOutUser();
       // setUser(null) will be called automatically by onAuthStateChange
     } catch (error) {
@@ -53,6 +55,16 @@ export default function App() {
     const unsubscribe = onAuthStateChange(async (authUser: User | null) => {
       console.log('App.tsx - Auth state changed:', authUser);
       setUser(authUser);
+      
+      // Register for push notifications when user logs in
+      if (authUser) {
+        try {
+          await registerForPushNotifications();
+          console.log('✅ Push notifications registered');
+        } catch (error) {
+          console.error('Error registering for push notifications:', error);
+        }
+      }
       
       // Load user's project if they have one
       if (authUser && authUser.projectId) {
