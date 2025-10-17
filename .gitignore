@@ -1,0 +1,42 @@
+# Expo
+.expo/
+dist/
+web-build/
+
+# Dependencies
+node_modules/
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.keystore
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*~
+
+# Macintosh
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+*.tmp.*
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Firebase
+firebase-service-account.json
+

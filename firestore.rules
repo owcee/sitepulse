@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isEngineer() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/engineer_accounts/$(request.auth.uid));
+    }
+    
+    function isWorker() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/worker_accounts/$(request.auth.uid));
+    }
+    
+    function getUserProjectId() {
+      return isEngineer() ? 
+        get(/databases/$(database)/documents/engineer_accounts/$(request.auth.uid)).data.currentProjectId :
+        get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data.projectId;
+    }
+    
+    function isEngineerForProject(projectId) {
+      return isEngineer() && 
+        (projectId in get(/databases/$(database)/documents/engineer_accounts/$(request.auth.uid)).data.activeProjectIds);
+    }
+    
+    // Engineer accounts - engineers can read/write their own
+    match /engineer_accounts/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Worker accounts - workers can read their own, engineers can read all
+    match /worker_accounts/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isEngineer());
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Projects - engineers can create and manage, workers can read assigned project
+    match /projects/{projectId} {
+      allow create: if isEngineer();
+      allow read: if isAuthenticated() && 
+        (isEngineerForProject(projectId) || getUserProjectId() == projectId);
+      allow list: if isAuthenticated() && isEngineer();
+      allow update, delete: if isEngineer() && 
+        resource.data.engineerId == request.auth.uid;
+    }
+    
+    // Notifications - users can read/update their own, system can create
+    match /notifications/{notificationId} {
+      allow read, update: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // Task Photos - workers create, engineers approve/reject
+    match /task_photos/{photoId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow update: if isEngineer();
+      allow delete: if false;
+    }
+    
+    // Usage Submissions - workers create, engineers review
+    match /usage_submissions/{submissionId} {
+      allow create: if isWorker();
+      allow read: if isAuthenticated() && 
+        (isEngineer() || resource.data.workerId == request.auth.uid);
+      allow update: if isEngineer();
+      allow delete: if false;
+    }
+    
+    // Worker Assignments - engineers create, workers accept/reject
+    match /worker_assignments/{workerId} {
+      allow create: if isEngineer();
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == workerId || isEngineer());
+      allow update: if isAuthenticated() && 
+        (request.auth.uid == workerId || isEngineer());
+      allow delete: if isEngineer();
+    }
+    
+    // Project data - users can only access their project's data
+    match /materials/{materialId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.projectId == getUserProjectId();
+      allow create: if isAuthenticated();
+    }
+    
+    match /workers/{workerId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.projectId == getUserProjectId();
+      allow create: if isAuthenticated();
+    }
+    
+    match /equipment/{equipmentId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.projectId == getUserProjectId();
+      allow create: if isAuthenticated();
+    }
+    
+    match /budget_logs/{logId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.projectId == getUserProjectId();
+      allow create: if isAuthenticated();
+    }
+    
+    // Tasks - engineers can manage, workers can read their assigned tasks
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated() && (
+        isEngineerForProject(resource.data.projectId) || 
+        request.auth.uid in resource.data.assigned_worker_ids
+      );
+      allow create, update, delete: if isAuthenticated() && 
+        isEngineerForProject(request.resource.data.projectId);
+    }
+    
+    // Chat messages - all project members can read and create
+    match /chat_messages/{messageId} {
+      allow read, create: if isAuthenticated() && (
+        isEngineerForProject(resource.data.projectId) || 
+        getUserProjectId() == resource.data.projectId
+      );
+      allow update, delete: if isAuthenticated() && 
+        resource.data.senderId == request.auth.uid;
+    }
+  }
+}
+

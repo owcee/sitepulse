@@ -1,0 +1,153 @@
+You are designing the complete UI/UX for "SitePulse" – a mobile-based construction task monitoring, delay prediction, resource management, and group chat application for small to mid-scale construction projects.
+
+==================================================================
+IMPORTANT INSTRUCTION
+==================================================================
+Only build the **frontend UI/UX** in **React (React Native for mobile)** at this stage. 
+Do **not** implement backend logic, APIs, or Firebase/TensorFlow Lite integration yet.
+However, ensure all components, screens, and data structures are designed to be fully compatible with:
+- Firebase Firestore
+- Firebase Authentication
+- Firebase Cloud Functions
+- Firebase Cloud Messaging
+- TensorFlow Lite (MobileNetV3 CNN & Linear Regression)
+
+==================================================================
+TECH STACK (for compatibility)
+==================================================================
+- **Frontend**: React (React Native for mobile)
+- **Backend** (future integration): Firebase / Firestore for authentication, real-time sync, resource management, and group chat
+- **Machine Learning** (future integration): TensorFlow Lite for:
+    - CNN (MobileNetV3) for task image classification
+    - Linear Regression for delay prediction
+- **Resource Management & Chat**: Firestore collections with Cloud Functions triggers and push notifications
+
+==================================================================
+ROLE 1: ENGINEER / PROJECT MANAGER UI/UX
+==================================================================
+
+### GENERAL LAYOUT
+- **Primary Navigation (Bottom Tab Bar)**:
+  1. Dashboard
+  2. Tasks
+  3. Delay Prediction
+  4. Resources
+  5. Chat
+
+- **Top Navigation Bar**:
+  - Project Selector (dropdown for switching projects)
+  - Profile icon with quick settings
+
+---
+
+### 1. DASHBOARD SCREEN
+- **Task Status Summary**: % of Not Started, In Progress, Completed (color-coded)
+- **Latest Photos**: thumbnails of recent worker uploads with CNN classification + verification status
+- **Delay Risk**: chart showing estimated completion date & delay warnings
+- **Resource Snapshot**: budget spent vs remaining, payroll summary, inventory alerts
+- **Unread Messages Badge** from chat
+
+---
+
+### 2. TASKS MODULE
+- **Task List View**:
+  - Filters: All, Not Started, In Progress, Completed
+  - Each card: title, CNN classification, verification status, last update
+- **Task Detail View**:
+  - Large photo preview
+  - CNN classification result
+  - Verification controls: Approve ✅ / Reject ❌ / Reclassify dropdown
+  - Notes input for feedback
+- All screens styled for mobile use in the field
+
+---
+
+### 3. DELAY PREDICTION MODULE
+- Progress timeline chart
+- Predicted delay result from Linear Regression (future integration)
+- Factors influencing prediction
+- Export PDF button
+
+---
+
+### 4. RESOURCE MANAGEMENT MODULE
+**Tabs:**
+- Budget: total, spent, remaining (pie chart/bar chart)
+- Payroll: list of workers, hours worked, wages
+- Inventory: stock list, reorder alerts (red highlight for low stock)
+
+---
+
+### 5. GROUP CHAT MODULE
+- Per-project chat rooms
+- Message cards: sender name, role, timestamp, text/image/file
+- Badge notifications for unread messages
+
+---
+
+==================================================================
+ROLE 2: WORKER UI/UX
+==================================================================
+
+### GENERAL LAYOUT
+- **Primary Navigation (Bottom Tab Bar)**:
+  1. Tasks
+  2. Upload Photo
+  3. Chat
+  4. Notifications
+  5. Profile
+
+---
+
+### 1. TASKS MODULE
+- Task List View:
+  - Assigned tasks only
+  - Status icons (gray/yellow/green)
+  - Due date + short description
+- Task Detail View:
+  - Instructions
+  - Last approved photo from engineer
+  - Upload new photo option
+
+---
+
+### 2. UPLOAD PHOTO MODULE
+- Camera integration
+- After capture:
+  - CNN (MobileNetV3) runs locally (future backend integration)
+  - Display classification result instantly
+  - Notes input
+  - Submit button sends for engineer review
+- Show “Pending Verification” until approved
+
+---
+
+### 3. GROUP CHAT MODULE
+- Same project chat as engineer side
+- Workers can send messages, questions, and images
+
+---
+
+### 4. NOTIFICATIONS MODULE
+- Task approvals/rejections
+- Delay warnings
+- Material/resource alerts
+
+---
+
+### 5. PROFILE MODULE
+- Name, role, assigned project
+- Hours worked (synced from payroll)
+- Payroll summary (read-only)
+- Manager contact info
+
+==================================================================
+UI DESIGN GUIDELINES (BOTH ROLES)
+==================================================================
+- **Color Coding**: Red = urgent, Yellow = warning, Green = complete
+- **Fonts**: Roboto or Inter for outdoor readability
+- **Buttons**: Large, touch-friendly for gloved hands
+- **Dark Mode**: Optional
+- **Offline Caching**: For photo uploads & chat messages
+- **Push Notifications**: Placeholder UI for future Firebase integration
+- **Data Sync**: Placeholder UI for future Firestore integration
