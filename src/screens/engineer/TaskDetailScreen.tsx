@@ -8,8 +8,6 @@ import {
   TextInput, 
   Chip, 
   IconButton,
-  Menu,
-  Divider,
   Portal,
   Modal,
   Badge 
@@ -44,21 +42,6 @@ const mockTaskDetail: Task = {
   },
 };
 
-const cnnClassificationOptions = [
-  'Foundation Work',
-  'Concrete Pouring',
-  'Electrical Work',
-  'Plumbing',
-  'Framing',
-  'Roofing',
-  'Drywall',
-  'Flooring',
-  'Painting',
-  'HVAC Installation',
-  'Insulation',
-  'Windows/Doors',
-];
-
 export default function TaskDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -68,8 +51,6 @@ export default function TaskDetailScreen() {
   
   const [task] = useState<Task>(mockTaskDetail);
   const [verificationNotes, setVerificationNotes] = useState('');
-  const [reclassificationMenuVisible, setReclassificationMenuVisible] = useState(false);
-  const [selectedReclassification, setSelectedReclassification] = useState('');
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
   const [processing, setProcessing] = useState(false);
 
@@ -117,26 +98,6 @@ export default function TaskDetailScreen() {
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
       setProcessing(false);
-    }, 1000);
-  };
-
-  const handleReclassify = async () => {
-    if (!selectedReclassification) {
-      Alert.alert('Classification Required', 'Please select a new classification.');
-      return;
-    }
-
-    setProcessing(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      Alert.alert(
-        'Reclassified',
-        `Photo has been reclassified as "${selectedReclassification}".`,
-        [{ text: 'OK' }]
-      );
-      setProcessing(false);
-      setReclassificationMenuVisible(false);
     }, 1000);
   };
 
@@ -268,52 +229,6 @@ export default function TaskDetailScreen() {
                     >
                       {Math.round((task.lastPhoto.confidence || 0) * 100)}% Confidence
                     </Chip>
-                  </View>
-
-                  {/* Reclassification Option */}
-                  <View style={styles.reclassifySection}>
-                    <Menu
-                      visible={reclassificationMenuVisible}
-                      onDismiss={() => setReclassificationMenuVisible(false)}
-                      anchor={
-                        <Button
-                          mode="outlined"
-                          onPress={() => setReclassificationMenuVisible(true)}
-                          icon="tag"
-                          style={styles.reclassifyButton}
-                        >
-                          Reclassify
-                        </Button>
-                      }
-                    >
-                      <Menu.Item title="Classification Options" disabled />
-                      <Divider />
-                      {cnnClassificationOptions.map((option) => (
-                        <Menu.Item
-                          key={option}
-                          onPress={() => {
-                            setSelectedReclassification(option);
-                            setReclassificationMenuVisible(false);
-                          }}
-                          title={option}
-                        />
-                      ))}
-                    </Menu>
-
-                    {selectedReclassification && (
-                      <View style={styles.selectedReclassification}>
-                        <Paragraph style={styles.reclassifyLabel}>New Classification:</Paragraph>
-                        <Chip style={styles.reclassifyChip}>{selectedReclassification}</Chip>
-                        <Button
-                          mode="contained"
-                          onPress={handleReclassify}
-                          loading={processing}
-                          style={styles.applyReclassifyButton}
-                        >
-                          Apply
-                        </Button>
-                      </View>
-                    )}
                   </View>
                 </Card.Content>
               </Card>
@@ -537,32 +452,6 @@ const styles = StyleSheet.create({
   },
   confidenceChip: {
     height: 28,
-  },
-  reclassifySection: {
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    paddingTop: spacing.md,
-  },
-  reclassifyButton: {
-    alignSelf: 'flex-start',
-  },
-  selectedReclassification: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    backgroundColor: 'white',
-    borderRadius: theme.roundness,
-  },
-  reclassifyLabel: {
-    fontSize: fontSizes.sm,
-    fontWeight: '500',
-    marginBottom: spacing.sm,
-  },
-  reclassifyChip: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  applyReclassifyButton: {
-    alignSelf: 'flex-start',
   },
   workerNotes: {
     backgroundColor: '#fff3cd',
