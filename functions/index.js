@@ -223,3 +223,6 @@ async function deleteQueryBatch(query, batchSize = 500) {
   return snapshot.size;
 }
 
+
+
+

@@ -24,7 +24,7 @@ service cloud.firestore {
     
     function isEngineerForProject(projectId) {
       return isEngineer() && 
-        (projectId in get(/databases/$(database)/documents/engineer_accounts/$(request.auth.uid)).data.activeProjectIds);
+        get(/databases/$(database)/documents/engineer_accounts/$(request.auth.uid)).data.activeProjectIds.hasAny([projectId]);
     }
     
     // Engineer accounts - engineers can read/write their own

@@ -69,13 +69,30 @@ export default function App() {
       // Load user's project if they have one
       if (authUser && authUser.projectId) {
         try {
+          console.log('📦 Loading project:', authUser.projectId);
           const { getProject } = await import('./src/services/projectService');
-          const project = await getProject(authUser.projectId);
+          
+          // Add timeout to prevent infinite loading
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Project load timeout')), 10000)
+          );
+          
+          const project = await Promise.race([
+            getProject(authUser.projectId),
+            timeoutPromise
+          ]) as any;
+          
           if (project) {
+            console.log('✅ Project loaded successfully:', project.name);
             setCurrentProject(project);
+          } else {
+            console.error('❌ Project not found');
+            setCurrentProject(null);
           }
         } catch (error) {
-          console.error('Error loading project:', error);
+          console.error('❌ Error loading project:', error);
+          // Set null to prevent infinite loading - user can create new project
+          setCurrentProject(null);
         }
       } else {
         setCurrentProject(null);
@@ -197,6 +214,18 @@ export default function App() {
               <StatusBar style="auto" />
             </NavigationContainer>
           </ProjectDataProvider>
+        </SafeAreaProvider>
+      </PaperProvider>
+    );
+  }
+
+  // Fallback: If user has projectId but project failed to load, show create screen
+  if (user.projectId && !currentProject && !isLoading) {
+    console.log('⚠️ Project ID exists but project not loaded - showing create screen');
+    return (
+      <PaperProvider theme={theme}>
+        <SafeAreaProvider>
+          <CreateNewProjectScreen onProjectCreated={handleRefresh} />
         </SafeAreaProvider>
       </PaperProvider>
     );
