@@ -222,8 +222,7 @@ export async function getWorkerTasks(workerId: string): Promise<Task[]> {
     const tasksRef = collection(db, 'tasks');
     const q = query(
       tasksRef,
-      where('assigned_worker_ids', 'array-contains', workerId),
-      orderBy('createdAt', 'desc')
+      where('assigned_worker_ids', 'array-contains', workerId)
     );
 
     const snapshot = await getDocs(q);
@@ -254,7 +253,8 @@ export async function getWorkerTasks(workerId: string): Promise<Task[]> {
       });
     });
 
-    return tasks;
+    // Sort by createdAt in JavaScript instead of Firestore (avoids index requirement)
+    return tasks.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error) {
     console.error('Error getting worker tasks:', error);
     throw new Error('Failed to fetch worker tasks');
