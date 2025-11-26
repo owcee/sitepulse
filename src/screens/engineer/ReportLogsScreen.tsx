@@ -396,31 +396,22 @@ export default function ReportLogsScreen() {
 
       <ScrollView style={styles.logsContainer} showsVerticalScrollIndicator={false}>
         {activeTab === 'reports' ? (
-          // Reports Tab - Show pending and all logs with full details
-          selectedWorker.logs.length > 0 ? (
-            <>
-              {selectedWorker.logs.map(renderLogItem)}
-              {expandedHistoryId && (
-                <Button
-                  mode="text"
-                  onPress={() => setExpandedHistoryId(null)}
-                  style={styles.collapseButton}
-                >
-                  Collapse All
-                </Button>
-              )}
-            </>
+          // Reports Tab - Show ONLY pending logs with full details
+          selectedWorker.logs.filter(l => l.status === 'pending').length > 0 ? (
+            selectedWorker.logs
+              .filter(l => l.status === 'pending')
+              .map(renderLogItem)
           ) : (
             <Card style={styles.emptyCard}>
               <Card.Content>
                 <Paragraph style={styles.emptyText}>
-                  No logs submitted by this worker yet.
+                  No pending reports for this worker.
                 </Paragraph>
               </Card.Content>
             </Card>
           )
         ) : (
-          // History Tab - Show only approved/rejected with ID and date
+          // History Tab - Show ONLY approved/rejected with ID and date
           selectedWorker.logs.filter(l => l.status !== 'pending').length > 0 ? (
             <>
               {selectedWorker.logs

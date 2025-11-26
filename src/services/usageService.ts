@@ -280,6 +280,7 @@ export async function getWorkerSubmissions(workerId: string): Promise<UsageSubmi
 
 /**
  * Approve usage submission (engineer action)
+ * Updates inventory counts and equipment status upon approval
  * @param submissionId - Submission ID
  * @returns Promise<void>
  */
@@ -290,6 +291,62 @@ export async function approveUsageSubmission(submissionId: string): Promise<void
     }
 
     const submissionRef = doc(db, 'usage_submissions', submissionId);
+    const submissionSnap = await getDoc(submissionRef);
+    
+    if (!submissionSnap.exists()) {
+      throw new Error('Submission not found');
+    }
+
+    const submission = submissionSnap.data() as UsageSubmission;
+
+    // Update inventory or equipment status based on type
+    if (submission.type === 'equipment') {
+      // Update equipment status to 'in_use'
+      const equipmentRef = doc(db, 'equipment', submission.itemId);
+      await updateDoc(equipmentRef, {
+        status: 'in_use',
+        lastUsedBy: submission.workerId,
+        lastUsedAt: serverTimestamp()
+      });
+      console.log(`Equipment ${submission.itemId} marked as in_use`);
+    } else if (submission.type === 'material') {
+      // Update material quantity
+      const materialRef = doc(db, 'materials', submission.itemId);
+      const materialSnap = await getDoc(materialRef);
+      
+      if (materialSnap.exists()) {
+        const materialData = materialSnap.data();
+        const currentQuantity = materialData.quantity || 0;
+        const usedQuantity = submission.quantity || 0;
+        const newQuantity = Math.max(0, currentQuantity - usedQuantity);
+        
+        await updateDoc(materialRef, {
+          quantity: newQuantity,
+          lastUpdated: serverTimestamp()
+        });
+        console.log(`Material ${submission.itemId} quantity updated to ${newQuantity}`);
+
+        // Check for low stock (threshold: 10 units or 20% of previous if we tracked it, default 10)
+        const LOW_STOCK_THRESHOLD = 10;
+        if (newQuantity <= LOW_STOCK_THRESHOLD) {
+          // Send low stock alert to engineer
+          const project = await getProject(submission.projectId);
+          if (project && project.engineerId) {
+            await sendNotification(project.engineerId, {
+              title: 'Low Stock Alert',
+              body: `Stock for ${materialData.name} is low (${newQuantity} ${materialData.unit || 'units'} remaining).`,
+              type: 'low_stock',
+              relatedId: submission.itemId,
+              projectId: submission.projectId,
+              status: 'warning'
+            });
+            console.log('Low stock alert sent');
+          }
+        }
+      }
+    }
+
+    // Update submission status
     await updateDoc(submissionRef, {
       status: 'approved',
       reviewedAt: serverTimestamp(),

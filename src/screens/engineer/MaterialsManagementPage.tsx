@@ -90,6 +90,11 @@ export default function MaterialsManagementPage() {
       dateAdded: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
     };
 
+    if (!editingMaterial) {
+      // Initial purchase quantity
+      materialData.totalBought = quantity;
+    }
+
     const supplierValue = formData.supplier.trim();
     if (supplierValue) {
       materialData.supplier = supplierValue;
@@ -203,9 +208,15 @@ export default function MaterialsManagementPage() {
 
                 <View style={styles.materialDetails}>
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Quantity:</Text>
+                    <Text style={styles.detailLabel}>Status:</Text>
                     <Text style={styles.detailValue}>
-                      {material.quantity} {material.unit}
+                      <Text style={{ fontWeight: 'bold', color: constructionColors.complete }}>
+                        {material.quantity} available
+                      </Text>
+                      <Text style={{ color: theme.colors.onSurfaceVariant }}>
+                        {' / '}
+                        {material.totalBought || material.quantity} bought
+                      </Text>
                     </Text>
                   </View>
                   <View style={styles.detailRow}>

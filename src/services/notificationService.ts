@@ -23,13 +23,13 @@ export interface Notification {
   userId: string;
   title: string;
   body: string;
-  type: 'task_approval' | 'task_rejection' | 'project_assignment' | 'usage_approved' | 'usage_rejected' | 'system' | 'message';
+  type: 'task_approval' | 'task_rejection' | 'project_assignment' | 'usage_approved' | 'usage_rejected' | 'system' | 'message' | 'low_stock';
   read: boolean;
   timestamp: Date;
   relatedId?: string;
   projectId?: string;
   assignmentId?: string;
-  status?: 'pending' | 'accepted' | 'rejected' | 'completed' | 'info';
+  status?: 'pending' | 'accepted' | 'rejected' | 'completed' | 'info' | 'warning';
 }
 
 /**

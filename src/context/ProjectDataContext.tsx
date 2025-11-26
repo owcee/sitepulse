@@ -5,7 +5,8 @@ import * as firebaseDataService from '../services/firebaseDataService';
 export interface Material {
   id: string;
   name: string;
-  quantity: number;
+  quantity: number; // Current available quantity
+  totalBought?: number; // Total quantity purchased
   price: number;
   unit: string;
   category: string;
