@@ -164,6 +164,51 @@ export async function getTask(taskId: string): Promise<Task | null> {
 }
 
 /**
+ * Get a single task by ID
+ * @param taskId - Task ID
+ * @returns Promise<Task | null> - Task object or null if not found
+ */
+export async function getTaskById(taskId: string): Promise<Task | null> {
+  try {
+    const taskRef = doc(db, 'tasks', taskId);
+    const taskSnap = await getDoc(taskRef);
+    
+    if (!taskSnap.exists()) {
+      console.log('Task not found:', taskId);
+      return null;
+    }
+    
+    const data = taskSnap.data();
+    const task: Task = {
+      id: taskSnap.id,
+      projectId: data.projectId,
+      title: data.title,
+      category: data.category,
+      subTask: data.subTask,
+      tagalogLabel: data.tagalogLabel,
+      status: data.status,
+      planned_start_date: data.planned_start_date,
+      planned_end_date: data.planned_end_date,
+      actual_start_date: data.actual_start_date,
+      actual_end_date: data.actual_end_date,
+      assigned_worker_ids: data.assigned_worker_ids || [],
+      assigned_worker_names: data.assigned_worker_names || [],
+      cnnEligible: data.cnnEligible || false,
+      notes: data.notes,
+      verification: data.verification,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+      createdBy: data.createdBy
+    };
+    
+    return task;
+  } catch (error) {
+    console.error('Error getting task by ID:', error);
+    throw new Error('Failed to fetch task');
+  }
+}
+
+/**
  * Get all tasks for a project
  * @param projectId - Project ID
  * @returns Promise<Task[]> - Array of tasks

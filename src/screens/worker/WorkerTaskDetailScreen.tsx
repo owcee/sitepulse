@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert, Text as RNText } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, Alert, Text as RNText, ActivityIndicator } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -17,60 +17,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
-import { Task, TaskPhoto } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
-
-// Mock task detail data for worker
-const mockWorkerTaskDetail: Task = {
-  id: '2',
-  title: 'Concrete Pouring - Level 1',
-  description: 'Pour concrete for first floor slab. Ensure proper mixing ratios and curing procedures are followed. Check for any air bubbles and ensure even distribution. Follow all safety protocols and wear appropriate PPE.',
-  assignedTo: 'worker-2',
-  projectId: 'project-1',
-  status: 'in_progress',
-  dueDate: '2024-01-25',
-  createdAt: '2024-01-20',
-  updatedAt: '2024-01-22',
-  lastPhoto: {
-    id: 'photo-2',
-    taskId: '2',
-    imageUri: 'https://via.placeholder.com/400x300/4CAF50/FFFFFF?text=Concrete+Pour',
-    cnnClassification: 'Concrete Pouring',
-    confidence: 0.88,
-    verificationStatus: 'pending',
-    notes: 'Concrete pour completed according to specifications. Ready for engineer review.',
-    uploadedBy: 'worker-2',
-    uploadedAt: '2024-01-22T14:30:00Z',
-  },
-};
-
-// Mock instruction steps
-const mockInstructions = [
-  'Set up concrete forms and ensure they are level and secure',
-  'Verify concrete mix ratio meets specifications (1:2:3 ratio)',
-  'Pour concrete in sections, starting from one corner',
-  'Use vibrator to eliminate air bubbles',
-  'Level surface with screed board',
-  'Apply finishing techniques as required',
-  'Cover with plastic sheeting for curing',
-  'Take photos at key stages for documentation',
-];
-
-// Mock approved photos from engineer
-const mockApprovedPhotos = [
-  {
-    id: 'approved-1',
-    imageUri: 'https://via.placeholder.com/150x100/4CAF50/FFFFFF?text=Setup',
-    description: 'Forms setup - Approved',
-    uploadedAt: '2024-01-21T10:00:00Z',
-  },
-  {
-    id: 'approved-2',
-    imageUri: 'https://via.placeholder.com/150x100/4CAF50/FFFFFF?text=Mix',
-    description: 'Concrete mix - Approved',
-    uploadedAt: '2024-01-21T14:00:00Z',
-  },
-];
+import { getTaskById, updateTaskStatus, Task as FirebaseTask } from '../../services/taskService';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadTaskPhoto } from '../../services/photoService';
 
 export default function WorkerTaskDetailScreen() {
   const route = useRoute();
@@ -79,12 +29,46 @@ export default function WorkerTaskDetailScreen() {
   // @ts-ignore - Route params would be properly typed in production
   const { taskId } = route.params;
   
-  const [task] = useState<Task>(mockWorkerTaskDetail);
+  const [task, setTask] = useState<FirebaseTask | null>(null);
+  const [loading, setLoading] = useState(true);
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
   const [selectedPhotoUri, setSelectedPhotoUri] = useState('');
-  const [newNotes, setNewNotes] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  const getStatusColor = (status: Task['status']) => {
+  // Load task from Firestore
+  useEffect(() => {
+    loadTaskDetails();
+  }, [taskId]);
+
+  const loadTaskDetails = async () => {
+    try {
+      setLoading(true);
+      const taskData = await getTaskById(taskId);
+      if (taskData) {
+        setTask(taskData);
+        
+        // Check if photo was rejected and show notification
+        if (taskData.verification?.engineerStatus === 'rejected') {
+          Alert.alert(
+            'Photo Rejected',
+            `Your photo submission was rejected. ${taskData.verification.engineerNotes || 'Please upload a new photo.'}`,
+            [{ text: 'OK' }]
+          );
+        }
+      } else {
+        Alert.alert('Error', 'Task not found');
+        navigation.goBack();
+      }
+    } catch (error: any) {
+      console.error('Error loading task:', error);
+      Alert.alert('Error', `Failed to load task: ${error.message}`);
+      navigation.goBack();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
         return constructionColors.complete;
@@ -97,7 +81,6 @@ export default function WorkerTaskDetailScreen() {
     }
   };
 
-
   const getVerificationStatusInfo = (status: string) => {
     switch (status) {
       case 'approved':
@@ -107,20 +90,84 @@ export default function WorkerTaskDetailScreen() {
       case 'rejected':
         return { color: constructionColors.urgent, icon: 'close-circle', text: 'Rejected - Needs Revision' };
       default:
-        return { color: theme.colors.disabled, icon: 'help-circle', text: 'Unknown Status' };
+        return { color: theme.colors.disabled, icon: 'help-circle', text: 'No Photo Submitted' };
     }
   };
 
-  // Action handlers removed per user request
+  const handleUploadPhoto = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
+        return;
+      }
 
-  const handleAddNotes = async () => {
-    if (!newNotes.trim()) {
-      Alert.alert('Notes Required', 'Please enter some notes before submitting.');
-      return;
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingPhoto(true);
+        
+        // Upload photo with CNN verification
+        await uploadTaskPhoto(
+          taskId,
+          result.assets[0].uri,
+          task?.cnnEligible || false
+        );
+
+        Alert.alert('Success', 'Photo uploaded successfully. Awaiting engineer review.');
+        
+        // Reload task to show new photo
+        await loadTaskDetails();
+      }
+    } catch (error: any) {
+      console.error('Error uploading photo:', error);
+      Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
     }
+  };
 
-    Alert.alert('Notes Added', 'Your notes have been added to the task.');
-    setNewNotes('');
+  const handleStartTask = async () => {
+    if (!task) return;
+    
+    try {
+      await updateTaskStatus(taskId, 'in_progress');
+      Alert.alert('Task Started', 'Task status updated to In Progress');
+      await loadTaskDetails();
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleCompleteTask = async () => {
+    if (!task) return;
+    
+    Alert.alert(
+      'Complete Task',
+      'Are you sure you want to mark this task as completed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete',
+          onPress: async () => {
+            try {
+              await updateTaskStatus(taskId, 'completed');
+              Alert.alert('Task Completed', 'Task marked as completed');
+              await loadTaskDetails();
+            } catch (error: any) {
+              Alert.alert('Error', error.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const openPhotoModal = (imageUri: string) => {
@@ -140,10 +187,31 @@ export default function WorkerTaskDetailScreen() {
     return diffDays;
   };
 
-  const daysUntilDue = getDaysUntilDue(task.dueDate);
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Paragraph style={styles.loadingText}>Loading task details...</Paragraph>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!task) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.loadingContainer}>
+          <Paragraph>Task not found</Paragraph>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const daysUntilDue = getDaysUntilDue(task.planned_end_date);
   const isOverdue = daysUntilDue < 0;
   const isDueSoon = daysUntilDue <= 2 && daysUntilDue >= 0;
-  const verificationInfo = task.lastPhoto ? getVerificationStatusInfo(task.lastPhoto.verificationStatus) : null;
+  const verificationInfo = task.verification?.engineerStatus ? getVerificationStatusInfo(task.verification.engineerStatus) : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -156,11 +224,7 @@ export default function WorkerTaskDetailScreen() {
           iconColor={theme.colors.primary}
         />
         <Title style={styles.headerTitle}>Task Details</Title>
-        <IconButton
-          icon="help-circle"
-          size={24}
-          iconColor={theme.colors.primary}
-        />
+        <View style={{ width: 48 }} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -180,8 +244,16 @@ export default function WorkerTaskDetailScreen() {
               </View>
             </View>
 
+            <Paragraph style={styles.taskCategory}>
+              Category: {task.category.replace('_', ' ')}
+            </Paragraph>
+
             <Paragraph style={styles.taskDescription}>
-              {task.description}
+              {task.subTask}
+            </Paragraph>
+
+            <Paragraph style={styles.tagalogLabel}>
+              {task.tagalogLabel}
             </Paragraph>
 
             {/* Due Date Alert */}
@@ -209,192 +281,130 @@ export default function WorkerTaskDetailScreen() {
 
             <View style={styles.taskDetails}>
               <View style={styles.detailRow}>
-                <Paragraph style={styles.detailLabel}>Due Date:</Paragraph>
+                <Paragraph style={styles.detailLabel}>Start Date</Paragraph>
+                <Paragraph style={styles.detailValue}>
+                  {new Date(task.planned_start_date).toLocaleDateString()}
+                </Paragraph>
+              </View>
+              <View style={styles.detailRow}>
+                <Paragraph style={styles.detailLabel}>Due Date</Paragraph>
                 <Paragraph style={[
                   styles.detailValue,
                   (isOverdue || isDueSoon) && { color: isOverdue ? constructionColors.urgent : constructionColors.warning }
                 ]}>
-                  {formatDate(task.dueDate)}
+                  {new Date(task.planned_end_date).toLocaleDateString()}
                 </Paragraph>
               </View>
-              <View style={styles.detailRow}>
-                <Paragraph style={styles.detailLabel}>Created:</Paragraph>
-                <Paragraph style={styles.detailValue}>{formatDate(task.createdAt)}</Paragraph>
-              </View>
-              <View style={styles.detailRow}>
-                <Paragraph style={styles.detailLabel}>Last Updated:</Paragraph>
-                <Paragraph style={styles.detailValue}>{formatDate(task.updatedAt)}</Paragraph>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Instructions Card */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.instructionsHeader}>
-              <Title style={styles.cardTitle}>Task Instructions</Title>
-              <IconButton icon="clipboard-outline" size={20} iconColor={theme.colors.primary} />
-            </View>
-            
-            <View style={styles.instructionsList}>
-              {mockInstructions.map((instruction, index) => (
-                <View key={index} style={styles.instructionItem}>
-                  <View style={styles.instructionNumber}>
-                    <Paragraph style={styles.instructionNumberText}>{index + 1}</Paragraph>
-                  </View>
-                  <Paragraph style={styles.instructionText}>{instruction}</Paragraph>
-                </View>
-              ))}
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Previous Approved Photos */}
-        {mockApprovedPhotos.length > 0 && (
-          <Card style={[styles.card, { overflow: 'visible' }]}>
-            <Card.Content style={{ overflow: 'visible' }}>
-              <View style={styles.photosHeader}>
-                <Title style={styles.cardTitle}>Previously Approved Photos</Title>
-                <IconButton icon="check-circle" size={20} iconColor={constructionColors.complete} />
-              </View>
-              
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ overflow: 'visible' }}>
-                <View style={[styles.approvedPhotosContainer, { overflow: 'visible' }]}>
-                  {mockApprovedPhotos.map((photo) => (
-                    <View key={photo.id} style={[styles.approvedPhotoCard, { overflow: 'visible' }]}>
-                      <Image 
-                        source={{ uri: photo.imageUri }} 
-                        style={styles.approvedPhotoThumbnail}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.approvedBadgeContainer}>
-                        <View style={[styles.approvedBadge, { backgroundColor: constructionColors.complete }]}>
-                          <RNText style={styles.badgeText}>✓</RNText>
-                        </View>
-                      </View>
-                      <Paragraph style={styles.approvedPhotoDescription}>
-                        {photo.description}
-                      </Paragraph>
-                      <Paragraph style={styles.approvedPhotoDate}>
-                        {new Date(photo.uploadedAt).toLocaleDateString()}
-                      </Paragraph>
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            </Card.Content>
-          </Card>
-        )}
-
-        {/* Current Photo Status */}
-        {task.lastPhoto && (
-          <Card style={[styles.card, { overflow: 'visible' }]}>
-            <Card.Content style={{ overflow: 'visible' }}>
-              <View style={[styles.photoHeader, { overflow: 'visible' }]}>
-                <Title style={styles.cardTitle}>Latest Photo Submission</Title>
-                <View style={styles.verificationBadgeContainer}>
-                  <View style={[styles.verificationBadge, { backgroundColor: verificationInfo?.color }]}>
-                    <RNText style={styles.badgeText}>
-                      {task.lastPhoto.verificationStatus.toUpperCase()}
-                    </RNText>
-                  </View>
-                </View>
-              </View>
-
-              {/* Photo Preview */}
-              <View style={styles.photoContainer}>
-                <Image 
-                  source={{ uri: task.lastPhoto.imageUri }} 
-                  style={styles.photoPreview}
-                  resizeMode="cover"
-                />
-                <Button
-                  mode="outlined"
-                  onPress={() => openPhotoModal(task.lastPhoto!.imageUri)}
-                  style={styles.fullscreenButton}
-                  icon="fullscreen"
-                >
-                  View Full Size
-                </Button>
-              </View>
-
-              {/* Verification Status */}
-              <View style={[styles.verificationStatus, { backgroundColor: `${verificationInfo?.color}20` }]}>
-                <IconButton 
-                  icon={verificationInfo?.icon || 'help-circle'} 
-                  size={20} 
-                  iconColor={verificationInfo?.color}
-                />
-                <Paragraph style={[styles.verificationText, { color: verificationInfo?.color }]}>
-                  {verificationInfo?.text}
-                </Paragraph>
-              </View>
-
-              {/* AI Classification */}
-              <View style={styles.aiClassification}>
-                <IconButton icon="brain" size={16} iconColor={theme.colors.primary} />
-                <Paragraph style={styles.aiText}>
-                  AI Classification: <RNText style={styles.boldText}>{task.lastPhoto.cnnClassification}</RNText> 
-                  ({Math.round((task.lastPhoto.confidence || 0) * 100)}% confidence)
-                </Paragraph>
-              </View>
-
-              {/* Worker Notes */}
-              {task.lastPhoto.notes && (
-                <View style={styles.workerNotes}>
-                  <Paragraph style={styles.notesLabel}>Your Notes:</Paragraph>
-                  <Paragraph style={styles.notesText}>{task.lastPhoto.notes}</Paragraph>
-                </View>
-              )}
-
-              {/* Engineer Feedback (if rejected) */}
-              {task.lastPhoto.verificationStatus === 'rejected' && (
-                <View style={styles.engineerFeedback}>
-                  <Paragraph style={styles.feedbackLabel}>Engineer Feedback:</Paragraph>
-                  <Paragraph style={styles.feedbackText}>
-                    Please recheck the concrete consistency and ensure proper vibration to eliminate air bubbles. Resubmit photos showing improved technique.
+              {task.assigned_worker_names && task.assigned_worker_names.length > 0 && (
+                <View style={styles.detailRow}>
+                  <Paragraph style={styles.detailLabel}>Assigned To</Paragraph>
+                  <Paragraph style={styles.detailValue}>
+                    {task.assigned_worker_names.join(', ')}
                   </Paragraph>
                 </View>
               )}
+            </View>
+          </Card.Content>
+        </Card>
 
-              <View style={styles.uploadInfo}>
-                <Paragraph style={styles.uploadText}>
-                  Uploaded on {formatDate(task.lastPhoto.uploadedAt)}
+
+        {/* Photo Submission Card */}
+        <Card style={[styles.card, { overflow: 'visible' }]}>
+          <Card.Content style={{ overflow: 'visible' }}>
+            <View style={[styles.photoHeader, { overflow: 'visible' }]}>
+              <Title style={styles.cardTitle}>Photo Verification</Title>
+              {verificationInfo && (
+                <Chip
+                  icon={verificationInfo.icon}
+                  style={{ backgroundColor: verificationInfo.color }}
+                  textStyle={{ color: 'white', fontSize: 11 }}
+                >
+                  {task.verification?.engineerStatus?.toUpperCase() || 'NONE'}
+                </Chip>
+              )}
+            </View>
+
+            {/* CNN Status Info */}
+            {task.cnnEligible && (
+              <View style={[styles.cnnInfo, { backgroundColor: theme.colors.primaryContainer }]}>
+                <IconButton icon="brain" size={20} iconColor={theme.colors.primary} />
+                <Paragraph style={styles.cnnInfoText}>
+                  This task requires AI verification
                 </Paragraph>
               </View>
-            </Card.Content>
-          </Card>
-        )}
+            )}
 
-        {/* Add Notes Card */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Title style={styles.cardTitle}>Add Notes</Title>
-            
-            <TextInput
-              label="Progress Notes"
-              value={newNotes}
-              onChangeText={setNewNotes}
-              mode="outlined"
-              multiline
-              numberOfLines={4}
-              style={styles.notesInput}
-              placeholder="Share your progress, concerns, or questions..."
-            />
+            {/* Current Verification Result */}
+            {task.verification?.cnnResult && (
+              <View style={styles.aiClassification}>
+                <IconButton icon="brain" size={16} iconColor={theme.colors.primary} />
+                <Paragraph style={styles.aiText}>
+                  AI Classification: <RNText style={styles.boldText}>{task.verification.cnnResult.label}</RNText> 
+                  ({Math.round((task.verification.cnnResult.score || 0) * 100)}% confidence)
+                </Paragraph>
+              </View>
+            )}
 
+            {/* Engineer Feedback (if rejected) */}
+            {task.verification?.engineerStatus === 'rejected' && task.verification?.engineerNotes && (
+              <View style={styles.engineerFeedback}>
+                <Paragraph style={styles.feedbackLabel}>Engineer Feedback</Paragraph>
+                <Paragraph style={styles.feedbackText}>
+                  {task.verification.engineerNotes}
+                </Paragraph>
+              </View>
+            )}
+
+            {/* Upload Photo Button */}
             <Button
               mode="contained"
-              onPress={handleAddNotes}
-              icon="note-plus"
-              style={styles.addNotesButton}
+              icon="camera"
+              onPress={handleUploadPhoto}
+              loading={uploadingPhoto}
+              disabled={uploadingPhoto}
+              style={styles.uploadButton}
             >
-              Add Notes
+              {uploadingPhoto ? 'Uploading...' : task.verification?.lastSubmissionId ? 'Upload New Photo' : 'Upload Photo'}
             </Button>
           </Card.Content>
         </Card>
 
-        {/* Action buttons card removed per user request */}
+        {/* Task Actions */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Title style={styles.cardTitle}>Task Actions</Title>
+            
+            {task.status === 'not_started' && (
+              <Button
+                mode="contained"
+                onPress={handleStartTask}
+                icon="play"
+                style={styles.actionButton}
+              >
+                Start Task
+              </Button>
+            )}
+
+            {task.status === 'in_progress' && (
+              <Button
+                mode="contained"
+                onPress={handleCompleteTask}
+                icon="check"
+                style={styles.actionButton}
+                buttonColor={constructionColors.complete}
+              >
+                Mark as Complete
+              </Button>
+            )}
+
+            {task.notes && (
+              <View style={styles.notesSection}>
+                <Paragraph style={styles.notesLabel}>Task Notes</Paragraph>
+                <Paragraph style={styles.notesText}>{task.notes}</Paragraph>
+              </View>
+            )}
+          </Card.Content>
+        </Card>
       </ScrollView>
 
       {/* Full Screen Photo Modal */}
@@ -753,6 +763,50 @@ const styles = StyleSheet.create({
   fullscreenPhoto: {
     width: '100%',
     height: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: fontSizes.md,
+    color: theme.colors.placeholder,
+  },
+  taskCategory: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.placeholder,
+    marginBottom: spacing.xs,
+    fontWeight: '500',
+  },
+  tagalogLabel: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.primary,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+  },
+  cnnInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: theme.roundness,
+    marginBottom: spacing.md,
+  },
+  cnnInfoText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.primary,
+    flex: 1,
+  },
+  uploadButton: {
+    marginTop: spacing.md,
+  },
+  notesSection: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: '#f8f9fa',
+    borderRadius: theme.roundness,
   },
 });
 
