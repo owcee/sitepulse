@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -9,97 +9,65 @@ import {
   Searchbar,
   IconButton,
   FAB,
-  Button 
+  Button,
+  ActivityIndicator
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { auth } from '../../firebaseConfig';
 
 import { Task } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
-
-// Mock tasks assigned to current worker
-const mockWorkerTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Foundation Excavation',
-    description: 'Excavate foundation for building section A. Follow safety protocols and ensure proper depth.',
-    assignedTo: 'worker-2', // Current worker
-    projectId: 'project-1',
-    status: 'completed',
-    dueDate: '2024-01-20',
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-19',
-    lastPhoto: {
-      id: 'photo-1',
-      taskId: '1',
-      imageUri: 'https://via.placeholder.com/150',
-      cnnClassification: 'Foundation Work',
-      confidence: 0.95,
-      verificationStatus: 'approved',
-      notes: 'Foundation excavation completed successfully',
-      uploadedBy: 'worker-2',
-      uploadedAt: '2024-01-19',
-      verifiedBy: 'engineer-1',
-      verifiedAt: '2024-01-19',
-    },
-  },
-  {
-    id: '2',
-    title: 'Concrete Pouring - Level 1',
-    description: 'Pour concrete for first floor slab. Ensure proper mixing ratios and even distribution.',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-01-25',
-    createdAt: '2024-01-20',
-    updatedAt: '2024-01-22',
-    lastPhoto: {
-      id: 'photo-2',
-      taskId: '2',
-      imageUri: 'https://via.placeholder.com/150',
-      cnnClassification: 'Concrete Pouring',
-      confidence: 0.88,
-      verificationStatus: 'pending',
-      notes: 'Ready for review - concrete pour completed',
-      uploadedBy: 'worker-2',
-      uploadedAt: '2024-01-22',
-    },
-  },
-  {
-    id: '5',
-    title: 'Site Cleanup',
-    description: 'Clean and organize work area. Remove debris and prepare for next phase.',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'not_started',
-    dueDate: '2024-01-28',
-    createdAt: '2024-01-22',
-    updatedAt: '2024-01-22',
-  },
-  {
-    id: '6',
-    title: 'Equipment Maintenance',
-    description: 'Perform routine maintenance on concrete mixer and other equipment.',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'not_started',
-    dueDate: '2024-02-01',
-    createdAt: '2024-01-23',
-    updatedAt: '2024-01-23',
-  },
-];
+import { getWorkerTasks, Task as FirebaseTask } from '../../services/taskService';
+import { useProjectData } from '../../context/ProjectDataContext';
 
 export default function WorkerTasksScreen() {
   const navigation = useNavigation();
+  const { projectId } = useProjectData();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [tasks, setTasks] = useState<FirebaseTask[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load worker's tasks from Firestore
+  useEffect(() => {
+    loadWorkerTasks();
+  }, [projectId]);
+
+  const loadWorkerTasks = async () => {
+    try {
+      setLoading(true);
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        console.log('No user logged in');
+        setTasks([]);
+        return;
+      }
+
+      // Get tasks assigned to this worker
+      const workerTasks = await getWorkerTasks(currentUser.uid);
+      console.log(`✅ Loaded ${workerTasks.length} tasks for worker ${currentUser.uid}`);
+      
+      // Filter by projectId if available
+      const filteredByProject = projectId 
+        ? workerTasks.filter(task => task.projectId === projectId)
+        : workerTasks;
+      
+      setTasks(filteredByProject);
+    } catch (error: any) {
+      console.error('Error loading worker tasks:', error);
+      Alert.alert('Error', `Failed to load tasks: ${error.message}`);
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simulate refresh
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    await loadWorkerTasks();
+    setRefreshing(false);
   };
 
   const getStatusColor = (status: Task['status']) => {
@@ -129,10 +97,10 @@ export default function WorkerTasksScreen() {
   };
 
 
-  const getVerificationStatus = (task: Task) => {
-    if (!task.lastPhoto) return null;
+  const getVerificationStatus = (task: FirebaseTask) => {
+    if (!task.verification?.engineerStatus) return null;
     
-    switch (task.lastPhoto.verificationStatus) {
+    switch (task.verification.engineerStatus) {
       case 'approved':
         return { icon: 'check-circle', color: constructionColors.complete, text: 'Approved' };
       case 'pending':
@@ -152,19 +120,24 @@ export default function WorkerTasksScreen() {
     return diffDays;
   };
 
-  const filteredTasks = mockWorkerTasks.filter(task => 
-    task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTasks = tasks.filter(task => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      task.title?.toLowerCase().includes(searchLower) ||
+      task.subTask?.toLowerCase().includes(searchLower) ||
+      task.tagalogLabel?.toLowerCase().includes(searchLower) ||
+      task.category?.toLowerCase().includes(searchLower)
+    );
+  });
 
   const handleTaskPress = (task: Task) => {
     // @ts-ignore - Navigation typing would be properly configured in production
     navigation.navigate('WorkerTaskDetail', { taskId: task.id });
   };
 
-  const renderTaskCard = (task: Task) => {
+  const renderTaskCard = (task: FirebaseTask) => {
     const verificationStatus = getVerificationStatus(task);
-    const daysUntilDue = getDaysUntilDue(task.dueDate);
+    const daysUntilDue = getDaysUntilDue(task.planned_end_date);
     const isOverdue = daysUntilDue < 0;
     const isDueSoon = daysUntilDue <= 2 && daysUntilDue >= 0;
     
@@ -208,7 +181,10 @@ export default function WorkerTasksScreen() {
 
             {/* Description */}
             <Paragraph style={styles.taskDescription} numberOfLines={3} ellipsizeMode="tail">
-              {task.description}
+              {task.subTask}
+            </Paragraph>
+            <Paragraph style={styles.tagalogLabel} numberOfLines={1}>
+              {task.tagalogLabel}
             </Paragraph>
 
             {/* Due Date Warning */}
@@ -269,7 +245,7 @@ export default function WorkerTasksScreen() {
             <View style={styles.taskActions}>
               <View style={styles.actionInfo}>
                 <Paragraph style={styles.dueDate}>
-                  Due: {new Date(task.dueDate).toLocaleDateString()}
+                  Due: {new Date(task.planned_end_date).toLocaleDateString()}
                 </Paragraph>
                 <Paragraph style={styles.lastUpdate}>
                   Updated: {new Date(task.updatedAt).toLocaleDateString()}
@@ -290,7 +266,7 @@ export default function WorkerTasksScreen() {
     completed: filteredTasks.filter(t => t.status === 'completed').length,
     inProgress: filteredTasks.filter(t => t.status === 'in_progress').length,
     notStarted: filteredTasks.filter(t => t.status === 'not_started').length,
-    overdue: filteredTasks.filter(t => getDaysUntilDue(t.dueDate) < 0).length,
+    overdue: filteredTasks.filter(t => getDaysUntilDue(t.planned_end_date) < 0).length,
   };
 
   return (
@@ -354,30 +330,37 @@ export default function WorkerTasksScreen() {
       </Card>
 
       {/* Tasks List */}
-      <ScrollView 
-        style={styles.tasksList} 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {filteredTasks.map(renderTaskCard)}
-        
-        {filteredTasks.length === 0 && (
-          <Card style={styles.emptyCard}>
-            <Card.Content style={styles.emptyContent}>
-              <IconButton icon="clipboard-check" size={40} iconColor="#ccc" />
-              <Title style={styles.emptyTitle}>No tasks found</Title>
-              <Paragraph style={styles.emptyText}>
-                {searchQuery 
-                  ? 'No tasks match your search criteria'
-                  : 'You have no assigned tasks at the moment'
-                }
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Paragraph style={styles.loadingText}>Loading your tasks...</Paragraph>
+        </View>
+      ) : (
+        <ScrollView 
+          style={styles.tasksList} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          {filteredTasks.map(renderTaskCard)}
+          
+          {filteredTasks.length === 0 && (
+            <Card style={styles.emptyCard}>
+              <Card.Content style={styles.emptyContent}>
+                <IconButton icon="clipboard-check" size={40} iconColor="#ccc" />
+                <Title style={styles.emptyTitle}>No tasks found</Title>
+                <Paragraph style={styles.emptyText}>
+                  {searchQuery 
+                    ? 'No tasks match your search criteria'
+                    : 'You have no assigned tasks at the moment'
+                  }
               </Paragraph>
             </Card.Content>
           </Card>
         )}
       </ScrollView>
+      )}
 
     </SafeAreaView>
   );
@@ -497,8 +480,14 @@ const styles = StyleSheet.create({
   taskDescription: {
     fontSize: fontSizes.sm,
     color: theme.colors.placeholder,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     lineHeight: 20,
+  },
+  tagalogLabel: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    fontStyle: 'italic',
+    marginBottom: spacing.md,
   },
   dueDateAlert: {
     flexDirection: 'row',
@@ -589,6 +578,17 @@ const styles = StyleSheet.create({
     color: theme.colors.placeholder,
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing.xl * 2,
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: fontSizes.md,
+    color: theme.colors.onSurfaceVariant,
   },
   fab: {
     position: 'absolute',

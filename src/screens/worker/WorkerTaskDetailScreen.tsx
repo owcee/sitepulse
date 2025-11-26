@@ -335,7 +335,7 @@ export default function WorkerTaskDetailScreen() {
               <View style={styles.aiClassification}>
                 <IconButton icon="brain" size={16} iconColor={theme.colors.primary} />
                 <Paragraph style={styles.aiText}>
-                  AI Classification: <strong>{task.lastPhoto.cnnClassification}</strong> 
+                  AI Classification: <RNText style={styles.boldText}>{task.lastPhoto.cnnClassification}</RNText> 
                   ({Math.round((task.lastPhoto.confidence || 0) * 100)}% confidence)
                 </Paragraph>
               </View>
@@ -673,6 +673,9 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.text,
     marginLeft: spacing.sm,
+  },
+  boldText: {
+    fontWeight: 'bold',
   },
   workerNotes: {
     backgroundColor: '#e8f5e8',
