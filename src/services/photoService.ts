@@ -19,7 +19,17 @@ import {
   getDownloadURL,
   UploadResult
 } from 'firebase/storage';
+import { Auth } from 'firebase/auth';
+// @ts-expect-error - auth is imported from JS config file
 import { db, storage, auth } from '../firebaseConfig';
+import { uploadFileToStorage } from './storageUploadHelper';
+import { uploadWithProgress } from './storageUploadHelperV2';
+import { sendNotification } from './notificationService';
+import { getProject } from './projectService';
+
+// Type assertion for auth from JS config file
+// @ts-expect-error - Casting auth from JS import
+const typedAuth = auth as Auth;
 
 export interface TaskPhoto {
   id: string;
@@ -56,7 +66,7 @@ export async function uploadTaskPhoto(
   }
 ): Promise<TaskPhoto> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
@@ -69,26 +79,29 @@ export async function uploadTaskPhoto(
       `task_photos/${metadata.projectId}/${taskId}/${photoId}`
     );
 
-    // Convert URI to blob for upload
-    const blob = await uriToBlob(imageUri);
-
-    // Upload to Firebase Storage
-    const uploadResult = await uploadBytes(storageRef, blob, {
-      contentType: 'image/jpeg'
-    });
-
-    // Get download URL
-    const downloadURL = await getDownloadURL(uploadResult.ref);
+    // Upload to Firebase Storage using REST API (bypasses SDK issues)
+    const storagePath = `task_photos/${metadata.projectId}/${taskId}/${photoId}`;
+    console.log('🚀 Uploading task photo (REST API method)...');
+    
+    const downloadURL = await uploadWithProgress(
+      storagePath,
+      imageUri,
+      (progress) => {
+        console.log(`Task photo upload: ${progress.toFixed(1)}%`);
+      }
+    );
+    
+    console.log('✅ Task photo uploaded successfully!');
 
     // Create Firestore metadata document
     const taskPhotosRef = collection(db, 'task_photos');
     const photoDoc = await addDoc(taskPhotosRef, {
       taskId,
       projectId: metadata.projectId,
-      uploaderId: auth.currentUser.uid,
+      uploaderId: typedAuth.currentUser.uid,
       uploaderName: metadata.uploaderName,
       imageUrl: downloadURL,
-      storagePath: uploadResult.ref.fullPath,
+      storagePath, // Use the path string directly
       cnnClassification: metadata.cnnClassification?.classification || null,
       confidence: metadata.cnnClassification?.confidence || null,
       verificationStatus: 'pending',
@@ -103,7 +116,7 @@ export async function uploadTaskPhoto(
       id: photoDoc.id,
       taskId,
       projectId: metadata.projectId,
-      uploaderId: auth.currentUser.uid,
+      uploaderId: typedAuth.currentUser.uid,
       uploaderName: metadata.uploaderName,
       imageUrl: downloadURL,
       cnnClassification: metadata.cnnClassification?.classification,
@@ -114,10 +127,102 @@ export async function uploadTaskPhoto(
     };
 
     console.log('Task photo uploaded successfully:', photoDoc.id);
+
+    // Send notification to engineer
+    try {
+      const project = await getProject(metadata.projectId);
+      if (project && project.engineerId) {
+        await sendNotification(project.engineerId, {
+          title: 'New Task Photo',
+          body: `${metadata.uploaderName} uploaded a photo for a task`,
+          type: 'task_approval',
+          relatedId: photoDoc.id,
+          projectId: metadata.projectId,
+          status: 'info'
+        });
+        console.log('Notification sent to engineer');
+      }
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+      // Don't fail the whole operation if notification fails
+    }
+
     return createdPhoto;
+  } catch (error: any) {
+    console.error('❌ Error uploading task photo:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      serverResponse: error.serverResponse,
+      customData: error.customData
+    });
+    throw new Error(`Failed to upload task photo: ${error.message || error.code || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Check if worker has already submitted a photo for this task today
+ * @param taskId - Task ID
+ * @param workerId - Worker ID
+ * @returns Promise<{canSubmit: boolean, reason?: string}> - Whether worker can submit
+ */
+export async function canWorkerSubmitToday(taskId: string, workerId: string): Promise<{canSubmit: boolean, reason?: string}> {
+  try {
+    const photosRef = collection(db, 'task_photos');
+    
+    // Get today's start and end timestamps
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    const q = query(
+      photosRef,
+      where('taskId', '==', taskId),
+      where('uploaderId', '==', workerId),
+      where('uploadedAt', '>=', todayStart),
+      where('uploadedAt', '<=', todayEnd)
+    );
+
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return { canSubmit: true };
+    }
+
+    // Check if the most recent submission was rejected
+    const submissions = snapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    })) as any[]; // Type assertion for Firestore data
+    
+    // Sort by upload time, most recent first
+    submissions.sort((a, b) => {
+      const aTime = a.uploadedAt?.toDate?.()?.getTime() || 0;
+      const bTime = b.uploadedAt?.toDate?.()?.getTime() || 0;
+      return bTime - aTime;
+    });
+    
+    const latestSubmission = submissions[0];
+    
+    // If the latest submission was rejected, allow resubmission
+    if (latestSubmission.verificationStatus === 'rejected') {
+      return { canSubmit: true };
+    }
+    
+    // If pending or approved, don't allow another submission today
+    return { 
+      canSubmit: false, 
+      reason: latestSubmission.verificationStatus === 'pending' 
+        ? 'You have already submitted a photo for this task today. Please wait for engineer review.'
+        : 'You have already submitted an approved photo for this task today.'
+    };
+    
   } catch (error) {
-    console.error('Error uploading task photo:', error);
-    throw new Error('Failed to upload task photo');
+    console.error('Error checking submission eligibility:', error);
+    // On error, allow submission (fail open)
+    return { canSubmit: true };
   }
 }
 
@@ -214,7 +319,7 @@ export async function getPendingPhotos(projectId: string): Promise<TaskPhoto[]> 
  */
 export async function approvePhoto(photoId: string): Promise<void> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
@@ -222,7 +327,7 @@ export async function approvePhoto(photoId: string): Promise<void> {
     await updateDoc(photoRef, {
       verificationStatus: 'approved',
       verifiedAt: serverTimestamp(),
-      verifiedBy: auth.currentUser.uid
+      verifiedBy: typedAuth.currentUser.uid
     });
 
     console.log('Photo approved:', photoId);
@@ -240,7 +345,7 @@ export async function approvePhoto(photoId: string): Promise<void> {
  */
 export async function rejectPhoto(photoId: string, reason: string): Promise<void> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
@@ -249,7 +354,7 @@ export async function rejectPhoto(photoId: string, reason: string): Promise<void
       verificationStatus: 'rejected',
       rejectionReason: reason,
       verifiedAt: serverTimestamp(),
-      verifiedBy: auth.currentUser.uid
+      verifiedBy: typedAuth.currentUser.uid
     });
 
     console.log('Photo rejected:', photoId);
@@ -260,18 +365,36 @@ export async function rejectPhoto(photoId: string, reason: string): Promise<void
 }
 
 /**
- * Helper function to convert URI to Blob for upload
+ * Helper function to convert URI to Blob for upload (React Native compatible)
  * @param uri - Image URI
  * @returns Promise<Blob>
  */
 async function uriToBlob(uri: string): Promise<Blob> {
   try {
+    console.log('Converting URI to Blob:', uri);
+    
+    // React Native specific: Create blob from file URI
     const response = await fetch(uri);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    
     const blob = await response.blob();
+    
+    // Ensure blob has proper type for JPEG
+    if (!blob.type || blob.type === '' || blob.type === 'application/octet-stream') {
+      // Create a new blob with explicit MIME type
+      const typedBlob = new Blob([blob], { type: 'image/jpeg' });
+      console.log('Blob created with explicit type. Size:', typedBlob.size, 'Type:', typedBlob.type);
+      return typedBlob;
+    }
+    
+    console.log('Blob created successfully. Size:', blob.size, 'Type:', blob.type);
     return blob;
   } catch (error) {
     console.error('Error converting URI to Blob:', error);
-    throw new Error('Failed to process image');
+    throw new Error(`Failed to process image: ${error}`);
   }
 }
 
@@ -295,7 +418,7 @@ export async function uploadTaskPhotoWithProgress(
   onProgress?: (progress: number) => void
 ): Promise<TaskPhoto> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
@@ -333,7 +456,7 @@ export async function uploadTaskPhotoWithProgress(
           const photoDoc = await addDoc(taskPhotosRef, {
             taskId,
             projectId: metadata.projectId,
-            uploaderId: auth.currentUser!.uid,
+            uploaderId: typedAuth.currentUser!.uid,
             uploaderName: metadata.uploaderName,
             imageUrl: downloadURL,
             storagePath: uploadTask.snapshot.ref.fullPath,
@@ -351,7 +474,7 @@ export async function uploadTaskPhotoWithProgress(
             id: photoDoc.id,
             taskId,
             projectId: metadata.projectId,
-            uploaderId: auth.currentUser!.uid,
+            uploaderId: typedAuth.currentUser!.uid,
             uploaderName: metadata.uploaderName,
             imageUrl: downloadURL,
             cnnClassification: metadata.cnnClassification?.classification,
@@ -368,6 +491,7 @@ export async function uploadTaskPhotoWithProgress(
     throw new Error('Failed to upload photo');
   }
 }
+
 
 
 

@@ -13,7 +13,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBnCa0kuR39LMNlJb_toNDlRDhfCXUsMdU",
   authDomain: "sitepulse-2d882.firebaseapp.com",
   projectId: "sitepulse-2d882",
-  storageBucket: "sitepulse-2d882.appspot.com",
+  storageBucket: "sitepulse-2d882.firebasestorage.app",
   messagingSenderId: "675231551037",
   appId: "1:675231551037:web:2c9f125bacc84264e3e454",
   measurementId: "G-37NWZXRDBS"
@@ -39,8 +39,8 @@ if (Platform.OS !== 'web') {
 // Initialize Firestore
 const db = getFirestore(app);
 
-// Initialize Firebase Storage
-const storage = getStorage(app);
+// Initialize Firebase Storage with explicit bucket
+const storage = getStorage(app, 'gs://sitepulse-2d882.firebasestorage.app');
 
 // Enable offline persistence for web
 if (Platform.OS === 'web') {

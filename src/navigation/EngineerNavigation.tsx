@@ -4,8 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Appbar, IconButton, Badge, ActivityIndicator, Text } from 'react-native-paper';
 import { View } from 'react-native';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { getUnreadCount } from '../services/notificationService';
 
 import { User, Project } from '../types';
 import { theme, constructionColors } from '../utils/theme';
@@ -40,7 +41,25 @@ interface Props {
 const CustomHeader = ({ user, project, onLogout }: Props) => {
   const [notificationsVisible, setNotificationsVisible] = React.useState(false);
   const [settingsVisible, setSettingsVisible] = React.useState(false);
-  const unreadNotifications = 2; // This would come from context/props
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Subscribe to unread notifications
+  useEffect(() => {
+    if (!user.uid) return;
+
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(
+      notificationsRef,
+      where('userId', '==', user.uid),
+      where('read', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUnreadNotifications(snapshot.size);
+    });
+
+    return () => unsubscribe();
+  }, [user.uid]);
 
   return (
     <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>

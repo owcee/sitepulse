@@ -352,24 +352,27 @@ export default function InventoryUseScreen() {
           ref={cameraRef}
         >
           <View style={styles.cameraControls}>
+            {/* Camera Header - positioned just below status bar */}
             <View style={styles.cameraHeader}>
               <IconButton
                 icon="close"
-                size={30}
+                size={32}
                 iconColor="white"
                 onPress={() => setShowCamera(false)}
+                style={styles.closeButton}
               />
               <Title style={styles.cameraTitle}>
                 Photo: {selectedItemInfo?.name}
               </Title>
             </View>
             
+            {/* Camera Capture Button */}
             <View style={styles.cameraActions}>
               <IconButton
                 icon="camera"
-                size={60}
+                size={70}
                 iconColor="white"
-                style={[styles.cameraButton, styles.captureButton]}
+                style={styles.captureButton}
                 onPress={takePicture}
               />
             </View>
@@ -1084,6 +1087,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     flex: 1,
+    backgroundColor: 'black',
   },
   camera: {
     flex: 1,
@@ -1096,14 +1100,21 @@ const styles = StyleSheet.create({
   cameraHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: 10,
     paddingHorizontal: spacing.md,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingBottom: spacing.md,
+  },
+  closeButton: {
+    backgroundColor: constructionColors.urgent,
+    margin: 0,
   },
   cameraTitle: {
     color: 'white',
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     marginLeft: spacing.md,
+    flex: 1,
   },
   cameraActions: {
     flexDirection: 'row',
@@ -1111,11 +1122,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 50,
   },
-  cameraButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
   captureButton: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 4,
+    borderColor: theme.colors.primary,
   },
   materialCard: {
     marginVertical: spacing.sm,

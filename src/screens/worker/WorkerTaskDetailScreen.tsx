@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Image, Alert, Text as RNText, ActivityIndicator } from 'react-native';
 import { 
   Card, 
@@ -20,7 +20,9 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { getTaskById, updateTaskStatus, Task as FirebaseTask } from '../../services/taskService';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadTaskPhoto } from '../../services/photoService';
+import { Camera, CameraType } from 'expo-camera';
+import { uploadTaskPhoto, canWorkerSubmitToday } from '../../services/photoService';
+import { auth } from '../../firebaseConfig';
 
 export default function WorkerTaskDetailScreen() {
   const route = useRoute();
@@ -34,6 +36,11 @@ export default function WorkerTaskDetailScreen() {
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
   const [selectedPhotoUri, setSelectedPhotoUri] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [photoNotes, setPhotoNotes] = useState('');
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [permission, requestPermission] = Camera.useCameraPermissions();
+  const cameraRef = useRef<Camera>(null);
 
   // Load task from Firestore
   useEffect(() => {
@@ -96,79 +103,90 @@ export default function WorkerTaskDetailScreen() {
 
   const handleUploadPhoto = async () => {
     try {
-      // Request permission
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
-        return;
+      // Check if worker can submit today
+      if (auth.currentUser) {
+        const eligibility = await canWorkerSubmitToday(taskId, auth.currentUser.uid);
+        if (!eligibility.canSubmit) {
+          Alert.alert('Cannot Submit', eligibility.reason || 'You have already submitted a photo for this task today.');
+          return;
+        }
       }
 
-      // Launch camera
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
+      // Request camera permission if needed
+      if (!permission || !permission.granted) {
+        const result = await requestPermission();
+        if (!result || !result.granted) {
+          Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
+          return;
+        }
+      }
 
-      if (!result.canceled && result.assets[0]) {
+      // Show notes modal (Android compatible)
+      setShowNotesModal(true);
+    } catch (error: any) {
+      console.error('Error in photo upload flow:', error);
+      Alert.alert('Error', error.message || 'Failed to start photo upload');
+    }
+  };
+
+  const continueToCamera = () => {
+    setShowNotesModal(false);
+    setShowCamera(true);
+  };
+
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.8,
+          base64: false,
+        });
+        
+        setShowCamera(false);
         setUploadingPhoto(true);
-        
-        // Upload photo with CNN verification
-        await uploadTaskPhoto(
-          taskId,
-          result.assets[0].uri,
-          task?.cnnEligible || false
-        );
 
-        Alert.alert('Success', 'Photo uploaded successfully. Awaiting engineer review.');
-        
-        // Reload task to show new photo
-        await loadTaskDetails();
-      }
-    } catch (error: any) {
-      console.error('Error uploading photo:', error);
-      Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
+        try {
+          // Get user profile for metadata
+          const { getUserProfile } = await import('../../utils/user');
+          if (!auth.currentUser) {
+            throw new Error('User not authenticated');
+          }
+          
+          const userProfile = await getUserProfile(auth.currentUser.uid);
+          if (!userProfile || !userProfile.projectId) {
+            throw new Error('No project assigned. Please contact your engineer.');
+          }
 
-  const handleStartTask = async () => {
-    if (!task) return;
-    
-    try {
-      await updateTaskStatus(taskId, 'in_progress');
-      Alert.alert('Task Started', 'Task status updated to In Progress');
-      await loadTaskDetails();
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    }
-  };
-
-  const handleCompleteTask = async () => {
-    if (!task) return;
-    
-    Alert.alert(
-      'Complete Task',
-      'Are you sure you want to mark this task as completed?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: async () => {
-            try {
-              await updateTaskStatus(taskId, 'completed');
-              Alert.alert('Task Completed', 'Task marked as completed');
-              await loadTaskDetails();
-            } catch (error: any) {
-              Alert.alert('Error', error.message);
+          // Upload photo with proper metadata
+          await uploadTaskPhoto(
+            taskId,
+            photo.uri,
+            {
+              projectId: userProfile.projectId,
+              uploaderName: userProfile.name,
+              cnnClassification: null,
+              notes: photoNotes || undefined
             }
-          },
-        },
-      ]
-    );
+          );
+
+          Alert.alert('Success', 'Photo uploaded successfully. Awaiting engineer review.');
+          setPhotoNotes('');
+          
+          // Reload task to show new photo
+          await loadTaskDetails();
+        } catch (error: any) {
+          console.error('Error uploading photo:', error);
+          Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
+        } finally {
+          setUploadingPhoto(false);
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to take picture. Please try again.');
+        setShowCamera(false);
+      }
+    }
   };
+
 
   const openPhotoModal = (imageUri: string) => {
     setSelectedPhotoUri(imageUri);
@@ -212,6 +230,50 @@ export default function WorkerTaskDetailScreen() {
   const isOverdue = daysUntilDue < 0;
   const isDueSoon = daysUntilDue <= 2 && daysUntilDue >= 0;
   const verificationInfo = task.verification?.engineerStatus ? getVerificationStatusInfo(task.verification.engineerStatus) : null;
+
+  // Full-screen camera view
+  if (showCamera) {
+    return (
+      <View style={styles.cameraContainer}>
+        <Camera 
+          style={styles.camera} 
+          type={CameraType.back}
+          ref={cameraRef}
+        >
+          <View style={styles.cameraControls}>
+            {/* Camera Header - positioned just below status bar */}
+            <View style={styles.cameraHeader}>
+              <IconButton
+                icon="close"
+                size={32}
+                iconColor="white"
+                onPress={() => {
+                  setShowCamera(false);
+                  setPhotoNotes('');
+                }}
+                style={styles.closeButton}
+              />
+              <Title style={styles.cameraTitle}>
+                Photo: {task.title}
+              </Title>
+            </View>
+            
+            {/* Camera Capture Button */}
+            <View style={styles.cameraActions}>
+              <IconButton
+                icon="camera"
+                size={70}
+                iconColor="white"
+                style={styles.captureButton}
+                onPress={takePicture}
+                disabled={uploadingPhoto}
+              />
+            </View>
+          </View>
+        </Camera>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -369,42 +431,17 @@ export default function WorkerTaskDetailScreen() {
           </Card.Content>
         </Card>
 
-        {/* Task Actions */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Title style={styles.cardTitle}>Task Actions</Title>
-            
-            {task.status === 'not_started' && (
-              <Button
-                mode="contained"
-                onPress={handleStartTask}
-                icon="play"
-                style={styles.actionButton}
-              >
-                Start Task
-              </Button>
-            )}
-
-            {task.status === 'in_progress' && (
-              <Button
-                mode="contained"
-                onPress={handleCompleteTask}
-                icon="check"
-                style={styles.actionButton}
-                buttonColor={constructionColors.complete}
-              >
-                Mark as Complete
-              </Button>
-            )}
-
-            {task.notes && (
+        {/* Engineer Notes */}
+        {task.notes && (
+          <Card style={styles.card}>
+            <Card.Content>
+              <Title style={styles.cardTitle}>Engineer Notes</Title>
               <View style={styles.notesSection}>
-                <Paragraph style={styles.notesLabel}>Task Notes</Paragraph>
                 <Paragraph style={styles.notesText}>{task.notes}</Paragraph>
               </View>
-            )}
-          </Card.Content>
-        </Card>
+            </Card.Content>
+          </Card>
+        )}
       </ScrollView>
 
       {/* Full Screen Photo Modal */}
@@ -428,6 +465,58 @@ export default function WorkerTaskDetailScreen() {
               resizeMode="contain"
             />
           </View>
+        </Modal>
+      </Portal>
+
+      {/* Notes Input Modal */}
+      <Portal>
+        <Modal
+          visible={showNotesModal}
+          onDismiss={() => {
+            setShowNotesModal(false);
+            setPhotoNotes('');
+          }}
+          contentContainerStyle={styles.notesModalContainer}
+        >
+          <Card style={styles.notesModalCard}>
+            <Card.Content>
+              <Title style={styles.notesModalTitle}>Add Notes (Optional)</Title>
+              <Paragraph style={styles.notesModalSubtitle}>
+                Describe the work completed, any issues encountered, or questions for the engineer:
+              </Paragraph>
+              
+              <TextInput
+                mode="outlined"
+                multiline
+                numberOfLines={4}
+                value={photoNotes}
+                onChangeText={setPhotoNotes}
+                placeholder="Enter your notes here..."
+                style={styles.notesTextInput}
+              />
+
+              <View style={styles.notesModalActions}>
+                <Button
+                  mode="text"
+                  onPress={() => {
+                    setShowNotesModal(false);
+                    setPhotoNotes('');
+                  }}
+                  style={styles.notesModalCancelButton}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={continueToCamera}
+                  icon="camera"
+                  style={styles.notesModalContinueButton}
+                >
+                  Continue
+                </Button>
+              </View>
+            </Card.Content>
+          </Card>
         </Modal>
       </Portal>
     </SafeAreaView>
@@ -807,6 +896,81 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: '#f8f9fa',
     borderRadius: theme.roundness,
+  },
+  // Camera styles
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  camera: {
+    flex: 1,
+  },
+  cameraControls: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'space-between',
+  },
+  cameraHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingHorizontal: spacing.md,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingBottom: spacing.md,
+  },
+  closeButton: {
+    backgroundColor: constructionColors.urgent,
+    margin: 0,
+  },
+  cameraTitle: {
+    color: 'white',
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    marginLeft: spacing.md,
+    flex: 1,
+  },
+  cameraActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 50,
+  },
+  captureButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 4,
+    borderColor: theme.colors.primary,
+  },
+  // Notes Modal styles
+  notesModalContainer: {
+    padding: spacing.md,
+  },
+  notesModalCard: {
+    maxHeight: '80%',
+  },
+  notesModalTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.sm,
+  },
+  notesModalSubtitle: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.placeholder,
+    marginBottom: spacing.md,
+  },
+  notesTextInput: {
+    marginBottom: spacing.md,
+    minHeight: 100,
+  },
+  notesModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  notesModalCancelButton: {
+    marginRight: spacing.sm,
+  },
+  notesModalContinueButton: {
+    minWidth: 120,
   },
 });
 

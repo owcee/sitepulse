@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   getDocs,
+  getDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import {
@@ -17,8 +18,17 @@ import {
   uploadBytes,
   getDownloadURL
 } from 'firebase/storage';
+import { Auth } from 'firebase/auth';
+// @ts-expect-error - auth is imported from JS config file
 import { db, storage, auth } from '../firebaseConfig';
 import { sendNotification } from './notificationService';
+import { uploadFileToStorage } from './storageUploadHelper';
+import { uploadWithProgress } from './storageUploadHelperV2';
+import { getProject } from './projectService';
+
+// Type assertion for auth from JS config file
+// @ts-expect-error - Casting auth from JS import
+const typedAuth = auth as Auth;
 
 export interface UsageSubmission {
   id: string;
@@ -56,12 +66,12 @@ export async function submitUsageReport(reportData: {
   taskId?: string;
 }): Promise<UsageSubmission> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
     // Get worker info
-    const workerDoc = await getFirestoreDoc('worker_accounts', auth.currentUser.uid);
+    const workerDoc = await getFirestoreDoc('worker_accounts', typedAuth.currentUser.uid);
     const workerData = workerDoc.data();
     const projectId = workerData?.projectId;
 
@@ -69,28 +79,31 @@ export async function submitUsageReport(reportData: {
       throw new Error('Worker not assigned to any project');
     }
 
-    // Upload photo to Storage
+    // Upload photo to Storage using REST API (bypasses SDK issues)
     let photoUrl = '';
     if (reportData.localPhotoUri) {
       const submissionId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const storageRef = ref(
-        storage,
-        `usage_photos/${projectId}/${submissionId}`
+      const storagePath = `usage_photos/${projectId}/${submissionId}`;
+      
+      console.log('🚀 Uploading usage photo (REST API method)...');
+      
+      // Use REST API upload
+      photoUrl = await uploadWithProgress(
+        storagePath,
+        reportData.localPhotoUri,
+        (progress) => {
+          console.log(`Usage photo upload: ${progress.toFixed(1)}%`);
+        }
       );
-
-      const blob = await uriToBlob(reportData.localPhotoUri);
-      const uploadResult = await uploadBytes(storageRef, blob, {
-        contentType: 'image/jpeg'
-      });
-
-      photoUrl = await getDownloadURL(uploadResult.ref);
+      
+      console.log('✅ Photo uploaded! URL:', photoUrl);
     }
 
     // Create submission document
     const submissionsRef = collection(db, 'usage_submissions');
     const submissionDoc = await addDoc(submissionsRef, {
       projectId,
-      workerId: auth.currentUser.uid,
+      workerId: typedAuth.currentUser.uid,
       workerName: workerData?.name || 'Unknown Worker',
       type: reportData.type,
       itemId: reportData.itemId,
@@ -110,7 +123,7 @@ export async function submitUsageReport(reportData: {
     const submission: UsageSubmission = {
       id: submissionDoc.id,
       projectId,
-      workerId: auth.currentUser.uid,
+      workerId: typedAuth.currentUser.uid,
       workerName: workerData?.name || 'Unknown Worker',
       type: reportData.type,
       itemId: reportData.itemId,
@@ -124,11 +137,35 @@ export async function submitUsageReport(reportData: {
       taskId: reportData.taskId
     };
 
-    console.log('Usage report submitted:', submissionDoc.id);
+    console.log('✅ Usage report submitted:', submissionDoc.id);
+
+    // Send notification to engineer
+    try {
+      const project = await getProject(projectId);
+      if (project && project.engineerId) {
+        await sendNotification(project.engineerId, {
+          title: `New ${reportData.type === 'damage' ? 'Damage Report' : 'Usage Submission'}`,
+          body: `${workerData?.name || 'A worker'} submitted a ${reportData.type} report`,
+          type: 'usage_approved', // Using existing type, logic will handle it as 'pending'
+          relatedId: submissionDoc.id,
+          projectId: projectId,
+          status: reportData.type === 'damage' ? 'rejected' : 'info' // Use 'rejected' status color for damage reports (urgent)
+        });
+        console.log('Notification sent to engineer');
+      }
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+    }
+
     return submission;
-  } catch (error) {
-    console.error('Error submitting usage report:', error);
-    throw new Error('Failed to submit usage report');
+  } catch (error: any) {
+    console.error('❌ Error submitting usage report:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      serverResponse: error.serverResponse
+    });
+    throw new Error(`Failed to submit usage report: ${error.message || error.code || 'Unknown error'}`);
   }
 }
 
@@ -248,7 +285,7 @@ export async function getWorkerSubmissions(workerId: string): Promise<UsageSubmi
  */
 export async function approveUsageSubmission(submissionId: string): Promise<void> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
@@ -256,7 +293,7 @@ export async function approveUsageSubmission(submissionId: string): Promise<void
     await updateDoc(submissionRef, {
       status: 'approved',
       reviewedAt: serverTimestamp(),
-      reviewerId: auth.currentUser.uid
+      reviewerId: typedAuth.currentUser.uid
     });
 
     console.log('Usage submission approved:', submissionId);
@@ -277,7 +314,7 @@ export async function rejectUsageSubmission(
   reason: string
 ): Promise<void> {
   try {
-    if (!auth.currentUser) {
+    if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
@@ -286,7 +323,7 @@ export async function rejectUsageSubmission(
       status: 'rejected',
       rejectionReason: reason,
       reviewedAt: serverTimestamp(),
-      reviewerId: auth.currentUser.uid
+      reviewerId: typedAuth.currentUser.uid
     });
 
     console.log('Usage submission rejected:', submissionId);
@@ -353,11 +390,35 @@ export async function checkDuplicateUsage(
 }
 
 /**
- * Helper: Convert URI to Blob
+ * Helper: Convert URI to Blob (React Native compatible)
  */
 async function uriToBlob(uri: string): Promise<Blob> {
-  const response = await fetch(uri);
-  return await response.blob();
+  try {
+    console.log('Converting URI to Blob:', uri);
+    
+    // React Native specific: Create blob from file URI
+    const response = await fetch(uri);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    
+    // Ensure blob has proper type for JPEG
+    if (!blob.type || blob.type === '' || blob.type === 'application/octet-stream') {
+      // Create a new blob with explicit MIME type
+      const typedBlob = new Blob([blob], { type: 'image/jpeg' });
+      console.log('Blob created with explicit type. Size:', typedBlob.size, 'Type:', typedBlob.type);
+      return typedBlob;
+    }
+    
+    console.log('Blob created successfully. Size:', blob.size, 'Type:', blob.type);
+    return blob;
+  } catch (error) {
+    console.error('Error converting URI to Blob:', error);
+    throw new Error(`Failed to process image: ${error}`);
+  }
 }
 
 /**
@@ -372,8 +433,6 @@ async function getFirestoreDoc(collectionName: string, docId: string) {
   return docSnap;
 }
 
-// Import getDoc
-import { getDoc } from 'firebase/firestore';
 
 
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, FlatList, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Alert, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -20,102 +20,51 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
-
-interface VerificationLog {
-  id: string;
-  workerId: string;
-  type: 'equipment' | 'material' | 'task' | 'damage';
-  photo: string;
-  workerNotes: string;
-  timestamp: string;
-  status: 'pending' | 'approved' | 'rejected';
-  engineerNotes?: string;
-  verifiedBy?: string;
-  verifiedAt?: string;
-}
-
-interface WorkerVerificationData {
-  workerId: string;
-  workerName: string;
-  pendingCount: number;
-  lastActivity: string;
-  logs: VerificationLog[];
-}
-
-// Mock verification data - removed clock in/out, only work submissions
-const mockVerificationData: WorkerVerificationData[] = [
-  {
-    workerId: '1',
-    workerName: 'John Doe',
-    pendingCount: 2,
-    lastActivity: '2024-01-28T14:30:00Z',
-    logs: [
-      {
-        id: '3',
-        workerId: '1',
-        type: 'material',
-        photo: 'https://via.placeholder.com/300x200/4ECDC4/FFFFFF?text=Cement+Bags',
-        workerNotes: 'Used 5 bags of cement for foundation work in Section A',
-        timestamp: '2024-01-28T10:30:00Z',
-        status: 'approved',
-        engineerNotes: 'Approved - usage verified on site',
-        verifiedBy: 'Engineer Smith',
-        verifiedAt: '2024-01-28T11:00:00Z',
-      },
-      {
-        id: '4',
-        workerId: '1',
-        type: 'equipment',
-        photo: 'https://via.placeholder.com/300x200/45B7D1/FFFFFF?text=Concrete+Mixer',
-        workerNotes: 'Used concrete mixer for 2 hours, cleaned after use',
-        timestamp: '2024-01-28T14:30:00Z',
-        status: 'pending',
-      },
-    ],
-  },
-  {
-    workerId: '2',
-    workerName: 'Jane Smith',
-    pendingCount: 1,
-    lastActivity: '2024-01-28T16:45:00Z',
-    logs: [
-      {
-        id: '6',
-        workerId: '2',
-        type: 'task',
-        photo: 'https://via.placeholder.com/300x200/96CEB4/FFFFFF?text=Electrical+Work',
-        workerNotes: 'Completed electrical wiring for first floor, all connections tested',
-        timestamp: '2024-01-28T16:45:00Z',
-        status: 'pending',
-      },
-    ],
-  },
-  {
-    workerId: '3',
-    workerName: 'Mike Johnson',
-    pendingCount: 1,
-    lastActivity: '2024-01-28T15:30:00Z',
-    logs: [
-      {
-        id: '9',
-        workerId: '3',
-        type: 'damage',
-        photo: 'https://via.placeholder.com/300x200/FF6B6B/FFFFFF?text=Wall+Damage',
-        workerNotes: 'Found crack in wall during plumbing installation, needs repair',
-        timestamp: '2024-01-28T15:30:00Z',
-        status: 'pending',
-      },
-    ],
-  },
-];
+import { getProjectVerificationLogs, WorkerVerificationData, VerificationLog } from '../../services/reportService';
+import { approvePhoto, rejectPhoto } from '../../services/photoService';
+import { approveUsageSubmission, rejectUsageSubmission } from '../../services/usageService';
 
 export default function ReportLogsScreen() {
-  const { state } = useProjectData();
+  const { state, projectId } = useProjectData(); // Use projectId directly from context
+  const [workersData, setWorkersData] = useState<WorkerVerificationData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState<WorkerVerificationData | null>(null);
   const [selectedLog, setSelectedLog] = useState<VerificationLog | null>(null);
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null); // For image viewer
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'reports' | 'history'>('reports'); // Tab state
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null); // For expanding history items
+
+  useEffect(() => {
+    loadData();
+  }, [projectId]); // Reload when projectId changes
+
+  const loadData = async () => {
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      const data = await getProjectVerificationLogs(projectId);
+      setWorkersData(data);
+    } catch (error) {
+      console.error('Error loading logs:', error);
+      Alert.alert('Error', 'Failed to load verification logs');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData();
+  };
 
   const getLogTypeIcon = (type: string) => {
     switch (type) {
@@ -127,13 +76,18 @@ export default function ReportLogsScreen() {
     }
   };
 
-  const getLogTypeLabel = (type: string) => {
-    switch (type) {
-      case 'equipment': return 'Equipment Usage';
-      case 'material': return 'Material Usage';
-      case 'task': return 'Task Completion';
-      case 'damage': return 'Damage Report';
-      default: return 'Unknown';
+  const getLogTypeLabel = (log: VerificationLog) => {
+    switch (log.type) {
+      case 'equipment':
+        return `Equipment Usage${log.itemName ? `: ${log.itemName}` : ''}`;
+      case 'material':
+        return `Material Usage${log.itemName ? `: ${log.itemName}` : ''}`;
+      case 'task':
+        return `Task Completion${log.taskTitle ? `: ${log.taskTitle}` : ''}`;
+      case 'damage':
+        return `Damage Report${log.itemName ? `: ${log.itemName}` : ''}`;
+      default:
+        return 'Unknown';
     }
   };
 
@@ -148,17 +102,27 @@ export default function ReportLogsScreen() {
 
   const handleApproveLog = async (log: VerificationLog) => {
     setIsProcessing(true);
-    
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      if (log.type === 'task') {
+        await approvePhoto(log.id);
+      } else {
+        await approveUsageSubmission(log.id);
+      }
+      
+      Alert.alert('Success', 'Log approved successfully');
+      await loadData(); // Refresh data
+      // Also update selected worker view if open
+      if (selectedWorker) {
+        const updatedData = await getProjectVerificationLogs(projectId);
+        const updatedWorker = updatedData.find(w => w.workerId === selectedWorker.workerId);
+        if (updatedWorker) setSelectedWorker(updatedWorker);
+      }
+    } catch (error) {
+      console.error('Error approving log:', error);
+      Alert.alert('Error', 'Failed to approve log');
+    } finally {
       setIsProcessing(false);
-      Alert.alert(
-        'Log Approved',
-        `${getLogTypeLabel(log.type)} has been approved and saved to Firestore.`,
-        [{ text: 'OK' }]
-      );
-      // Here you would update the log status in your state/context
-    }, 1500);
+    }
   };
 
   const handleRejectLog = (log: VerificationLog) => {
@@ -168,25 +132,37 @@ export default function ReportLogsScreen() {
   };
 
   const submitRejection = async () => {
-    if (!rejectionNotes.trim()) {
+    if (!rejectionNotes.trim() || !selectedLog) {
       Alert.alert('Missing Notes', 'Please enter rejection notes for the worker.');
       return;
     }
 
     setIsProcessing(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsProcessing(false);
+    try {
+      if (selectedLog.type === 'task') {
+        await rejectPhoto(selectedLog.id, rejectionNotes);
+      } else {
+        await rejectUsageSubmission(selectedLog.id, rejectionNotes);
+      }
+
+      Alert.alert('Success', 'Log rejected and worker notified');
       setShowRejectionModal(false);
-      Alert.alert(
-        'Log Rejected',
-        `${selectedLog ? getLogTypeLabel(selectedLog.type) : 'Log'} has been rejected. Worker will receive FCM notification with your feedback.`,
-        [{ text: 'OK' }]
-      );
-      setSelectedLog(null);
       setRejectionNotes('');
-    }, 1500);
+      setSelectedLog(null);
+      
+      await loadData(); // Refresh data
+      // Also update selected worker view if open
+      if (selectedWorker) {
+        const updatedData = await getProjectVerificationLogs(projectId);
+        const updatedWorker = updatedData.find(w => w.workerId === selectedWorker.workerId);
+        if (updatedWorker) setSelectedWorker(updatedWorker);
+      }
+    } catch (error) {
+      console.error('Error rejecting log:', error);
+      Alert.alert('Error', 'Failed to reject log');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const renderWorkerCard = ({ item }: { item: WorkerVerificationData }) => (
@@ -220,7 +196,7 @@ export default function ReportLogsScreen() {
               color={getStatusColor(log.status)} 
             />
             <View style={styles.logDetails}>
-              <Title style={styles.logTitle}>{getLogTypeLabel(log.type)}</Title>
+              <Title style={styles.logTitle}>{getLogTypeLabel(log)}</Title>
               <Paragraph style={styles.logTimestamp}>
                 {new Date(log.timestamp).toLocaleString()}
               </Paragraph>
@@ -237,8 +213,15 @@ export default function ReportLogsScreen() {
         {/* Photo Evidence */}
         <View style={styles.photoSection}>
           <Paragraph style={styles.notesLabel}>Photo Evidence:</Paragraph>
-          <TouchableOpacity style={styles.photoContainer}>
+          <TouchableOpacity 
+            style={styles.photoContainer}
+            onPress={() => {
+              setSelectedImage(log.photo);
+              setShowImageModal(true);
+            }}
+          >
             <Image source={{ uri: log.photo }} style={styles.submissionPhoto} />
+            <Paragraph style={styles.tapToEnlarge}>Tap to enlarge</Paragraph>
           </TouchableOpacity>
         </View>
 
@@ -258,7 +241,7 @@ export default function ReportLogsScreen() {
               <Paragraph style={styles.notesText}>{log.engineerNotes}</Paragraph>
               {log.verifiedBy && (
                 <Paragraph style={styles.verificationInfo}>
-                  - {log.verifiedBy} ({log.verifiedAt ? new Date(log.verifiedAt).toLocaleString() : ''})
+                  - Engineer ({log.verifiedAt ? new Date(log.verifiedAt).toLocaleString() : ''})
                 </Paragraph>
               )}
             </Surface>
@@ -293,6 +276,51 @@ export default function ReportLogsScreen() {
     </Card>
   );
 
+  // Render history item (simple ID and date, expandable to full view)
+  const renderHistoryItem = (log: VerificationLog) => {
+    const isExpanded = expandedHistoryId === log.id;
+
+    if (isExpanded) {
+      // Show full details when expanded
+      return renderLogItem(log);
+    }
+
+    // Show compact view when collapsed
+    return (
+      <Card 
+        key={log.id} 
+        style={styles.historyCard}
+        onPress={() => setExpandedHistoryId(log.id)}
+      >
+        <Card.Content style={styles.historyCardContent}>
+          <View style={styles.historyRow}>
+            <View style={styles.historyIdSection}>
+              <Paragraph style={styles.historyLabel}>ID:</Paragraph>
+              <Paragraph style={styles.historyId}>{log.id.substring(0, 8)}...</Paragraph>
+            </View>
+            <View style={styles.historyDateSection}>
+              <Paragraph style={styles.historyLabel}>
+                {log.status === 'approved' ? 'Approved:' : 'Rejected:'}
+              </Paragraph>
+              <Paragraph style={styles.historyDate}>
+                {log.verifiedAt ? new Date(log.verifiedAt).toLocaleDateString() : 'N/A'}
+              </Paragraph>
+            </View>
+            <View style={styles.historyStatusIcon}>
+              <Ionicons 
+                name={log.status === 'approved' ? 'checkmark-circle' : 'close-circle'} 
+                size={24} 
+                color={log.status === 'approved' ? constructionColors.complete : constructionColors.urgent}
+              />
+            </View>
+          </View>
+          <Paragraph style={styles.historyTaskTitle}>{getLogTypeLabel(log)}</Paragraph>
+          <Paragraph style={styles.tapToExpand}>Tap to view details</Paragraph>
+        </Card.Content>
+      </Card>
+    );
+  };
+
   // Main worker list view
   if (!selectedWorker) {
     return (
@@ -304,13 +332,29 @@ export default function ReportLogsScreen() {
           </Paragraph>
         </View>
 
-        <View style={styles.workersGridContainer}>
-          {mockVerificationData.map((item) => (
-            <View key={item.workerId}>
-              {renderWorkerCard({ item })}
-            </View>
-          ))}
-        </View>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Paragraph style={styles.loadingText}>Loading logs...</Paragraph>
+          </View>
+        ) : (
+          <ScrollView 
+            contentContainerStyle={styles.workersGridContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+          >
+            {workersData.length > 0 ? (
+              workersData.map((item) => (
+                <View key={item.workerId}>
+                  {renderWorkerCard({ item })}
+                </View>
+              ))
+            ) : (
+              <Paragraph style={styles.emptyText}>No activity found for this project yet.</Paragraph>
+            )}
+          </ScrollView>
+        )}
       </SafeAreaView>
     );
   }
@@ -330,17 +374,78 @@ export default function ReportLogsScreen() {
         </View>
       </View>
 
+      {/* Tab Selector */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'reports' && styles.activeTab]}
+          onPress={() => setActiveTab('reports')}
+        >
+          <Paragraph style={[styles.tabText, activeTab === 'reports' && styles.activeTabText]}>
+            Reports ({selectedWorker.logs.filter(l => l.status === 'pending').length})
+          </Paragraph>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+          onPress={() => setActiveTab('history')}
+        >
+          <Paragraph style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>
+            History ({selectedWorker.logs.filter(l => l.status !== 'pending').length})
+          </Paragraph>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView style={styles.logsContainer} showsVerticalScrollIndicator={false}>
-        {selectedWorker.logs.length > 0 ? (
-          selectedWorker.logs.map(renderLogItem)
+        {activeTab === 'reports' ? (
+          // Reports Tab - Show pending and all logs with full details
+          selectedWorker.logs.length > 0 ? (
+            <>
+              {selectedWorker.logs.map(renderLogItem)}
+              {expandedHistoryId && (
+                <Button
+                  mode="text"
+                  onPress={() => setExpandedHistoryId(null)}
+                  style={styles.collapseButton}
+                >
+                  Collapse All
+                </Button>
+              )}
+            </>
+          ) : (
+            <Card style={styles.emptyCard}>
+              <Card.Content>
+                <Paragraph style={styles.emptyText}>
+                  No logs submitted by this worker yet.
+                </Paragraph>
+              </Card.Content>
+            </Card>
+          )
         ) : (
-          <Card style={styles.emptyCard}>
-            <Card.Content>
-              <Paragraph style={styles.emptyText}>
-                No logs submitted by this worker yet.
-              </Paragraph>
-            </Card.Content>
-          </Card>
+          // History Tab - Show only approved/rejected with ID and date
+          selectedWorker.logs.filter(l => l.status !== 'pending').length > 0 ? (
+            <>
+              {selectedWorker.logs
+                .filter(l => l.status !== 'pending')
+                .map(renderHistoryItem)}
+              {expandedHistoryId && (
+                <Button
+                  mode="text"
+                  onPress={() => setExpandedHistoryId(null)}
+                  style={styles.collapseButton}
+                  icon="chevron-up"
+                >
+                  Collapse
+                </Button>
+              )}
+            </>
+          ) : (
+            <Card style={styles.emptyCard}>
+              <Card.Content>
+                <Paragraph style={styles.emptyText}>
+                  No history available yet.
+                </Paragraph>
+              </Card.Content>
+            </Card>
+          )
         )}
       </ScrollView>
 
@@ -385,6 +490,30 @@ export default function ReportLogsScreen() {
               Reject & Notify
             </Button>
           </View>
+        </Modal>
+
+        {/* Image Viewer Modal */}
+        <Modal
+          visible={showImageModal}
+          onDismiss={() => setShowImageModal(false)}
+          contentContainerStyle={styles.imageModal}
+        >
+          <View style={styles.imageModalHeader}>
+            <Title style={styles.imageModalTitle}>Photo Evidence</Title>
+            <IconButton
+              icon="close"
+              size={24}
+              iconColor="white"
+              onPress={() => setShowImageModal(false)}
+            />
+          </View>
+          {selectedImage && (
+            <Image 
+              source={{ uri: selectedImage }} 
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+          )}
         </Modal>
       </Portal>
     </SafeAreaView>
@@ -598,5 +727,125 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surfaceVariant,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    color: theme.colors.placeholder,
+  },
+  tapToEnlarge: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.primary,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  imageModal: {
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    margin: 0,
+    padding: 0,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  imageModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  imageModalTitle: {
+    color: 'white',
+    fontSize: fontSizes.lg,
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '80%',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.outlineVariant,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: theme.colors.primary,
+  },
+  tabText: {
+    fontSize: fontSizes.md,
+    color: theme.colors.onSurfaceVariant,
+  },
+  activeTabText: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
+  },
+  historyCard: {
+    marginBottom: spacing.sm,
+    elevation: 1,
+    backgroundColor: theme.colors.surface,
+  },
+  historyCardContent: {
+    paddingVertical: spacing.sm,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  historyIdSection: {
+    flex: 1,
+  },
+  historyDateSection: {
+    flex: 1,
+    alignItems: 'flex-end',
+    marginRight: spacing.sm,
+  },
+  historyStatusIcon: {
+    marginLeft: spacing.xs,
+  },
+  historyLabel: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: 2,
+  },
+  historyId: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: theme.colors.onSurface,
+  },
+  historyDate: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: theme.colors.onSurface,
+  },
+  historyTaskTitle: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    fontStyle: 'italic',
+  },
+  tapToExpand: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.primary,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  collapseButton: {
+    marginVertical: spacing.md,
   },
 });

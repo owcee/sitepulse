@@ -41,6 +41,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.9",
     "@types/react": "~18.2.79",
+    "@types/react-native": "^0.72.8",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
     "firebase-admin": "^13.5.0",
