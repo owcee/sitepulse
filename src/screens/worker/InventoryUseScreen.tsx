@@ -437,7 +437,7 @@ export default function InventoryUseScreen() {
                 <Surface key={material.id} style={styles.materialCard}>
                   <List.Item
                     title={material.name}
-                    description={`Available: ${material.quantity} ${material.unit}`}
+                    description={`Available: ${material.quantity} / ${material.totalBought || material.quantity} ${material.unit}`}
                     left={() => (
                       <List.Icon icon="package-variant" color={theme.colors.primary} />
                     )}
@@ -825,7 +825,7 @@ export default function InventoryUseScreen() {
                 </Title>
                 <Paragraph style={styles.selectedItemDetails}>
                   {submissionType === 'material' 
-                    ? `Available: ${(getSelectedItemInfo() as any)?.quantity} ${(getSelectedItemInfo() as any)?.unit}`
+                    ? `Available: ${(getSelectedItemInfo() as any)?.quantity} / ${(getSelectedItemInfo() as any)?.totalBought || (getSelectedItemInfo() as any)?.quantity} ${(getSelectedItemInfo() as any)?.unit}`
                     : `Status: ${(getSelectedItemInfo() as any)?.status} | Condition: ${(getSelectedItemInfo() as any)?.condition}`
                   }
                 </Paragraph>
