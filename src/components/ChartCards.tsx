@@ -135,8 +135,9 @@ export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
                 styles.headerChip, 
                 { backgroundColor: tasksWithDelays > 0 ? constructionColors.warning : constructionColors.complete }
               ]}
+              textStyle={styles.headerChipText}
             >
-              {tasksWithDelays} task{tasksWithDelays !== 1 ? 's' : ''} affected
+              {tasksWithDelays} affected
             </Chip>
           </View>
 
@@ -212,6 +213,7 @@ export const BudgetChart: React.FC<ChartCardProps> = ({ onPress }) => {
                 styles.headerChip,
                 { backgroundColor: budgetUsagePercent > 0.8 ? constructionColors.urgent : constructionColors.complete }
               ]}
+              textStyle={styles.headerChipText}
             >
               {Math.round(budgetUsagePercent * 100)}% used
             </Chip>
@@ -219,7 +221,7 @@ export const BudgetChart: React.FC<ChartCardProps> = ({ onPress }) => {
 
           <View style={styles.budgetSummary}>
             <Paragraph style={styles.budgetText}>
-              Spent: ${budgetData.spentAmount.toLocaleString()} / ${budgetData.totalBudget.toLocaleString()}
+              Spent: ₱{budgetData.spentAmount.toLocaleString()} / ₱{budgetData.totalBudget.toLocaleString()}
             </Paragraph>
             <ProgressBar 
               progress={budgetUsagePercent} 
@@ -269,6 +271,10 @@ const styles = StyleSheet.create({
   },
   headerChip: {
     backgroundColor: theme.colors.primary,
+  },
+  headerChipText: {
+    fontSize: 12,
+    color: 'white',
   },
   progressSection: {
     marginBottom: spacing.md,

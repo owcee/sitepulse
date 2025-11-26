@@ -378,13 +378,355 @@ function generateBudgetHTML(
   `;
 }
 
+interface MaterialItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  category: string;
+  supplier?: string;
+  dateAdded: string;
+}
+
 /**
  * Generate Materials Inventory Report as PDF
- * (Future enhancement - can be expanded similarly)
  */
-export async function exportMaterialsToPDF(materials: any[], projectInfo: ProjectInfo): Promise<void> {
-  // Similar implementation for materials
-  Alert.alert('Coming Soon', 'Materials export feature will be available in the next update.');
+export async function exportMaterialsToPDF(
+  materials: MaterialItem[], 
+  projectInfo: ProjectInfo,
+  lowStockThreshold: number = 10
+): Promise<void> {
+  try {
+    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold);
+
+    const { uri } = await Print.printToFileAsync({
+      html: htmlContent,
+      base64: false,
+    });
+
+    console.log('Inventory PDF generated:', uri);
+
+    const isAvailable = await Sharing.isAvailableAsync();
+    
+    if (isAvailable) {
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Save Inventory Report',
+        UTI: 'com.adobe.pdf',
+      });
+      
+      Alert.alert(
+        'PDF Exported Successfully',
+        'Your inventory report has been saved and can be shared.',
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'PDF Generated',
+        `PDF saved to: ${uri}`,
+        [{ text: 'OK' }]
+      );
+    }
+  } catch (error) {
+    console.error('Error exporting inventory PDF:', error);
+    Alert.alert(
+      'Export Failed',
+      'Unable to generate inventory report. Please try again.',
+      [{ text: 'OK' }]
+    );
+    throw error;
+  }
+}
+
+/**
+ * Generate HTML template for inventory report
+ */
+function generateMaterialsHTML(
+  materials: MaterialItem[],
+  projectInfo: ProjectInfo,
+  lowStockThreshold: number
+): string {
+  const currentDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const totalValue = materials.reduce((sum, m) => sum + (m.quantity * m.price), 0);
+  const lowStockItems = materials.filter(m => m.quantity <= lowStockThreshold);
+  const totalItems = materials.length;
+
+  // Group by category
+  const categorySummary = materials.reduce((acc, m) => {
+    if (!acc[m.category]) {
+      acc[m.category] = { count: 0, value: 0 };
+    }
+    acc[m.category].count += m.quantity;
+    acc[m.category].value += m.quantity * m.price;
+    return acc;
+  }, {} as Record<string, { count: number; value: number }>);
+
+  const categoryRows = Object.entries(categorySummary)
+    .sort((a, b) => b[1].value - a[1].value)
+    .map(([category, data]) => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${category}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${data.count}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-weight: 600;">
+          ₱${data.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </td>
+      </tr>
+    `)
+    .join('');
+
+  const materialRows = materials
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((m) => {
+      const isLowStock = m.quantity <= lowStockThreshold;
+      return `
+        <tr style="${isLowStock ? 'background-color: #ffebee;' : ''}">
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${m.name}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${m.category}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; font-size: 12px; ${isLowStock ? 'color: #c62828; font-weight: bold;' : ''}">
+            ${m.quantity} ${m.unit}
+          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px;">
+            ₱${m.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; font-weight: 600;">
+            ₱${(m.quantity * m.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
+            ${m.supplier || '-'}
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  const lowStockRows = lowStockItems
+    .map((m) => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #c62828; font-weight: 500;">${m.name}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; color: #c62828; font-weight: bold;">
+          ${m.quantity} ${m.unit}
+        </td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${m.category}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Inventory Report - ${projectInfo.name}</title>
+      <style>
+        body {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          margin: 0;
+          padding: 20px;
+          color: #333;
+          background-color: #fff;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+          padding-bottom: 20px;
+          border-bottom: 3px solid #4CAF50;
+        }
+        .header h1 {
+          margin: 0;
+          color: #4CAF50;
+          font-size: 28px;
+        }
+        .header p {
+          margin: 5px 0;
+          color: #666;
+          font-size: 14px;
+        }
+        .project-info {
+          background-color: #f5f5f5;
+          padding: 15px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+        }
+        .project-info h2 {
+          margin: 0 0 10px 0;
+          color: #333;
+          font-size: 18px;
+        }
+        .summary-cards {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 30px;
+          gap: 15px;
+        }
+        .summary-card {
+          flex: 1;
+          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+          color: white;
+          padding: 20px;
+          border-radius: 8px;
+          text-align: center;
+        }
+        .summary-card.orange {
+          background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+        }
+        .summary-card.red {
+          background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+        }
+        .summary-card.blue {
+          background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+        }
+        .summary-card h3 {
+          margin: 0 0 10px 0;
+          font-size: 14px;
+          font-weight: 400;
+          opacity: 0.9;
+        }
+        .summary-card .value {
+          font-size: 24px;
+          font-weight: 700;
+          margin: 0;
+        }
+        .section {
+          margin-bottom: 30px;
+        }
+        .section h2 {
+          color: #4CAF50;
+          font-size: 20px;
+          margin-bottom: 15px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid #e0e0e0;
+        }
+        .alert-section h2 {
+          color: #c62828;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+          background-color: #fff;
+        }
+        thead {
+          background-color: #4CAF50;
+          color: white;
+        }
+        .alert-section thead {
+          background-color: #c62828;
+        }
+        th {
+          padding: 12px 8px;
+          text-align: left;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .footer {
+          margin-top: 40px;
+          padding-top: 20px;
+          border-top: 2px solid #e0e0e0;
+          text-align: center;
+          font-size: 12px;
+          color: #999;
+        }
+        @media print {
+          body { margin: 0; }
+          .summary-cards { page-break-inside: avoid; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>📦 Inventory Report</h1>
+        <p><strong>SitePulse</strong> Construction Management Platform</p>
+        <p>Generated on: ${currentDate}</p>
+      </div>
+
+      <div class="project-info">
+        <h2>${projectInfo.name}</h2>
+        ${projectInfo.description ? `<p>${projectInfo.description}</p>` : ''}
+      </div>
+
+      <div class="summary-cards">
+        <div class="summary-card blue">
+          <h3>Total Items</h3>
+          <p class="value">${totalItems}</p>
+        </div>
+        <div class="summary-card">
+          <h3>Total Value</h3>
+          <p class="value">₱${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+        </div>
+        <div class="summary-card ${lowStockItems.length > 0 ? 'red' : 'orange'}">
+          <h3>Low Stock Items</h3>
+          <p class="value">${lowStockItems.length}</p>
+        </div>
+      </div>
+
+      ${lowStockItems.length > 0 ? `
+      <div class="section alert-section">
+        <h2>⚠️ Low Stock Alerts</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th style="text-align: center;">Current Stock</th>
+              <th>Category</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lowStockRows}
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+
+      <div class="section">
+        <h2>Inventory by Category</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th style="text-align: center;">Total Quantity</th>
+              <th style="text-align: right;">Total Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${categoryRows || '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #999;">No materials recorded</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>Detailed Inventory (${materials.length} items)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th>Category</th>
+              <th style="text-align: center;">Quantity</th>
+              <th style="text-align: right;">Unit Price</th>
+              <th style="text-align: right;">Total Value</th>
+              <th>Supplier</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${materialRows || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">No materials recorded</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer">
+        <p><strong>SitePulse</strong> - Construction Management Platform</p>
+        <p>This is a computer-generated document. No signature is required.</p>
+        <p>Report generated on ${currentDate}</p>
+      </div>
+    </body>
+    </html>
+  `;
 }
 
 /**

@@ -211,17 +211,61 @@ export function ProjectDataProvider({
 }) {
   const [state, dispatch] = useReducer(projectDataReducer, initialState);
 
+  // Helper function to add timeout to promises
+  const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+      ),
+    ]);
+  };
+
   // Load all project data from Firebase
   const loadData = async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
+      // Load data with individual timeouts and error handling
+      const loadWithFallback = async <T,>(
+        loader: () => Promise<T>,
+        fallback: T,
+        name: string
+      ): Promise<T> => {
+        try {
+          return await withTimeout(loader(), 10000);
+        } catch (error: any) {
+          console.error(`Error loading ${name}:`, error);
+          return fallback;
+        }
+      };
+
       const [materials, workers, equipment, budgetLogs, project] = await Promise.all([
-        firebaseDataService.getMaterials(projectId),
-        firebaseDataService.getWorkers(projectId),
-        firebaseDataService.getEquipment(projectId),
-        firebaseDataService.getBudgetLogs(projectId),
-        firebaseDataService.getProject(projectId),
+        loadWithFallback(
+          () => firebaseDataService.getMaterials(projectId),
+          [],
+          'materials'
+        ),
+        loadWithFallback(
+          () => firebaseDataService.getWorkers(projectId),
+          [],
+          'workers'
+        ),
+        loadWithFallback(
+          () => firebaseDataService.getEquipment(projectId),
+          [],
+          'equipment'
+        ),
+        loadWithFallback(
+          () => firebaseDataService.getBudgetLogs(projectId),
+          [],
+          'budgetLogs'
+        ),
+        loadWithFallback(
+          () => firebaseDataService.getProject(projectId),
+          null,
+          'project'
+        ),
       ]);
 
       dispatch({
@@ -236,7 +280,17 @@ export function ProjectDataProvider({
       });
     } catch (error: any) {
       console.error('Error loading project data:', error);
-      dispatch({ type: 'SET_ERROR', payload: error.message || 'Failed to load project data' });
+      // Even on error, set empty data so app doesn't freeze
+      dispatch({
+        type: 'SET_ALL_DATA',
+        payload: {
+          materials: [],
+          workers: [],
+          equipment: [],
+          budgetLogs: [],
+          totalBudget: 100000,
+        },
+      });
     }
   };
 

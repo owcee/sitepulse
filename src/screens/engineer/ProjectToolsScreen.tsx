@@ -88,7 +88,7 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
     {
       id: 'task-management',
       title: 'Task Management',
-      icon: 'list',
+      icon: 'clipboard-outline',
       color: constructionColors.inProgress,
       description: 'Manage project tasks',
       onPress: () => navigation.navigate('Tasks'),
@@ -153,7 +153,7 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Project Header with Dropdown */}
       <View style={styles.projectHeader}>
         <Menu
@@ -217,10 +217,15 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
             horizontal
             showsHorizontalScrollIndicator={false}
             snapToInterval={screenWidth - 20}
-            snapToAlignment="start"
+            snapToAlignment="center"
             decelerationRate="fast"
             contentContainerStyle={styles.chartsCarousel}
-            pagingEnabled={false}
+            pagingEnabled
+            getItemLayout={(data, index) => ({
+              length: screenWidth - 20,
+              offset: (screenWidth - 20) * index,
+              index,
+            })}
           />
         </View>
 
@@ -249,12 +254,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   projectHeader: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-    position: 'relative',
   },
   projectTouchable: {
     flexDirection: 'row',
@@ -271,9 +276,9 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurface,
   },
   projectSubtitle: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   titleRow: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { 
   Modal,
   Portal,
@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { createTask } from '../../services/taskService';
+import { getProjectWorkers } from '../../services/firebaseService';
 
 // Category and SubTask definitions with exact Tagalog labels and CNN flags
 const TASK_CATEGORIES = {
@@ -149,7 +150,7 @@ interface TaskCreationModalProps {
 }
 
 export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }: TaskCreationModalProps) {
-  const { state } = useProjectData();
+  const { state, projectId } = useProjectData();
   
   // Form state
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -161,15 +162,39 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
   const [startDateText, setStartDateText] = useState(new Date().toISOString().split('T')[0]);
   const [endDateText, setEndDateText] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [isCreating, setIsCreating] = useState(false);
+  const [projectWorkers, setProjectWorkers] = useState<any[]>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(false);
+  const [taskStatus, setTaskStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
 
   // UI state
   const [currentStep, setCurrentStep] = useState<'category' | 'subtask' | 'details'>('category');
+
+  // Load project workers when modal opens
+  React.useEffect(() => {
+    if (visible && projectId) {
+      loadProjectWorkers();
+    }
+  }, [visible, projectId]);
+
+  const loadProjectWorkers = async () => {
+    try {
+      setLoadingWorkers(true);
+      const workers = await getProjectWorkers(projectId);
+      setProjectWorkers(workers);
+    } catch (error) {
+      console.error('Error loading project workers:', error);
+      setProjectWorkers([]);
+    } finally {
+      setLoadingWorkers(false);
+    }
+  };
 
   const resetForm = () => {
     setSelectedCategory('');
     setSelectedSubTask('');
     setStartDateText(new Date().toISOString().split('T')[0]);
     setEndDateText(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setTaskStatus('not_started');
     setSelectedWorkers([]);
     setNotes('');
     setCurrentStep('category');
@@ -240,10 +265,11 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
         planned_end_date: endDateText,
         assigned_worker_ids: selectedWorkers,
         assigned_worker_names: selectedWorkers.map(id => {
-          const worker = state.workers.find(w => w.id === id);
+          const worker = projectWorkers.find(w => w.id === id);
           return worker?.name || `Worker ${id}`;
         }),
         cnnEligible: subtask?.cnnEligible || false,
+        status: taskStatus,
         notes,
       };
 
@@ -270,7 +296,11 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
   };
 
   const renderCategoryStep = () => (
-    <ScrollView style={styles.stepContent}>
+    <ScrollView 
+      style={styles.stepContent}
+      contentContainerStyle={styles.stepContentContainer}
+      showsVerticalScrollIndicator={true}
+    >
       <Title style={styles.stepTitle}>Select Category</Title>
       <Paragraph style={styles.stepSubtitle}>Choose the work category for this task</Paragraph>
       
@@ -285,7 +315,7 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
               <Paragraph style={styles.categoryTagalog}>{categoryData.tagalog}</Paragraph>
               <View style={styles.categoryMeta}>
                 <Chip 
-                  icon="list" 
+                  icon="format-list-bulleted" 
                   style={styles.subtaskCountChip}
                   textStyle={{ fontSize: 12 }}
                 >
@@ -311,7 +341,11 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
     if (!category) return null;
 
     return (
-      <ScrollView style={styles.stepContent}>
+      <ScrollView 
+        style={styles.stepContent}
+        contentContainerStyle={styles.stepContentContainer}
+        showsVerticalScrollIndicator={true}
+      >
         <View style={styles.stepHeader}>
           <IconButton
             icon="arrow-left"
@@ -360,96 +394,180 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
     if (!category || !subtask) return null;
 
     return (
-      <ScrollView style={styles.stepContent}>
-        <View style={styles.stepHeader}>
-          <IconButton
-            icon="arrow-left"
-            size={24}
-            onPress={() => setCurrentStep('subtask')}
-          />
-          <View>
-            <Title style={styles.stepTitle}>Task Details</Title>
-            <Paragraph style={styles.stepSubtitle}>{subtask.label}</Paragraph>
+      <View style={styles.detailsContainer}>
+        <ScrollView 
+          style={styles.stepContent}
+          contentContainerStyle={styles.stepContentContainer}
+          showsVerticalScrollIndicator={true}
+        >
+          <View style={styles.stepHeader}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              onPress={() => setCurrentStep('subtask')}
+            />
+            <View>
+              <Title style={styles.stepTitle}>Task Details</Title>
+              <Paragraph style={styles.stepSubtitle}>{subtask.label}</Paragraph>
+            </View>
           </View>
-        </View>
 
-        {/* Selected Task Info */}
-        <Surface style={styles.selectedTaskInfo}>
-          <Title style={styles.selectedTaskTitle}>{subtask.label}</Title>
-          <Paragraph style={styles.selectedTaskTagalog}>{subtask.tagalog}</Paragraph>
-          {subtask.cnnEligible && (
-            <Chip 
-              icon="brain" 
-              style={[styles.cnnChip, { backgroundColor: '#9C27B0' }]}
-              textStyle={{ color: 'white', fontSize: 12 }}
-            >
-              CNN Eligible Task
-            </Chip>
-          )}
-        </Surface>
+          {/* Selected Task Info */}
+          <Surface style={styles.selectedTaskInfo}>
+            <Title style={styles.selectedTaskTitle}>{subtask.label}</Title>
+            <Paragraph style={styles.selectedTaskTagalog}>{subtask.tagalog}</Paragraph>
+            {subtask.cnnEligible && (
+              <Chip 
+                icon="brain" 
+                style={[styles.cnnChip, { backgroundColor: '#9C27B0' }]}
+                textStyle={{ color: 'white', fontSize: 12 }}
+              >
+                CNN Eligible Task
+              </Chip>
+            )}
+          </Surface>
 
-        {/* Date Selection */}
-        <View style={styles.dateSection}>
-          <Title style={styles.sectionTitle}>Planned Timeline</Title>
-          
-          <TextInput
-            label="Start Date * (YYYY-MM-DD)"
-            value={startDateText}
-            onChangeText={setStartDateText}
-            style={styles.dateInput}
-            placeholder="2024-01-30"
-            right={<TextInput.Icon icon="calendar" />}
-          />
+          {/* Date Selection */}
+          <View style={styles.dateSection}>
+            <Title style={styles.sectionTitle}>Planned Timeline</Title>
+            
+            <TextInput
+              label="Start Date * (YYYY-MM-DD)"
+              value={startDateText}
+              onChangeText={setStartDateText}
+              style={styles.dateInput}
+              placeholder="2024-01-30"
+              right={<TextInput.Icon icon="calendar" />}
+            />
 
-          <TextInput
-            label="End Date * (YYYY-MM-DD)"
-            value={endDateText}
-            onChangeText={setEndDateText}
-            style={styles.dateInput}
-            placeholder="2024-02-05"
-            right={<TextInput.Icon icon="calendar" />}
-          />
+            <TextInput
+              label="End Date * (YYYY-MM-DD)"
+              value={endDateText}
+              onChangeText={setEndDateText}
+              style={styles.dateInput}
+              placeholder="2024-02-05"
+              right={<TextInput.Icon icon="calendar" />}
+            />
 
-          <Paragraph style={styles.durationText}>
-            Duration: {Math.ceil((new Date(endDateText).getTime() - new Date(startDateText).getTime()) / (1000 * 60 * 60 * 24)) || 0} days
-          </Paragraph>
-        </View>
+            <Paragraph style={styles.durationText}>
+              Duration: {Math.ceil((new Date(endDateText).getTime() - new Date(startDateText).getTime()) / (1000 * 60 * 60 * 24)) || 0} days
+            </Paragraph>
+          </View>
 
-        {/* Worker Assignment */}
-        <View style={styles.workerSection}>
-          <Title style={styles.sectionTitle}>Assign Workers *</Title>
-          {state.workers.map((worker) => (
-            <TouchableOpacity 
-              key={worker.id}
-              style={styles.workerItem}
-              onPress={() => handleWorkerToggle(worker.id)}
-            >
-              <View style={styles.workerInfo}>
-                <Checkbox
-                  status={selectedWorkers.includes(worker.id) ? 'checked' : 'unchecked'}
-                  onPress={() => handleWorkerToggle(worker.id)}
-                />
-                <View style={styles.workerDetails}>
-                  <Paragraph style={styles.workerName}>{worker.name}</Paragraph>
-                  <Paragraph style={styles.workerRole}>{worker.role}</Paragraph>
-                </View>
+          {/* Worker Assignment */}
+          <View style={styles.workerSection}>
+            <Title style={styles.sectionTitle}>Assign Workers *</Title>
+            {loadingWorkers ? (
+              <View style={styles.loadingWorkers}>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <Paragraph style={styles.loadingText}>Loading workers...</Paragraph>
               </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+            ) : projectWorkers.length === 0 ? (
+              <View style={styles.emptyWorkers}>
+                <Ionicons name="people-outline" size={32} color={theme.colors.onSurfaceDisabled} />
+                <Paragraph style={styles.emptyText}>No workers assigned to this project yet.</Paragraph>
+                <Paragraph style={styles.emptySubtext}>Please assign workers from Workers Management first.</Paragraph>
+              </View>
+            ) : (
+              projectWorkers.map((worker) => (
+                <TouchableOpacity 
+                  key={worker.id}
+                  style={styles.workerItem}
+                  onPress={() => handleWorkerToggle(worker.id)}
+                >
+                  <View style={styles.workerInfo}>
+                    <Checkbox
+                      status={selectedWorkers.includes(worker.id) ? 'checked' : 'unchecked'}
+                      onPress={() => handleWorkerToggle(worker.id)}
+                    />
+                    <View style={styles.workerDetails}>
+                      <Paragraph style={styles.workerName}>{worker.name}</Paragraph>
+                      <Paragraph style={styles.workerRole}>{worker.email}</Paragraph>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
 
-        {/* Notes */}
-        <TextInput
-          label="Notes (Optional)"
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-          numberOfLines={3}
-          style={styles.notesInput}
-          placeholder="Additional details, requirements, or special instructions..."
-        />
+          {/* Task Status Selection */}
+          <View style={styles.statusSection}>
+            <Title style={styles.sectionTitle}>Task Status *</Title>
+            <Paragraph style={styles.sectionSubtitle}>Select the current status of this task</Paragraph>
+            
+            <RadioButton.Group onValueChange={value => setTaskStatus(value as any)} value={taskStatus}>
+              <TouchableOpacity 
+                style={styles.statusOption}
+                onPress={() => setTaskStatus('not_started')}
+              >
+                <View style={styles.statusOptionContent}>
+                  <RadioButton value="not_started" />
+                  <View style={styles.statusInfo}>
+                    <Paragraph style={styles.statusLabel}>Not Started</Paragraph>
+                    <Paragraph style={styles.statusDescription}>Task has not begun yet</Paragraph>
+                  </View>
+                </View>
+                <Chip 
+                  style={{ backgroundColor: constructionColors.notStarted }}
+                  textStyle={{ color: 'white', fontSize: 10 }}
+                >
+                  NOT STARTED
+                </Chip>
+              </TouchableOpacity>
 
-        {/* Action Buttons */}
+              <TouchableOpacity 
+                style={styles.statusOption}
+                onPress={() => setTaskStatus('in_progress')}
+              >
+                <View style={styles.statusOptionContent}>
+                  <RadioButton value="in_progress" />
+                  <View style={styles.statusInfo}>
+                    <Paragraph style={styles.statusLabel}>In Progress</Paragraph>
+                    <Paragraph style={styles.statusDescription}>Task is currently being worked on</Paragraph>
+                  </View>
+                </View>
+                <Chip 
+                  style={{ backgroundColor: constructionColors.inProgress }}
+                  textStyle={{ color: 'white', fontSize: 10 }}
+                >
+                  IN PROGRESS
+                </Chip>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.statusOption}
+                onPress={() => setTaskStatus('completed')}
+              >
+                <View style={styles.statusOptionContent}>
+                  <RadioButton value="completed" />
+                  <View style={styles.statusInfo}>
+                    <Paragraph style={styles.statusLabel}>Completed</Paragraph>
+                    <Paragraph style={styles.statusDescription}>Task has been finished</Paragraph>
+                  </View>
+                </View>
+                <Chip 
+                  style={{ backgroundColor: constructionColors.complete }}
+                  textStyle={{ color: 'white', fontSize: 10 }}
+                >
+                  COMPLETED
+                </Chip>
+              </TouchableOpacity>
+            </RadioButton.Group>
+          </View>
+
+          {/* Notes */}
+          <TextInput
+            label="Notes (Optional)"
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            numberOfLines={3}
+            style={styles.notesInput}
+            placeholder="Additional details, requirements, or special instructions..."
+          />
+        </ScrollView>
+
+        {/* Action Buttons - OUTSIDE ScrollView */}
         <View style={styles.actionButtons}>
           <Button
             mode="outlined"
@@ -471,7 +589,7 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
             Create Task
           </Button>
         </View>
-      </ScrollView>
+      </View>
     );
   };
 
@@ -480,38 +598,43 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
       <Modal
         visible={visible}
         onDismiss={onDismiss}
-        contentContainerStyle={styles.modal}
+        contentContainerStyle={styles.modalContainer}
       >
-        <Card style={styles.modalCard}>
-          <Card.Content style={styles.modalContent}>
-            {currentStep === 'category' && renderCategoryStep()}
-            {currentStep === 'subtask' && renderSubTaskStep()}
-            {currentStep === 'details' && renderDetailsStep()}
-          </Card.Content>
-        </Card>
-
-
+        <View style={styles.modalCard}>
+          {currentStep === 'category' && renderCategoryStep()}
+          {currentStep === 'subtask' && renderSubTaskStep()}
+          {currentStep === 'details' && renderDetailsStep()}
+        </View>
       </Modal>
     </Portal>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: {
+  modalContainer: {
     margin: spacing.md,
-    maxHeight: '90%',
+    height: '85%',
   },
   modalCard: {
-    flex: 1,
+    backgroundColor: 'white',
     borderRadius: theme.roundness,
+    height: '100%',
+    elevation: 4,
   },
   modalContent: {
     flex: 1,
     padding: 0,
   },
+  detailsContainer: {
+    flex: 1,
+    height: '100%',
+  },
   stepContent: {
     flex: 1,
+  },
+  stepContentContainer: {
     padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   stepHeader: {
     flexDirection: 'row',
@@ -619,6 +742,42 @@ const styles = StyleSheet.create({
   workerSection: {
     marginBottom: spacing.md,
   },
+  statusSection: {
+    marginBottom: spacing.md,
+  },
+  sectionSubtitle: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.sm,
+  },
+  statusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.xs,
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: theme.roundness,
+  },
+  statusOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  statusInfo: {
+    marginLeft: spacing.sm,
+    flex: 1,
+  },
+  statusLabel: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: theme.colors.onSurface,
+  },
+  statusDescription: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+  },
   workerItem: {
     marginBottom: spacing.xs,
   },
@@ -638,6 +797,35 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
     color: theme.colors.onSurfaceVariant,
   },
+  loadingWorkers: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+  },
+  loadingText: {
+    marginLeft: spacing.sm,
+    color: theme.colors.onSurfaceVariant,
+  },
+  emptyWorkers: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: theme.roundness,
+    paddingHorizontal: spacing.md,
+  },
+  emptyText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceDisabled,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
   notesInput: {
     marginBottom: spacing.md,
     backgroundColor: theme.colors.surface,
@@ -646,7 +834,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingTop: spacing.md,
+    padding: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.outlineVariant,
+    backgroundColor: theme.colors.surface,
   },
   cancelButton: {
     flex: 1,

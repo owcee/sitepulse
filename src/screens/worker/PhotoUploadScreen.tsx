@@ -223,7 +223,7 @@ export default function PhotoUploadScreen() {
 
   if (hasPermission === null) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.permissionContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Paragraph style={styles.permissionText}>Requesting camera permission...</Paragraph>
@@ -234,7 +234,7 @@ export default function PhotoUploadScreen() {
 
   if (hasPermission === false) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.permissionContainer}>
           <IconButton icon="camera-off" size={60} iconColor="#ccc" />
           <Title style={styles.permissionTitle}>Camera Permission Required</Title>
@@ -255,7 +255,7 @@ export default function PhotoUploadScreen() {
 
   if (showCamera) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <Camera
           style={styles.camera}
           type={type}
@@ -320,7 +320,7 @@ export default function PhotoUploadScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <Title style={styles.screenTitle}>Upload Photo</Title>
@@ -336,10 +336,12 @@ export default function PhotoUploadScreen() {
         {!capturedImage ? (
           <Card style={styles.card}>
             <Card.Content style={styles.captureCard}>
-              <IconButton icon="camera" size={60} iconColor={theme.colors.primary} />
-              <Title style={styles.captureTitle}>Capture Construction Photo</Title>
-              <Paragraph style={styles.captureDescription}>
-                Take a photo of your work progress for AI analysis and engineer review
+              <IconButton icon="camera" size={50} iconColor={theme.colors.primary} />
+              <Title style={styles.captureTitle} numberOfLines={2}>
+                Capture Photo
+              </Title>
+              <Paragraph style={styles.captureDescription} numberOfLines={3}>
+                Take a photo for AI analysis and review
               </Paragraph>
               
               <View style={styles.captureButtons}>
@@ -347,7 +349,7 @@ export default function PhotoUploadScreen() {
                   mode="contained"
                   onPress={() => setShowCamera(true)}
                   icon="camera"
-                  style={styles.captureButton}
+                  style={[styles.captureButton, styles.captureButtonSpacing]}
                   contentStyle={styles.captureButtonContent}
                 >
                   Take Photo
@@ -411,18 +413,18 @@ export default function PhotoUploadScreen() {
                 {isClassifying ? (
                   <View style={styles.classifyingContainer}>
                     <ActivityIndicator size="large" color={theme.colors.primary} />
-                    <Paragraph style={styles.classifyingText}>
-                      Analyzing photo with AI...
+                    <Paragraph style={styles.classifyingText} numberOfLines={1}>
+                      Analyzing with AI...
                     </Paragraph>
-                    <Paragraph style={styles.classifyingSubtext}>
-                      Using MobileNetV3 CNN for classification
+                    <Paragraph style={styles.classifyingSubtext} numberOfLines={2}>
+                      Using MobileNetV3 CNN
                     </Paragraph>
                   </View>
                 ) : classificationResult ? (
                   <View style={styles.classificationResult}>
                     <View style={styles.classificationMain}>
                       <Paragraph style={styles.classificationLabel}>Classification:</Paragraph>
-                      <Title style={styles.classificationValue}>
+                      <Title style={styles.classificationValue} numberOfLines={2} ellipsizeMode="tail">
                         {classificationResult.classification}
                       </Title>
                     </View>
@@ -445,8 +447,8 @@ export default function PhotoUploadScreen() {
                     {classificationResult.confidence < 0.7 && (
                       <View style={styles.lowConfidenceWarning}>
                         <IconButton icon="alert" size={16} iconColor={constructionColors.warning} />
-                        <Paragraph style={styles.warningText}>
-                          Low confidence detected. Consider retaking the photo with better lighting or angle.
+                        <Paragraph style={styles.warningText} numberOfLines={3}>
+                          Low confidence. Try better lighting or angle.
                         </Paragraph>
                       </View>
                     )}
@@ -502,7 +504,9 @@ export default function PhotoUploadScreen() {
                       description={`Status: ${getTaskById(selectedTask)?.status.replace('_', ' ')}`}
                       left={() => <List.Icon icon="check-circle" color={constructionColors.complete} />}
                       titleStyle={styles.selectedTaskTitle}
+                      titleNumberOfLines={2}
                       descriptionStyle={styles.selectedTaskDescription}
+                      descriptionNumberOfLines={1}
                     />
                   </View>
                 )}
@@ -542,8 +546,8 @@ export default function PhotoUploadScreen() {
                   {isSubmitting ? 'Uploading Photo...' : 'Submit for Review'}
                 </Button>
                 
-                <Paragraph style={styles.submitDescription}>
-                  Photo will be sent to engineer for verification and approval
+                <Paragraph style={styles.submitDescription} numberOfLines={2}>
+                  Photo will be sent for verification
                 </Paragraph>
               </Card.Content>
             </Card>
@@ -590,7 +594,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 1,
   },
@@ -705,7 +710,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   captureTitle: {
-    fontSize: fontSizes.xl,
+    fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: theme.colors.text,
     marginTop: spacing.md,
@@ -721,7 +726,9 @@ const styles = StyleSheet.create({
   },
   captureButtons: {
     width: '100%',
-    gap: spacing.md,
+  },
+  captureButtonSpacing: {
+    marginBottom: spacing.md,
   },
   captureButtonContent: {
     paddingVertical: spacing.md,
@@ -738,8 +745,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   photoPreview: {
-    width: screenWidth - 80,
-    height: (screenWidth - 80) * 0.75,
+    width: '100%',
+    height: 250,
     borderRadius: theme.roundness,
     marginBottom: spacing.sm,
   },
@@ -784,7 +791,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   classificationValue: {
-    fontSize: fontSizes.xl,
+    fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: theme.colors.primary,
   },

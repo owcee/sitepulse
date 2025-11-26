@@ -133,7 +133,7 @@ export default function WorkerAssignmentScreen({ route, navigation }: WorkerAssi
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Paragraph style={styles.loadingText}>Loading available workers...</Paragraph>
@@ -143,7 +143,7 @@ export default function WorkerAssignmentScreen({ route, navigation }: WorkerAssi
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -380,14 +380,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.lg,
     marginBottom: spacing.xl,
-    gap: spacing.md,
   },
   cancelButton: {
     flex: 1,
+    marginRight: spacing.sm,
     borderColor: theme.colors.outline,
   },
   assignButton: {
     flex: 2,
+    marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
 });

@@ -206,9 +206,6 @@ export default function ReportLogsScreen() {
         )}
       </View>
       <Paragraph style={styles.workerFolderName}>{item.workerName}</Paragraph>
-      <Paragraph style={styles.workerFolderDetails}>
-        {item.logs.length} submissions
-      </Paragraph>
     </TouchableOpacity>
   );
 
@@ -299,7 +296,7 @@ export default function ReportLogsScreen() {
   // Main worker list view
   if (!selectedWorker) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.header}>
           <Title style={styles.screenTitle}>Report Logs</Title>
           <Paragraph style={styles.subtitle}>
@@ -307,22 +304,20 @@ export default function ReportLogsScreen() {
           </Paragraph>
         </View>
 
-        <FlatList
-          data={mockVerificationData}
-          renderItem={renderWorkerCard}
-          keyExtractor={(item) => item.workerId}
-          numColumns={3}
-          contentContainerStyle={styles.workersGrid}
-          columnWrapperStyle={styles.gridRow}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={styles.workersGridContainer}>
+          {mockVerificationData.map((item) => (
+            <View key={item.workerId}>
+              {renderWorkerCard({ item })}
+            </View>
+          ))}
+        </View>
       </SafeAreaView>
     );
   }
 
   // Worker's logs detail view
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.detailHeader}>
         <IconButton
           icon="arrow-left"
@@ -402,7 +397,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
   screenTitle: {
@@ -415,44 +411,41 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     color: theme.colors.onSurfaceVariant,
   },
-  workersGrid: {
+  workersGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
     padding: spacing.md,
     paddingTop: 0,
   },
-  gridRow: {
-    justifyContent: 'space-around',
-  },
   workerFolderCard: {
     alignItems: 'center',
-    padding: spacing.md,
-    margin: spacing.sm,
+    padding: spacing.sm,
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.sm,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
-    elevation: 1,
+    elevation: 2,
     width: 100,
-    height: 120,
+    minHeight: 120,
   },
   folderIconContainer: {
     position: 'relative',
     marginBottom: spacing.sm,
+    overflow: 'visible',
   },
   workerFolderName: {
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.md,
     fontWeight: '500',
     color: theme.colors.onSurface,
     textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  workerFolderDetails: {
-    fontSize: fontSizes.xs,
-    color: theme.colors.onSurfaceVariant,
-    textAlign: 'center',
+    marginTop: spacing.xs,
   },
   pendingBadge: {
     position: 'absolute',
     top: -8,
     right: -8,
-    zIndex: 1,
+    zIndex: 10,
   },
   detailHeader: {
     flexDirection: 'row',
@@ -486,6 +479,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   logInfo: {
     flexDirection: 'row',
@@ -538,14 +532,15 @@ const styles = StyleSheet.create({
   logActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: spacing.sm,
   },
   rejectButton: {
     flex: 1,
+    marginRight: spacing.xs,
     borderColor: constructionColors.urgent,
   },
   approveButton: {
     flex: 1,
+    marginLeft: spacing.xs,
     backgroundColor: constructionColors.complete,
   },
   emptyCard: {
@@ -580,14 +575,15 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: spacing.sm,
   },
   modalCancelButton: {
     flex: 1,
+    marginRight: spacing.xs,
     borderColor: theme.colors.outline,
   },
   modalSubmitButton: {
     flex: 1,
+    marginLeft: spacing.xs,
     backgroundColor: constructionColors.urgent,
   },
   photoSection: {

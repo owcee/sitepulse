@@ -98,17 +98,24 @@ export default function EquipmentManagementPage() {
       return;
     }
 
-    const equipmentData = {
+    const equipmentData: Record<string, any> = {
       name: formData.name.trim(),
       category: formData.category.trim(),
       type: formData.type,
       condition: formData.condition,
       status: formData.status,
-      dailyRate: formData.dailyRate ? parseFloat(formData.dailyRate) : undefined,
-      weeklyRate: formData.weeklyRate ? parseFloat(formData.weeklyRate) : undefined,
-      monthlyRate: formData.monthlyRate ? parseFloat(formData.monthlyRate) : undefined,
       dateAcquired: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
     };
+
+    if (formData.dailyRate) {
+      equipmentData.dailyRate = parseFloat(formData.dailyRate);
+    }
+    if (formData.weeklyRate) {
+      equipmentData.weeklyRate = parseFloat(formData.weeklyRate);
+    }
+    if (formData.monthlyRate) {
+      equipmentData.monthlyRate = parseFloat(formData.monthlyRate);
+    }
 
     if (editingEquipment) {
       updateEquipment(editingEquipment.id, equipmentData);
@@ -168,14 +175,23 @@ export default function EquipmentManagementPage() {
     }
   };
 
+  const getPreferredRentalRate = (equip: any) => {
+    if (equip.dailyRate) {
+      return { label: 'Daily', value: equip.dailyRate };
+    }
+    if (equip.weeklyRate) {
+      return { label: 'Weekly', value: equip.weeklyRate };
+    }
+    if (equip.monthlyRate) {
+      return { label: 'Monthly', value: equip.monthlyRate };
+    }
+    return null;
+  };
+
   const ownedEquipment = equipment.filter(e => e.type === 'owned');
   const rentalEquipment = equipment.filter(e => e.type === 'rental');
-  const totalRentalCost = rentalEquipment.reduce((sum, e) => {
-    return sum + (e.dailyRate || e.weeklyRate || e.monthlyRate || 0);
-  }, 0);
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -183,7 +199,7 @@ export default function EquipmentManagementPage() {
             icon="arrow-left"
             size={24}
             onPress={() => navigation.goBack()}
-            iconColor={theme.colors.onSurface}
+            iconColor={theme.colors.primary}
           />
           <View style={styles.headerText}>
             <Text style={styles.title}>Equipment Management</Text>
@@ -204,12 +220,6 @@ export default function EquipmentManagementPage() {
           <Card.Content style={styles.summaryContent}>
             <Text style={styles.summaryNumber}>{rentalEquipment.length}</Text>
             <Text style={styles.summaryLabel}>Rental</Text>
-          </Card.Content>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <Card.Content style={styles.summaryContent}>
-            <Text style={styles.summaryNumber}>${totalRentalCost.toLocaleString()}</Text>
-            <Text style={styles.summaryLabel}>Monthly Rental</Text>
           </Card.Content>
         </Card>
       </View>
@@ -283,16 +293,17 @@ export default function EquipmentManagementPage() {
                   {/* Rental Rates */}
                   {equip.type === 'rental' && (
                     <View style={styles.ratesContainer}>
-                      <Text style={styles.ratesTitle}>Rental Rates:</Text>
-                      {equip.dailyRate && (
-                        <Text style={styles.rateText}>Daily: ${equip.dailyRate}</Text>
-                      )}
-                      {equip.weeklyRate && (
-                        <Text style={styles.rateText}>Weekly: ${equip.weeklyRate}</Text>
-                      )}
-                      {equip.monthlyRate && (
-                        <Text style={styles.rateText}>Monthly: ${equip.monthlyRate}</Text>
-                      )}
+                      <Text style={styles.ratesTitle}>Rental Rate:</Text>
+                      {(() => {
+                        const preferredRate = getPreferredRentalRate(equip);
+                        return preferredRate ? (
+                          <Text style={styles.rateText}>
+                            {preferredRate.label}: ₱{preferredRate.value.toLocaleString()}
+                          </Text>
+                        ) : (
+                          <Text style={styles.rateText}>N/A</Text>
+                        );
+                      })()}
                     </View>
                   )}
 
@@ -384,7 +395,7 @@ export default function EquipmentManagementPage() {
                   <View style={styles.ratesInputs}>
                     <TextInput
                       mode="outlined"
-                      label="Daily Rate ($)"
+                      label="Daily Rate (₱)"
                       value={formData.dailyRate}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, dailyRate: text }))}
                       keyboardType="numeric"
@@ -393,7 +404,7 @@ export default function EquipmentManagementPage() {
                     />
                     <TextInput
                       mode="outlined"
-                      label="Weekly Rate ($)"
+                      label="Weekly Rate (₱)"
                       value={formData.weeklyRate}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, weeklyRate: text }))}
                       keyboardType="numeric"
@@ -402,7 +413,7 @@ export default function EquipmentManagementPage() {
                     />
                     <TextInput
                       mode="outlined"
-                      label="Monthly Rate ($)"
+                      label="Monthly Rate (₱)"
                       value={formData.monthlyRate}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, monthlyRate: text }))}
                       keyboardType="numeric"
@@ -469,7 +480,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-    paddingVertical: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   headerContent: {
     flexDirection: 'row',
@@ -482,7 +494,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.primary,
   },
   subtitle: {
     fontSize: fontSizes.md,
@@ -494,10 +506,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    gap: spacing.sm,
   },
   summaryCard: {
     flex: 1,
+    marginHorizontal: spacing.xs,
     backgroundColor: 'white',
   },
   summaryContent: {
@@ -530,6 +542,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   equipmentInfo: {
     flex: 1,
@@ -556,11 +569,15 @@ const styles = StyleSheet.create({
   },
   statusRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexWrap: 'wrap',
     marginBottom: spacing.md,
+    marginHorizontal: -spacing.xs,
+    overflow: 'visible',
   },
   statusChip: {
     paddingHorizontal: spacing.xs,
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.xs,
   },
   statusText: {
     color: 'white',
@@ -679,11 +696,13 @@ const styles = StyleSheet.create({
   },
   typeChips: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    flexWrap: 'wrap',
     paddingBottom: spacing.sm,
+    marginHorizontal: -spacing.xs,
   },
   typeChip: {
-    marginRight: spacing.xs,
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.xs,
   },
   customTypeInput: {
     marginTop: spacing.sm,
@@ -713,10 +732,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   ratesInputs: {
-    gap: spacing.sm,
+    marginVertical: -spacing.xs,
   },
   rateInput: {
     flex: 1,
+    marginVertical: spacing.xs,
   },
   statusSection: {
     marginBottom: spacing.md,
@@ -743,8 +763,11 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: spacing.md,
     marginTop: spacing.lg,
+  },
+  modalActionButton: {
+    flex: 1,
+    marginHorizontal: spacing.xs,
   },
 });
 

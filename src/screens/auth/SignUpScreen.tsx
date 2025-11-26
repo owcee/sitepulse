@@ -18,9 +18,11 @@ import { signUp } from '../../services/authService';
 interface Props {
   onSignUp: (user: User) => void;
   onBackToLogin: () => void;
+  onSignUpStart?: () => void;
+  onSignUpComplete?: () => void;
 }
 
-export default function SignUpScreen({ onSignUp, onBackToLogin }: Props) {
+export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, onSignUpComplete }: Props) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +61,9 @@ export default function SignUpScreen({ onSignUp, onBackToLogin }: Props) {
 
     setLoading(true);
     
+    // Notify parent that sign-up is starting (to prevent navigation flash)
+    onSignUpStart?.();
+    
     try {
       const userData = await signUp(email, password, {
         name: name.trim(),
@@ -66,7 +71,25 @@ export default function SignUpScreen({ onSignUp, onBackToLogin }: Props) {
         projectId: null // No default project - engineer creates, worker gets invited
       }) as User;
 
-      // Show success message and redirect to login
+      // Sign out immediately after signup (since signUp auto-logs in)
+      // This must happen BEFORE showing alert to prevent navigation flash
+      const { signOutUser } = require('../../services/authService');
+      await signOutUser();
+
+      // Clear form
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setRole('worker');
+
+      // Small delay to ensure sign-out state has propagated
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Notify parent that sign-up is complete
+      onSignUpComplete?.();
+
+      // Show success message after sign-out
       Alert.alert(
         'Account Created Successfully! 🎉', 
         `Welcome to SitePulse, ${userData.name}!\n\nYour account has been created. Please sign in with your new credentials to continue.`,
@@ -74,12 +97,6 @@ export default function SignUpScreen({ onSignUp, onBackToLogin }: Props) {
           {
             text: 'Sign In Now',
             onPress: () => {
-              // Clear form and go back to login
-              setName('');
-              setEmail('');
-              setPassword('');
-              setConfirmPassword('');
-              setRole('worker');
               onBackToLogin();
             }
           }
@@ -87,6 +104,8 @@ export default function SignUpScreen({ onSignUp, onBackToLogin }: Props) {
       );
     } catch (error: any) {
       Alert.alert('Sign Up Failed', error.message);
+      // Reset flag on error
+      onSignUpComplete?.();
     } finally {
       setLoading(false);
     }

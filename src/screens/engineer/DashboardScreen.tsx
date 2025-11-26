@@ -120,20 +120,20 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Task Status Summary */}
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
-              <Title style={styles.cardTitle}>Task Overview</Title>
-              <Chip icon="chart-pie" style={styles.headerChip}>
-                {taskSummary.total} Total
+              <Title style={styles.cardTitle} numberOfLines={1}>Task Overview</Title>
+              <Chip icon="chart-pie" style={styles.headerChip} textStyle={styles.chipTextSmall}>
+                {taskSummary.total}
               </Chip>
             </View>
             
             {loading ? (
-              <View style={{ padding: spacing.xl, alignItems: 'center' }}>
+              <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
               </View>
             ) : (
@@ -141,19 +141,19 @@ export default function DashboardScreen() {
                 <View style={styles.taskSummaryRow}>
                   <View style={styles.taskSummaryItem}>
                     <Paragraph style={styles.taskCount}>{taskSummary.completed}</Paragraph>
-                    <Paragraph style={[styles.taskLabel, { color: constructionColors.complete }]}>
+                    <Paragraph style={styles.taskLabelComplete} numberOfLines={2}>
                       Completed
                     </Paragraph>
                   </View>
                   <View style={styles.taskSummaryItem}>
                     <Paragraph style={styles.taskCount}>{taskSummary.inProgress}</Paragraph>
-                    <Paragraph style={[styles.taskLabel, { color: constructionColors.inProgress }]}>
+                    <Paragraph style={styles.taskLabelProgress} numberOfLines={2}>
                       In Progress
                     </Paragraph>
                   </View>
                   <View style={styles.taskSummaryItem}>
                     <Paragraph style={styles.taskCount}>{taskSummary.notStarted}</Paragraph>
-                    <Paragraph style={[styles.taskLabel, { color: constructionColors.notStarted }]}>
+                    <Paragraph style={styles.taskLabelNotStarted} numberOfLines={2}>
                       Not Started
                     </Paragraph>
                   </View>
@@ -178,8 +178,8 @@ export default function DashboardScreen() {
                 {taskSummary.total > 0 ? (
                   <PieChart
                     data={taskChartData}
-                    width={screenWidth - 80}
-                    height={200}
+                    width={Math.min(screenWidth - 80, 350)}
+                    height={180}
                     chartConfig={{
                       color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                     }}
@@ -189,8 +189,8 @@ export default function DashboardScreen() {
                     absolute
                   />
                 ) : (
-                  <View style={{ padding: spacing.md, alignItems: 'center' }}>
-                    <Paragraph style={{ color: theme.colors.onSurfaceVariant }}>
+                  <View style={styles.emptyChartContainer}>
+                    <Paragraph style={styles.emptyChartText} numberOfLines={2}>
                       No tasks yet. Create your first task to get started!
                     </Paragraph>
                   </View>
@@ -204,7 +204,7 @@ export default function DashboardScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.cardHeader}>
-              <Title style={styles.cardTitle}>Recent Photo Uploads</Title>
+              <Title style={styles.cardTitle} numberOfLines={1}>Recent Photos</Title>
               <IconButton 
                 icon="camera" 
                 size={20} 
@@ -215,7 +215,8 @@ export default function DashboardScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.photosContainer}>
                 {mockData.recentPhotos.map((photo) => (
-                  <View key={photo.id} style={styles.photoCard}>
+                  <View key={photo.id} style={styles.photoCardWrapper}>
+                    <View style={styles.photoCard}>
                     <View style={styles.photoImageContainer}>
                       <View style={styles.photoPlaceholder}>
                         <IconButton icon="image" size={30} iconColor="#666" />
@@ -234,12 +235,13 @@ export default function DashboardScreen() {
                         </Badge>
                       )}
                     </View>
-                    <Paragraph style={styles.photoClassification}>
+                    <Paragraph style={styles.photoClassification} numberOfLines={2} ellipsizeMode="tail">
                       {photo.classification}
                     </Paragraph>
-                    <Paragraph style={styles.photoStatus}>
-                      {photo.verified ? 'Verified' : 'Pending Review'}
+                    <Paragraph style={styles.photoStatus} numberOfLines={1}>
+                      {photo.verified ? 'Verified' : 'Pending'}
                     </Paragraph>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -261,18 +263,18 @@ export default function DashboardScreen() {
             </View>
 
             <View style={styles.delayInfo}>
-              <Paragraph style={styles.delayText}>
-                Estimated Completion: <strong>{mockData.delayRisk.estimatedCompletion}</strong>
+              <Paragraph style={styles.delayText} numberOfLines={1}>
+                Est. Completion: {mockData.delayRisk.estimatedCompletion}
               </Paragraph>
-              <Paragraph style={[styles.riskLevel, { color: constructionColors.warning }]}>
-                Risk Level: Medium
+              <Paragraph style={styles.riskLevelMedium} numberOfLines={1}>
+                Risk: Medium
               </Paragraph>
             </View>
 
             <LineChart
               data={timelineData}
-              width={screenWidth - 80}
-              height={180}
+              width={Math.min(screenWidth - 80, 350)}
+              height={160}
               chartConfig={{
                 backgroundColor: '#ffffff',
                 backgroundGradientFrom: '#ffffff',
@@ -306,7 +308,7 @@ export default function DashboardScreen() {
               <View style={styles.resourceItem}>
                 <Paragraph style={styles.resourceLabel}>Budget Used</Paragraph>
                 <Paragraph style={styles.resourceValue}>
-                  ${(mockData.resources.budgetSpent / 1000).toFixed(0)}K
+                  ₱{(mockData.resources.budgetSpent / 1000).toFixed(0)}K
                 </Paragraph>
                 <ProgressBar 
                   progress={budgetProgress} 
@@ -318,7 +320,7 @@ export default function DashboardScreen() {
               <View style={styles.resourceItem}>
                 <Paragraph style={styles.resourceLabel}>Monthly Payroll</Paragraph>
                 <Paragraph style={styles.resourceValue}>
-                  ${(mockData.resources.payrollCurrent / 1000).toFixed(0)}K
+                  ₱{(mockData.resources.payrollCurrent / 1000).toFixed(0)}K
                 </Paragraph>
               </View>
             </View>
@@ -351,7 +353,7 @@ export default function DashboardScreen() {
               )}
             </View>
             
-            <Paragraph style={styles.messagesText}>
+            <Paragraph style={styles.messagesText} numberOfLines={2}>
               {mockData.unreadMessages > 0 
                 ? `You have ${mockData.unreadMessages} unread messages`
                 : 'All messages read'
@@ -369,8 +371,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  scrollContent: {
+    paddingTop: spacing.sm,
+  },
   card: {
-    margin: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
   },
@@ -379,6 +386,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -397,13 +405,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   taskCount: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
     color: theme.colors.text,
   },
-  taskLabel: {
-    fontSize: fontSizes.sm,
+  taskLabelComplete: {
+    fontSize: fontSizes.xs,
     fontWeight: '500',
+    color: constructionColors.complete,
+    textAlign: 'center',
+  },
+  taskLabelProgress: {
+    fontSize: fontSizes.xs,
+    fontWeight: '500',
+    color: constructionColors.inProgress,
+    textAlign: 'center',
+  },
+  taskLabelNotStarted: {
+    fontSize: fontSizes.xs,
+    fontWeight: '500',
+    color: constructionColors.notStarted,
+    textAlign: 'center',
+  },
+  chipTextSmall: {
+    fontSize: fontSizes.xs,
+  },
+  loadingContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyChartContainer: {
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  emptyChartText: {
+    color: theme.colors.onSurfaceVariant,
+    textAlign: 'center',
   },
   progressSection: {
     marginBottom: spacing.lg,
@@ -420,10 +457,13 @@ const styles = StyleSheet.create({
   },
   photosContainer: {
     flexDirection: 'row',
-    gap: spacing.md,
+    marginLeft: -spacing.sm,
+  },
+  photoCardWrapper: {
+    marginLeft: spacing.md,
   },
   photoCard: {
-    width: 120,
+    width: 110,
     alignItems: 'center',
   },
   photoImageContainer: {
@@ -431,8 +471,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   photoPlaceholder: {
-    width: 100,
-    height: 100,
+    width: 90,
+    height: 90,
     backgroundColor: '#f0f0f0',
     borderRadius: theme.roundness,
     justifyContent: 'center',
@@ -463,9 +503,10 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     marginBottom: spacing.xs,
   },
-  riskLevel: {
-    fontSize: fontSizes.md,
+  riskLevelMedium: {
+    fontSize: fontSizes.sm,
     fontWeight: '500',
+    color: constructionColors.warning,
   },
   chart: {
     marginVertical: spacing.sm,

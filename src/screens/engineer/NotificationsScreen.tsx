@@ -126,17 +126,19 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
   // Subscribe to real-time notifications
   useEffect(() => {
     const unsubscribe = subscribeToNotifications((updatedNotifications) => {
-      // Convert to local format
-      const formattedNotifications = updatedNotifications.map(notif => ({
-        id: notif.id,
-        type: notif.type,
-        title: notif.title,
-        message: notif.body,
-        timestamp: notif.timestamp,
-        isRead: notif.read,
-        priority: notif.status === 'pending' ? 'high' : 'medium',
-        relatedId: notif.relatedId,
-      }));
+      // Convert to local format and filter out read notifications
+      const formattedNotifications = updatedNotifications
+        .filter(notif => !notif.read) // Only show unread notifications
+        .map(notif => ({
+          id: notif.id,
+          type: notif.type,
+          title: notif.title,
+          message: notif.body,
+          timestamp: notif.timestamp,
+          isRead: notif.read,
+          priority: notif.status === 'pending' ? 'high' : 'medium',
+          relatedId: notif.relatedId,
+        }));
       setNotifications(formattedNotifications);
       setLoading(false);
     });
@@ -155,6 +157,8 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
   const handleMarkAsRead = async (id: string) => {
     try {
       await markAsRead(id);
+      // Remove notification from list immediately
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -163,6 +167,8 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
   const handleMarkAllAsRead = async () => {
     try {
       await markAllAsRead();
+      // Remove all unread notifications from list immediately
+      setNotifications(prev => prev.filter(n => n.isRead));
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
@@ -248,7 +254,7 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
 
   // If used as modal
   const content = (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -421,9 +427,11 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    marginTop: 50,
-    marginHorizontal: 20,
-    borderRadius: 12,
+    marginTop: 40,
+    marginHorizontal: 16,
+    marginBottom: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     overflow: 'hidden',
   },
   header: {
@@ -431,7 +439,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',

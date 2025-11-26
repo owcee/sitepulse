@@ -178,23 +178,26 @@ export default function WorkerTasksScreen() {
           styles.taskCard,
           isOverdue && styles.overdueCard,
           isDueSoon && styles.dueSoonCard,
+          { overflow: 'visible' }
         ]}>
-          <Card.Content>
+          <Card.Content style={{ overflow: 'visible' }}>
             {/* Header Row */}
-            <View style={styles.taskHeader}>
-              <View style={styles.taskTitleRow}>
+            <View style={[styles.taskHeader, { overflow: 'visible' }]}>
+              <View style={[styles.taskTitleRow, { overflow: 'visible' }]}>
                 <IconButton
                   icon={getStatusIcon(task.status)}
                   size={24}
                   iconColor={getStatusColor(task.status)}
                   style={styles.statusIcon}
                 />
-                <View style={styles.titleContainer}>
-                  <Title style={styles.taskTitle}>{task.title}</Title>
-                  <View style={styles.taskMeta}>
+                <View style={[styles.titleContainer, { overflow: 'visible' }]}>
+                  <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
+                    {task.title}
+                  </Title>
+                  <View style={[styles.taskMeta, { overflow: 'visible' }]}>
                     <Chip 
-                      style={[styles.statusChip, { backgroundColor: getStatusColor(task.status) }]}
-                      textStyle={{ color: 'white', fontSize: 12 }}
+                      style={[styles.statusChip, styles.taskMetaChip, { backgroundColor: getStatusColor(task.status) }]}
+                      textStyle={styles.statusChipText}
                     >
                       {task.status.replace('_', ' ').toUpperCase()}
                     </Chip>
@@ -204,7 +207,7 @@ export default function WorkerTasksScreen() {
             </View>
 
             {/* Description */}
-            <Paragraph style={styles.taskDescription}>
+            <Paragraph style={styles.taskDescription} numberOfLines={3} ellipsizeMode="tail">
               {task.description}
             </Paragraph>
 
@@ -212,20 +215,23 @@ export default function WorkerTasksScreen() {
             {(isOverdue || isDueSoon) && (
               <View style={[
                 styles.dueDateAlert,
-                { backgroundColor: isOverdue ? '#ffebee' : '#fff3e0' }
+                { backgroundColor: isOverdue ? '#ffebee' : '#fff3e0', overflow: 'visible' }
               ]}>
                 <IconButton 
                   icon={isOverdue ? 'alert-circle' : 'clock-alert'} 
                   size={16} 
                   iconColor={isOverdue ? constructionColors.urgent : constructionColors.warning}
                 />
-                <Paragraph style={[
-                  styles.dueDateText,
-                  { color: isOverdue ? constructionColors.urgent : constructionColors.warning }
-                ]}>
+                <Paragraph 
+                  style={[
+                    styles.dueDateText,
+                    { color: isOverdue ? constructionColors.urgent : constructionColors.warning }
+                  ]}
+                  numberOfLines={1}
+                >
                   {isOverdue 
-                    ? `Overdue by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}`
-                    : `Due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`
+                    ? `Overdue ${Math.abs(daysUntilDue)}d`
+                    : `Due ${daysUntilDue}d`
                   }
                 </Paragraph>
               </View>
@@ -236,8 +242,8 @@ export default function WorkerTasksScreen() {
               <View style={styles.photoStatus}>
                 <View style={styles.photoInfo}>
                   <IconButton icon="camera" size={16} iconColor="#666" />
-                  <Paragraph style={styles.photoText}>
-                    Last photo: {new Date(task.lastPhoto.uploadedAt).toLocaleDateString()}
+                  <Paragraph style={styles.photoText} numberOfLines={1}>
+                    {new Date(task.lastPhoto.uploadedAt).toLocaleDateString()}
                   </Paragraph>
                 </View>
                 
@@ -248,7 +254,10 @@ export default function WorkerTasksScreen() {
                       size={16} 
                       iconColor={verificationStatus.color}
                     />
-                    <Paragraph style={[styles.verificationText, { color: verificationStatus.color }]}>
+                    <Paragraph 
+                      style={[styles.verificationText, { color: verificationStatus.color }]}
+                      numberOfLines={1}
+                    >
                       {verificationStatus.text}
                     </Paragraph>
                   </View>
@@ -285,7 +294,7 @@ export default function WorkerTasksScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <Title style={styles.screenTitle}>My Tasks</Title>
@@ -384,7 +393,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 1,
   },
@@ -441,6 +451,7 @@ const styles = StyleSheet.create({
   },
   taskHeader: {
     marginBottom: spacing.sm,
+    overflow: 'visible',
   },
   taskTitleRow: {
     flexDirection: 'row',
@@ -455,17 +466,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taskTitle: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.sm,
     fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: spacing.sm,
   },
+  statusChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 16,
+    paddingVertical: 2,
+  },
   taskMeta: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: -spacing.xs,
+    overflow: 'visible',
+  },
+  taskMetaChip: {
+    marginTop: spacing.xs,
+    marginRight: spacing.xs,
   },
   statusChip: {
-    height: 24,
+    minHeight: 30,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    overflow: 'visible',
   },
   taskDescription: {
     fontSize: fontSizes.sm,
@@ -484,6 +511,8 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     fontWeight: '500',
     marginLeft: spacing.sm,
+    lineHeight: 20,
+    paddingVertical: 2,
   },
   photoStatus: {
     backgroundColor: '#f8f9fa',
@@ -531,7 +560,10 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    marginHorizontal: -spacing.xs,
+  },
+  actionButtonWrapper: {
+    marginHorizontal: spacing.xs,
   },
   actionButton: {
     minWidth: 80,

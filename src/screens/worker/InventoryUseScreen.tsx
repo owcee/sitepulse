@@ -380,7 +380,7 @@ export default function InventoryUseScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -940,7 +940,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -1045,13 +1047,14 @@ const styles = StyleSheet.create({
   formActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: spacing.md,
   },
   cancelButton: {
     flex: 1,
+    marginRight: spacing.sm,
   },
   submitButton: {
     flex: 1,
+    marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
   modalContainer: {
@@ -1141,15 +1144,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: spacing.sm,
-    gap: spacing.sm,
   },
   reportUsageButton: {
     backgroundColor: theme.colors.primary,
     flex: 1,
+    marginRight: spacing.xs,
   },
   reportDamageButton: {
     backgroundColor: constructionColors.urgent,
     flex: 1,
+    marginLeft: spacing.xs,
   },
   quantitySection: {
     marginVertical: spacing.md,
@@ -1236,14 +1240,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: spacing.lg,
-    gap: spacing.md,
   },
   cancelButton: {
     flex: 1,
+    marginRight: spacing.sm,
     borderColor: theme.colors.outline,
   },
   submitButton: {
     flex: 1,
+    marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
   // Modal styles

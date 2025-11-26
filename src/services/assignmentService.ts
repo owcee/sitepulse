@@ -26,6 +26,8 @@ export interface WorkerAssignment {
   invitedByName: string;
   invitedAt: Date;
   decidedAt?: Date;
+  previousProjectId?: string | null;
+  isProjectSwitch?: boolean;
 }
 
 /**
@@ -89,6 +91,10 @@ export async function inviteWorker(
     }
     const workerData = workerDoc.data();
 
+    // Check if worker already has a project
+    const currentProjectId = workerData.projectId;
+    const hasExistingProject = currentProjectId && currentProjectId !== null;
+
     // Create assignment document
     const assignmentRef = doc(db, 'worker_assignments', workerId);
     const assignmentData = {
@@ -101,7 +107,9 @@ export async function inviteWorker(
       invitedBy: auth.currentUser.uid,
       invitedByName: engineerData.name,
       invitedAt: serverTimestamp(),
-      decidedAt: null
+      decidedAt: null,
+      previousProjectId: hasExistingProject ? currentProjectId : null, // Store previous project if exists
+      isProjectSwitch: hasExistingProject // Flag to indicate this is a project switch
     };
 
     await setDoc(assignmentRef, assignmentData);
@@ -132,16 +140,25 @@ export async function sendProjectAssignmentNotification(
   assignmentId: string
 ): Promise<void> {
   try {
+    // Check if worker already has a project
+    const workerDoc = await getDoc(doc(db, 'worker_accounts', workerId));
+    const workerData = workerDoc.data();
+    const hasExistingProject = workerData?.projectId && workerData.projectId !== null;
+
+    const notificationBody = hasExistingProject
+      ? `You have been invited to join "${projectInfo.name}". Accepting will switch you from your current project.`
+      : `You have been invited to join "${projectInfo.name}". Please review and accept or reject this assignment.`;
+
     await sendNotification(workerId, {
-      title: 'New Project Assignment',
-      body: `You have been invited to join "${projectInfo.name}". Please review and accept or reject this assignment.`,
+      title: hasExistingProject ? 'New Project Invitation (Switch)' : 'New Project Assignment',
+      body: notificationBody,
       type: 'project_assignment',
       projectId: projectInfo.id,
       assignmentId: assignmentId,
       status: 'pending'
     });
 
-    console.log('Assignment notification sent to worker:', workerId);
+    console.log('Assignment notification sent to worker:', workerId, hasExistingProject ? '(project switch)' : '');
   } catch (error) {
     console.error('Error sending assignment notification:', error);
     throw new Error('Failed to send assignment notification');
@@ -174,7 +191,9 @@ export async function getWorkerInvites(workerId: string): Promise<WorkerAssignme
         invitedBy: data.invitedBy,
         invitedByName: data.invitedByName,
         invitedAt: data.invitedAt?.toDate() || new Date(),
-        decidedAt: data.decidedAt?.toDate()
+        decidedAt: data.decidedAt?.toDate(),
+        previousProjectId: data.previousProjectId || null,
+        isProjectSwitch: data.isProjectSwitch || false
       }];
     }
 
@@ -196,21 +215,41 @@ export async function acceptAssignment(
   projectId: string
 ): Promise<void> {
   try {
-    // Update assignment status
+    // Get current assignment to check if it's a project switch
     const assignmentRef = doc(db, 'worker_assignments', workerId);
+    const assignmentDoc = await getDoc(assignmentRef);
+    const assignmentData = assignmentDoc.data();
+    const isProjectSwitch = assignmentData?.isProjectSwitch || false;
+    const previousProjectId = assignmentData?.previousProjectId;
+
+    // Update assignment status
     await updateDoc(assignmentRef, {
       status: 'accepted',
       decidedAt: serverTimestamp()
     });
 
-    // Update worker's projectId
+    // Update worker's projectId (keep current project as primary, but allow multiple)
     const workerRef = doc(db, 'worker_accounts', workerId);
+    const workerDoc = await getDoc(workerRef);
+    const workerData = workerDoc.data();
+    
+    // Get existing project IDs array or create new one
+    const existingProjectIds = workerData?.projectIds || (workerData?.projectId ? [workerData.projectId] : []);
+    
+    // Add new project if not already in list
+    if (!existingProjectIds.includes(projectId)) {
+      existingProjectIds.push(projectId);
+    }
+    
     await updateDoc(workerRef, {
-      projectId: projectId,
-      assignedAt: serverTimestamp()
+      projectId: projectId, // Current/primary project
+      projectIds: existingProjectIds, // All projects worker is assigned to
+      assignedAt: serverTimestamp(),
+      previousProjectId: previousProjectId || null, // Store previous project for reference
+      projectSwitchedAt: isProjectSwitch ? serverTimestamp() : null
     });
 
-    console.log('Assignment accepted:', workerId, projectId);
+    console.log('Assignment accepted:', workerId, projectId, isProjectSwitch ? '(project switch)' : '');
   } catch (error) {
     console.error('Error accepting assignment:', error);
     throw new Error('Failed to accept assignment');
@@ -239,29 +278,166 @@ export async function rejectAssignment(workerId: string): Promise<void> {
 }
 
 /**
+ * Get all projects for a worker (accepted assignments)
+ * @param workerId - Worker's UID
+ * @returns Promise<Array<{projectId: string, projectName: string}>> - Worker's projects
+ */
+export async function getWorkerProjects(workerId: string): Promise<Array<{projectId: string, projectName: string}>> {
+  try {
+    // Get worker's projectIds from worker_accounts
+    const workerRef = doc(db, 'worker_accounts', workerId);
+    const workerDoc = await getDoc(workerRef);
+    
+    if (!workerDoc.exists()) {
+      return [];
+    }
+    
+    const workerData = workerDoc.data();
+    const projectIds = workerData?.projectIds || (workerData?.projectId ? [workerData.projectId] : []);
+    
+    if (projectIds.length === 0) {
+      return [];
+    }
+    
+    // Get project details for each project ID
+    const projects = await Promise.all(
+      projectIds.map(async (projectId: string) => {
+        try {
+          const projectRef = doc(db, 'projects', projectId);
+          const projectDoc = await getDoc(projectRef);
+          
+          if (projectDoc.exists()) {
+            const projectData = projectDoc.data();
+            return {
+              projectId: projectId,
+              projectName: projectData.name || 'Unknown Project'
+            };
+          }
+          return null;
+        } catch (error) {
+          console.error(`Error fetching project ${projectId}:`, error);
+          return null;
+        }
+      })
+    );
+    
+    // Filter out null values
+    return projects.filter(p => p !== null) as Array<{projectId: string, projectName: string}>;
+  } catch (error) {
+    console.error('Error getting worker projects:', error);
+    throw new Error('Failed to fetch worker projects');
+  }
+}
+
+/**
+ * Get workers with pending invitations for a project
+ * @param projectId - Project ID
+ * @returns Promise<any[]> - Workers with pending invitations
+ */
+export async function getPendingInvitations(projectId: string): Promise<any[]> {
+  try {
+    // Get workers who have pending assignments for this project
+    const assignmentsRef = collection(db, 'worker_assignments');
+    const q = query(
+      assignmentsRef, 
+      where('projectId', '==', projectId),
+      where('status', '==', 'pending')
+    );
+    
+    const snapshot = await getDocs(q);
+    const workerIds: string[] = [];
+    
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.workerId) {
+        workerIds.push(data.workerId);
+      }
+    });
+
+    if (workerIds.length === 0) {
+      return [];
+    }
+
+    // Get worker details from worker_accounts
+    const workers: any[] = [];
+    
+    // Fetch each worker's details
+    for (const workerId of workerIds) {
+      try {
+        const workerDoc = await getDoc(doc(db, 'worker_accounts', workerId));
+        if (workerDoc.exists()) {
+          const data = workerDoc.data();
+          workers.push({
+            id: workerDoc.id,
+            name: data.name,
+            email: data.email,
+            role: data.role || 'worker',
+            profileImage: data.profileImage
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching worker ${workerId}:`, error);
+      }
+    }
+
+    return workers;
+  } catch (error) {
+    console.error('Error getting pending invitations:', error);
+    throw new Error('Failed to fetch pending invitations');
+  }
+}
+
+/**
  * Get all workers assigned to a project
  * @param projectId - Project ID
  * @returns Promise<any[]> - Assigned workers
  */
 export async function getProjectWorkers(projectId: string): Promise<any[]> {
   try {
-    const workersRef = collection(db, 'worker_accounts');
-    const q = query(workersRef, where('projectId', '==', projectId));
+    // Get workers who have accepted assignments for this project
+    const assignmentsRef = collection(db, 'worker_assignments');
+    const q = query(
+      assignmentsRef, 
+      where('projectId', '==', projectId),
+      where('status', '==', 'accepted')
+    );
     
     const snapshot = await getDocs(q);
-    const workers: any[] = [];
-
+    const workerIds: string[] = [];
+    
     snapshot.forEach((doc) => {
       const data = doc.data();
-      workers.push({
-        id: doc.id,
-        name: data.name,
-        email: data.email,
-        role: data.role || 'worker',
-        assignedAt: data.assignedAt?.toDate(),
-        profileImage: data.profileImage
-      });
+      if (data.workerId) {
+        workerIds.push(data.workerId);
+      }
     });
+
+    if (workerIds.length === 0) {
+      return [];
+    }
+
+    // Get worker details from worker_accounts
+    const workersRef = collection(db, 'worker_accounts');
+    const workers: any[] = [];
+    
+    // Fetch each worker's details
+    for (const workerId of workerIds) {
+      try {
+        const workerDoc = await getDoc(doc(db, 'worker_accounts', workerId));
+        if (workerDoc.exists()) {
+          const data = workerDoc.data();
+          workers.push({
+            id: workerDoc.id,
+            name: data.name,
+            email: data.email,
+            role: data.role || 'worker',
+            profileImage: data.profileImage
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching worker ${workerId}:`, error);
+      }
+    }
 
     return workers;
   } catch (error) {
@@ -297,6 +473,29 @@ export async function removeWorkerFromProject(workerId: string): Promise<void> {
     throw new Error('Failed to remove worker from project');
   }
 }
+
+/**
+ * Update the list of tasks assigned to a worker
+ * @param workerId - Worker's UID
+ * @param taskIds - Array of task IDs
+ */
+export async function updateWorkerAssignedTasks(workerId: string, taskIds: string[]): Promise<void> {
+  try {
+    const workerRef = doc(db, 'worker_accounts', workerId);
+    await updateDoc(workerRef, {
+      assignedTaskIds: taskIds,
+      assignedTaskCount: taskIds.length,
+    });
+    console.log(`Updated ${workerId} assigned tasks:`, taskIds);
+  } catch (error) {
+    console.error('Error updating worker assigned tasks:', error);
+    throw new Error('Failed to update worker task assignments');
+  }
+}
+
+
+
+
 
 
 

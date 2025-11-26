@@ -57,19 +57,19 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
           <View style={styles.logoContainer}>
             <Text style={styles.logo}>🏗️</Text>
           </View>
-          <Title style={styles.title}>SitePulse</Title>
-          <Paragraph style={styles.subtitle}>
-            Construction Task Monitoring & Management
+          <Title style={styles.title} numberOfLines={1}>SitePulse</Title>
+          <Paragraph style={styles.subtitle} numberOfLines={2}>
+            Construction Task Monitoring
           </Paragraph>
         </View>
 
         {/* Login Form */}
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.cardTitle}>Welcome Back</Title>
+            <Title style={styles.cardTitle} numberOfLines={1}>Welcome Back</Title>
             
-            <Paragraph style={styles.roleInfo}>
-              Your role (Engineer or Worker) is automatically detected from your account
+            <Paragraph style={styles.roleInfo} numberOfLines={2}>
+              Your role is detected automatically
             </Paragraph>
 
             {/* Gmail Input */}
@@ -120,8 +120,8 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
 
             {/* Gmail Notice */}
             <View style={styles.gmailNotice}>
-              <Text style={styles.gmailText}>
-                📧 Gmail accounts only - for secure authentication
+              <Text style={styles.gmailText} numberOfLines={2}>
+                📧 Gmail only - secure auth
               </Text>
             </View>
           </Card.Content>

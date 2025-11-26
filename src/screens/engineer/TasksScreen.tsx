@@ -26,7 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
 import TaskCreationModal from './TaskCreationModal';
-import { subscribeToProjectTasks, Task as FirebaseTask } from '../../services/taskService';
+import { subscribeToProjectTasks, Task as FirebaseTask, updateTask, updateTaskStatus, deleteTask } from '../../services/taskService';
 
 // Task data model for Firestore
 interface TaskData {
@@ -186,6 +186,14 @@ export default function TasksScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [tasks, setTasks] = useState<FirebaseTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTask, setSelectedTask] = useState<FirebaseTask | null>(null);
+  const [showTaskActionModal, setShowTaskActionModal] = useState(false);
+  const [dateChangeModalVisible, setDateChangeModalVisible] = useState(false);
+  const [pendingStatusTarget, setPendingStatusTarget] = useState<'not_started' | 'in_progress' | null>(null);
+  const [dateInputStart, setDateInputStart] = useState('');
+  const [dateInputEnd, setDateInputEnd] = useState('');
+  const [dateModalTitle, setDateModalTitle] = useState('');
+  const [dateModalMessage, setDateModalMessage] = useState('');
 
   // Subscribe to real-time tasks
   useEffect(() => {
@@ -198,6 +206,106 @@ export default function TasksScreen() {
 
     return () => unsubscribe();
   }, [projectId]);
+
+  // Auto-update task status based on dates
+  useEffect(() => {
+    const checkAndUpdateTaskStatuses = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      for (const task of tasks) {
+        // Auto-update not_started to in_progress when start date arrives
+        if (task.status === 'not_started' && task.planned_start_date <= today) {
+          try {
+            await updateTaskStatus(task.id, 'in_progress');
+            console.log(`Auto-updated task ${task.id} to in_progress`);
+          } catch (error) {
+            console.error(`Failed to auto-update task ${task.id}:`, error);
+          }
+        }
+        
+        // Auto-update in_progress to completed when end date arrives
+        if (task.status === 'in_progress' && task.planned_end_date <= today) {
+          try {
+            await updateTask(task.id, {
+              status: 'completed',
+              actual_end_date: today,
+            });
+            console.log(`Auto-completed task ${task.id}`);
+          } catch (error) {
+            console.error(`Failed to auto-complete task ${task.id}:`, error);
+          }
+        }
+      }
+    };
+
+    if (tasks.length > 0) {
+      checkAndUpdateTaskStatuses();
+    }
+  }, [tasks]);
+
+  const formatDateValue = (daysFromNow: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromNow);
+    return d.toISOString().split('T')[0];
+  };
+
+  const openRegressionDateModal = (targetStatus: 'not_started' | 'in_progress', message: string) => {
+    const futureStart = formatDateValue(1);
+    const futureEnd = formatDateValue(14);
+
+    setPendingStatusTarget(targetStatus);
+    setDateInputStart(futureStart);
+    setDateInputEnd(futureEnd);
+    setDateModalTitle(targetStatus === 'not_started' ? 'Move to Not Started' : 'Move to In Progress');
+    setDateModalMessage(message);
+    setDateChangeModalVisible(true);
+  };
+
+  const closeDateModal = () => {
+    setDateChangeModalVisible(false);
+    setPendingStatusTarget(null);
+    setDateModalTitle('');
+    setDateModalMessage('');
+    setDateInputStart('');
+    setDateInputEnd('');
+  };
+
+  const isValidDateFormat = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+  const handleApplyDateChange = async () => {
+    if (!selectedTask || !pendingStatusTarget) return;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    if (!isValidDateFormat(dateInputStart) || !isValidDateFormat(dateInputEnd)) {
+      Alert.alert('Invalid Date', 'Please enter dates in YYYY-MM-DD format.');
+      return;
+    }
+
+    if (dateInputStart <= today) {
+      Alert.alert('Choose Later Start Date', 'Start date must be later than today before regressing.');
+      return;
+    }
+
+    if (dateInputEnd <= dateInputStart) {
+      Alert.alert('Invalid Range', 'End date must be after the start date.');
+      return;
+    }
+
+    try {
+      await updateTask(selectedTask.id, {
+        status: pendingStatusTarget,
+        planned_start_date: dateInputStart,
+        planned_end_date: dateInputEnd,
+        actual_end_date: null,
+      });
+      closeDateModal();
+      setShowTaskActionModal(false);
+      Alert.alert('Success', `Task moved to ${pendingStatusTarget === 'not_started' ? 'Not Started' : 'In Progress'} with new dates.`);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update task');
+    }
+  };
 
   // Task counts for folder badges
   const taskCounts = {
@@ -231,7 +339,7 @@ export default function TasksScreen() {
       },
       completed: {
         title: 'Completed Tasks',
-        icon: 'folder-check-outline' as keyof typeof Ionicons.glyphMap,
+        icon: 'checkmark-done-circle-outline' as keyof typeof Ionicons.glyphMap,
         color: constructionColors.complete,
         description: 'Finished and verified tasks'
       }
@@ -276,23 +384,29 @@ export default function TasksScreen() {
           <Card.Content>
             <View style={styles.taskHeader}>
               <View style={styles.taskInfo}>
-                <Title style={styles.taskTitle}>{task.title || subtask?.label || task.subTask}</Title>
-                <Paragraph style={styles.taskTagalog}>{task.tagalogLabel}</Paragraph>
+                <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
+                  {task.title || subtask?.label || task.subTask}
+                </Title>
+                <Paragraph style={styles.taskTagalog} numberOfLines={1} ellipsizeMode="tail">
+                  {task.tagalogLabel}
+                </Paragraph>
                 <View style={styles.taskMeta}>
                   <Chip 
                     icon="account-group" 
-                    style={styles.workerChip}
-                    textStyle={{ fontSize: 12 }}
+                    style={[styles.workerChip, styles.taskMetaChip]}
+                    textStyle={styles.chipTextSmall}
                   >
-                    {task.assigned_worker_names.join(', ') || 'Unassigned'}
+                    {task.assigned_worker_names.length > 0 
+                      ? task.assigned_worker_names[0] 
+                      : 'Unassigned'}
                   </Chip>
                   {task.cnnEligible && (
                     <Chip 
                       icon="brain" 
-                      style={[styles.cnnChip, { backgroundColor: '#9C27B0' }]}
-                      textStyle={{ color: 'white', fontSize: 10 }}
+                      style={[styles.cnnChip, styles.taskMetaChip, { backgroundColor: '#9C27B0' }]}
+                      textStyle={styles.cnnChipText}
                     >
-                      CNN
+                      AI
                     </Chip>
                   )}
                 </View>
@@ -308,12 +422,12 @@ export default function TasksScreen() {
             </View>
 
             <View style={styles.taskDates}>
-              <Paragraph style={styles.dateText}>
-                Planned: {new Date(task.planned_start_date).toLocaleDateString()} - {new Date(task.planned_end_date).toLocaleDateString()}
+              <Paragraph style={styles.dateText} numberOfLines={2} ellipsizeMode="tail">
+                {new Date(task.planned_start_date).toLocaleDateString()} - {new Date(task.planned_end_date).toLocaleDateString()}
               </Paragraph>
               {task.actual_end_date && (
-                <Paragraph style={styles.dateText}>
-                  Completed: {new Date(task.actual_end_date).toLocaleDateString()}
+                <Paragraph style={styles.dateText} numberOfLines={1}>
+                  Done: {new Date(task.actual_end_date).toLocaleDateString()}
                 </Paragraph>
               )}
             </View>
@@ -323,25 +437,30 @@ export default function TasksScreen() {
                 <Chip 
                   icon={task.verification.engineerStatus === 'approved' ? 'check' : 
                         task.verification.engineerStatus === 'rejected' ? 'close' : 'clock'}
-                  style={{ 
-                    backgroundColor: task.verification.engineerStatus === 'approved' ? constructionColors.complete :
-                                     task.verification.engineerStatus === 'rejected' ? constructionColors.urgent :
-                                     constructionColors.warning 
-                  }}
-                  textStyle={{ color: 'white', fontSize: 12 }}
+                  style={[
+                    styles.verificationChip,
+                    { 
+                      backgroundColor: task.verification.engineerStatus === 'approved' ? constructionColors.complete :
+                                       task.verification.engineerStatus === 'rejected' ? constructionColors.urgent :
+                                       constructionColors.warning 
+                    }
+                  ]}
+                  textStyle={styles.verificationChipText}
                 >
                   {task.verification.engineerStatus.toUpperCase()}
                 </Chip>
                 {task.verification.cnnResult && (
-                  <Paragraph style={styles.cnnResult}>
-                    CNN: {task.verification.cnnResult.label} ({Math.round(task.verification.cnnResult.score * 100)}%)
+                  <Paragraph style={styles.cnnResult} numberOfLines={1} ellipsizeMode="tail">
+                    {task.verification.cnnResult.label} ({Math.round(task.verification.cnnResult.score * 100)}%)
                   </Paragraph>
                 )}
               </View>
             )}
 
             {task.notes && (
-              <Paragraph style={styles.taskNotes}>{task.notes}</Paragraph>
+              <Paragraph style={styles.taskNotes} numberOfLines={2} ellipsizeMode="tail">
+                {task.notes}
+              </Paragraph>
             )}
           </Card.Content>
         </Card>
@@ -350,10 +469,58 @@ export default function TasksScreen() {
   };
 
   const handleTaskPress = (task: FirebaseTask) => {
+    setSelectedTask(task);
+    setShowTaskActionModal(true);
+  };
+
+  const handleChangeStatus = async (newStatus: 'not_started' | 'in_progress' | 'completed') => {
+    if (!selectedTask) return;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    if (newStatus === 'completed') {
+      try {
+        await updateTask(selectedTask.id, {
+          status: newStatus,
+          actual_end_date: today,
+        });
+        setShowTaskActionModal(false);
+        Alert.alert('Success', `Task completed on ${today}!`);
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to update task status');
+      }
+      return;
+    }
+
+    const message = selectedTask.status === 'completed'
+      ? 'Reopening this task requires a new timeline. Please select a later start and end date.'
+      : 'Choose a later start and end date to move this task back in the workflow.';
+
+    openRegressionDateModal(newStatus, message);
+  };
+
+  const handleDeleteTask = async () => {
+    if (!selectedTask) return;
+
     Alert.alert(
-      'Task Details',
-      `Task: ${task.title}\nStatus: ${task.status}\nWorkers: ${task.assigned_worker_names.join(', ')}`,
-      [{ text: 'OK' }]
+      'Delete Task',
+      `Are you sure you want to delete "${selectedTask.title}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTask(selectedTask.id);
+              setShowTaskActionModal(false);
+              Alert.alert('Success', 'Task deleted successfully');
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete task');
+            }
+          },
+        },
+      ]
     );
   };
 
@@ -370,7 +537,7 @@ export default function TasksScreen() {
   // Loading state
   if (loading && currentView === 'folders') {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Paragraph style={{ marginTop: spacing.md }}>Loading tasks...</Paragraph>
@@ -382,12 +549,22 @@ export default function TasksScreen() {
   // Main folders view
   if (currentView === 'folders') {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.header}>
-          <Title style={styles.screenTitle}>Task Management</Title>
-          <Paragraph style={styles.subtitle}>
-            Organize tasks by status with time-oriented workflow
-          </Paragraph>
+          <View style={styles.headerRow}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              onPress={() => navigation.goBack()}
+              iconColor={theme.colors.primary}
+            />
+            <View style={styles.headerText}>
+              <Title style={styles.screenTitle}>Task Management</Title>
+              <Paragraph style={styles.subtitle}>
+                Organize tasks by status with time-oriented workflow
+              </Paragraph>
+            </View>
+          </View>
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -399,7 +576,11 @@ export default function TasksScreen() {
         <FAB
           icon="plus"
           style={styles.fab}
-          onPress={() => setShowCreateModal(true)}
+          onPress={() => {
+            console.log('FAB pressed, opening modal');
+            setShowCreateModal(true);
+          }}
+          accessibilityLabel="Add new task"
         />
 
         <TaskCreationModal
@@ -410,13 +591,113 @@ export default function TasksScreen() {
             // Task will automatically appear via real-time subscription
           }}
         />
+
+        {/* Task Action Modal */}
+        <Portal>
+          <Modal
+            visible={showTaskActionModal}
+            onDismiss={() => setShowTaskActionModal(false)}
+            contentContainerStyle={styles.taskActionModal}
+          >
+            <Surface style={styles.taskActionSurface}>
+              <View style={styles.taskActionHeader}>
+                <Title style={styles.taskActionTitle}>{selectedTask?.title}</Title>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowTaskActionModal(false)}
+                />
+              </View>
+
+              <View style={styles.taskActionContent}>
+                <Paragraph style={styles.taskActionLabel}>Change Status:</Paragraph>
+                
+                <Button
+                  mode="contained"
+                  icon="ellipse-outline"
+                  onPress={() => handleChangeStatus('not_started')}
+                  style={[styles.statusButton, { backgroundColor: constructionColors.notStarted }]}
+                  disabled={selectedTask?.status === 'not_started'}
+                >
+                  Not Started
+                </Button>
+
+                <Button
+                  mode="contained"
+                  icon="time"
+                  onPress={() => handleChangeStatus('in_progress')}
+                  style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
+                  disabled={selectedTask?.status === 'in_progress'}
+                >
+                  In Progress
+                </Button>
+
+                <Button
+                  mode="contained"
+                  icon="checkmark-circle"
+                  onPress={() => handleChangeStatus('completed')}
+                  style={[styles.statusButton, { backgroundColor: constructionColors.complete }]}
+                  disabled={selectedTask?.status === 'completed'}
+                >
+                  Completed
+                </Button>
+
+                <Divider style={styles.divider} />
+
+                <Button
+                  mode="contained"
+                  icon="trash"
+                  onPress={handleDeleteTask}
+                  style={[styles.deleteButton, { backgroundColor: constructionColors.urgent }]}
+                >
+                  Delete Task
+                </Button>
+              </View>
+            </Surface>
+          </Modal>
+
+          {/* Date Change Modal */}
+          <Modal
+            visible={dateChangeModalVisible}
+            onDismiss={closeDateModal}
+            contentContainerStyle={styles.dateModalContainer}
+          >
+            <Surface style={styles.dateModalSurface}>
+              <Title style={styles.taskActionTitle}>{dateModalTitle}</Title>
+              <Paragraph style={styles.dateModalMessage}>{dateModalMessage}</Paragraph>
+
+              <TextInput
+                label="Start Date (YYYY-MM-DD)"
+                value={dateInputStart}
+                onChangeText={setDateInputStart}
+                style={styles.dateModalInput}
+              />
+
+              <TextInput
+                label="End Date (YYYY-MM-DD)"
+                value={dateInputEnd}
+                onChangeText={setDateInputEnd}
+                style={styles.dateModalInput}
+              />
+
+              <View style={styles.dateModalActions}>
+                <Button mode="outlined" onPress={closeDateModal}>
+                  Cancel
+                </Button>
+                <Button mode="contained" onPress={handleApplyDateChange}>
+                  Save
+                </Button>
+              </View>
+            </Surface>
+          </Modal>
+        </Portal>
       </SafeAreaView>
     );
   }
 
   // Task list view for specific status
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.detailHeader}>
         <IconButton
           icon="arrow-left"
@@ -462,7 +743,11 @@ export default function TasksScreen() {
       <FAB
         icon="plus"
         style={styles.fab}
-        onPress={() => setShowCreateModal(true)}
+        onPress={() => {
+          console.log('FAB pressed, opening modal');
+          setShowCreateModal(true);
+        }}
+        accessibilityLabel="Add new task"
       />
 
       <TaskCreationModal
@@ -473,6 +758,71 @@ export default function TasksScreen() {
           // Task will automatically appear via real-time subscription
         }}
       />
+
+      {/* Task Action Modal */}
+      <Portal>
+        <Modal
+          visible={showTaskActionModal}
+          onDismiss={() => setShowTaskActionModal(false)}
+          contentContainerStyle={styles.taskActionModal}
+        >
+          <Surface style={styles.taskActionSurface}>
+            <View style={styles.taskActionHeader}>
+              <Title style={styles.taskActionTitle}>{selectedTask?.title}</Title>
+              <IconButton
+                icon="close"
+                size={24}
+                onPress={() => setShowTaskActionModal(false)}
+              />
+            </View>
+
+            <View style={styles.taskActionContent}>
+              <Paragraph style={styles.taskActionLabel}>Change Status:</Paragraph>
+              
+              <Button
+                mode="contained"
+                icon="ellipse-outline"
+                onPress={() => handleChangeStatus('not_started')}
+                style={[styles.statusButton, { backgroundColor: constructionColors.notStarted }]}
+                disabled={selectedTask?.status === 'not_started'}
+              >
+                Not Started
+              </Button>
+
+              <Button
+                mode="contained"
+                icon="time"
+                onPress={() => handleChangeStatus('in_progress')}
+                style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
+                disabled={selectedTask?.status === 'in_progress'}
+              >
+                In Progress
+              </Button>
+
+              <Button
+                mode="contained"
+                icon="checkmark-circle"
+                onPress={() => handleChangeStatus('completed')}
+                style={[styles.statusButton, { backgroundColor: constructionColors.complete }]}
+                disabled={selectedTask?.status === 'completed'}
+              >
+                Completed
+              </Button>
+
+              <Divider style={styles.divider} />
+
+              <Button
+                mode="contained"
+                icon="trash"
+                onPress={handleDeleteTask}
+                style={[styles.deleteButton, { backgroundColor: constructionColors.urgent }]}
+              >
+                Delete Task
+              </Button>
+            </View>
+          </Surface>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -483,8 +833,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerText: {
+    flex: 1,
+    marginLeft: spacing.xs,
   },
   screenTitle: {
     fontSize: fontSizes.xl,
@@ -514,12 +873,13 @@ const styles = StyleSheet.create({
   folderHeader: {
     position: 'relative',
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   taskBadge: {
     position: 'absolute',
     top: -8,
     right: -8,
-    zIndex: 1,
+    zIndex: 10,
   },
   folderTitle: {
     fontSize: fontSizes.lg,
@@ -567,15 +927,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.sm,
+    overflow: 'visible',
   },
   taskInfo: {
     flex: 1,
   },
   taskTitle: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.sm,
     fontWeight: 'bold',
     color: theme.colors.onSurface,
     marginBottom: spacing.xs,
+  },
+  chipTextSmall: {
+    fontSize: 10,
+  },
+  cnnChipText: {
+    color: 'white',
+    fontSize: 9,
+  },
+  verificationChipText: {
+    color: 'white',
+    fontSize: 10,
   },
   taskTagalog: {
     fontSize: fontSizes.sm,
@@ -585,15 +957,19 @@ const styles = StyleSheet.create({
   },
   taskMeta: {
     flexDirection: 'row',
-    gap: spacing.sm,
     flexWrap: 'wrap',
+    marginHorizontal: -spacing.xs,
+  },
+  taskMetaChip: {
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.xs,
   },
   workerChip: {
     backgroundColor: theme.colors.primaryContainer,
-    height: 28,
+    height: 32,
   },
   cnnChip: {
-    height: 28,
+    height: 32,
   },
   taskStatus: {
     marginLeft: spacing.sm,
@@ -608,8 +984,11 @@ const styles = StyleSheet.create({
   verificationSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
     marginBottom: spacing.sm,
+    overflow: 'visible',
+  },
+  verificationChip: {
+    marginRight: spacing.sm,
   },
   cnnResult: {
     fontSize: fontSizes.sm,
@@ -648,5 +1027,74 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: theme.colors.primary,
+    zIndex: 999,
+    elevation: 8,
+  },
+  taskActionModal: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  taskActionSurface: {
+    backgroundColor: 'white',
+    borderRadius: theme.roundness,
+    width: '90%',
+    maxWidth: 400,
+    padding: spacing.md,
+    elevation: 4,
+  },
+  taskActionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  taskActionTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  taskActionContent: {
+    gap: spacing.sm,
+  },
+  taskActionLabel: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  statusButton: {
+    marginBottom: spacing.xs,
+  },
+  divider: {
+    marginVertical: spacing.md,
+  },
+  deleteButton: {
+    marginTop: spacing.xs,
+  },
+  dateModalContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  dateModalSurface: {
+    width: '90%',
+    maxWidth: 400,
+    padding: spacing.md,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
+    elevation: 4,
+  },
+  dateModalMessage: {
+    marginBottom: spacing.sm,
+    color: theme.colors.onSurfaceVariant,
+  },
+  dateModalInput: {
+    marginBottom: spacing.sm,
+    backgroundColor: theme.colors.surfaceVariant,
+  },
+  dateModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
   },
 });

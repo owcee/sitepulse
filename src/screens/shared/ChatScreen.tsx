@@ -104,7 +104,7 @@ const mockMessages: ChatMessage[] = [
 ];
 
 interface Props {
-  user: User;
+  user?: User;
 }
 
 export default function ChatScreen({ user }: Props) {
@@ -113,8 +113,37 @@ export default function ChatScreen({ user }: Props) {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{name: string, role: string} | null>(null);
   
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Get current user data
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        if (user) {
+          setCurrentUser({ name: user.name, role: user.role });
+          return;
+        }
+        
+        // If no user prop, get from Firebase
+        if (auth.currentUser) {
+          const { getUserProfile } = await import('../../utils/user');
+          const userProfile = await getUserProfile(auth.currentUser.uid);
+          if (userProfile) {
+            setCurrentUser({ 
+              name: userProfile.name, 
+              role: userProfile.role 
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      }
+    };
+    
+    loadUserData();
+  }, [user]);
 
   // Subscribe to real-time chat messages
   useEffect(() => {
@@ -152,7 +181,7 @@ export default function ChatScreen({ user }: Props) {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !projectId) return;
+    if (!newMessage.trim() || !projectId || !currentUser) return;
 
     setSending(true);
 
@@ -160,8 +189,8 @@ export default function ChatScreen({ user }: Props) {
       await sendMessage(
         projectId,
         newMessage.trim(),
-        user.name,
-        user.role,
+        currentUser.name,
+        currentUser.role,
         'text'
       );
       setNewMessage('');
@@ -187,7 +216,7 @@ export default function ChatScreen({ user }: Props) {
   };
 
   const getRoleColor = (role: 'engineer' | 'worker') => {
-    return role === 'engineer' ? theme.colors.primary : constructionColors.complete;
+    return role === 'engineer' ? theme.colors.error : constructionColors.complete;
   };
 
   const renderMessage = (message: any, index: number) => {
@@ -210,47 +239,47 @@ export default function ChatScreen({ user }: Props) {
           />
         )}
         
-        <View style={[
-          styles.messageBubble,
-          isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
-          !isCurrentUser && !showAvatar && styles.messageBubbleWithoutAvatar
-        ]}>
-          {!isCurrentUser && showAvatar && (
-            <View style={styles.messageHeader}>
-              <Paragraph style={styles.senderName}>{message.senderName}</Paragraph>
-              <Chip 
-                style={[styles.roleChip, { backgroundColor: getRoleColor(message.senderRole) }]}
-                textStyle={{ color: 'white', fontSize: 10 }}
-              >
-                {message.senderRole === 'engineer' ? 'ENG' : 'WKR'}
-              </Chip>
-            </View>
+        <View style={styles.messageBubbleWrapper}>
+          <View style={[
+            styles.messageBubble,
+            isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
+            !isCurrentUser && !showAvatar && styles.messageBubbleWithoutAvatar
+          ]}>
+            {!isCurrentUser && showAvatar && (
+              <View style={styles.messageHeader}>
+                <Paragraph style={styles.senderName}>{message.senderName}</Paragraph>
+                <Chip 
+                  style={[styles.roleChip, { backgroundColor: getRoleColor(message.senderRole) }]}
+                  textStyle={styles.roleChipText}
+                >
+                  {message.senderRole === 'engineer' ? 'Engineer' : 'Worker'}
+                </Chip>
+              </View>
+            )}
+            
+            <Paragraph style={[
+              styles.messageText,
+              isCurrentUser ? styles.currentUserText : styles.otherUserText
+            ]}>
+              {message.content}
+            </Paragraph>
+          </View>
+          
+          {showTimestamp && (
+            <Paragraph style={[
+              styles.timestamp,
+              isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
+            ]}>
+              {formatTimestamp(message.timestamp)}
+            </Paragraph>
           )}
-          
-
-          
-          <Paragraph style={[
-            styles.messageText,
-            isCurrentUser ? styles.currentUserText : styles.otherUserText
-          ]}>
-            {message.content}
-          </Paragraph>
         </View>
-        
-        {showTimestamp && (
-          <Paragraph style={[
-            styles.timestamp,
-            isCurrentUser ? styles.currentUserTimestamp : styles.otherUserTimestamp
-          ]}>
-            {formatTimestamp(message.timestamp)}
-          </Paragraph>
-        )}
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerInfo}>
@@ -345,7 +374,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 1,
   },
@@ -400,8 +430,11 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
     marginBottom: spacing.xs,
   },
-  messageBubble: {
+  messageBubbleWrapper: {
     maxWidth: '75%',
+    flexDirection: 'column',
+  },
+  messageBubble: {
     padding: spacing.md,
     borderRadius: 16,
     elevation: 1,
@@ -429,7 +462,23 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   roleChip: {
-    height: 20,
+    height: 26,
+    minHeight: 26,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  roleChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
+    lineHeight: 13,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    paddingVertical: 0,
+    marginVertical: 0,
   },
 
   messageText: {
@@ -445,15 +494,19 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: fontSizes.xs,
     color: theme.colors.placeholder,
-    marginTop: spacing.xs,
+    marginTop: 4,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   currentUserTimestamp: {
     textAlign: 'right',
-    marginRight: spacing.sm,
+    alignSelf: 'flex-end',
+    marginRight: 0,
   },
   otherUserTimestamp: {
     textAlign: 'left',
-    marginLeft: 44, // Avatar width + margin
+    alignSelf: 'flex-start',
+    marginLeft: 0,
   },
   typingIndicator: {
     flexDirection: 'row',

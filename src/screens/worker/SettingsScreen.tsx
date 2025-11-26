@@ -156,7 +156,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -169,22 +169,24 @@ export default function SettingsScreen() {
         {/* Profile Card */}
         <Card style={styles.card}>
           <Card.Content>
+            <Title style={styles.cardTitle}>Worker Profile</Title>
+            
             <View style={styles.profileHeader}>
               <Avatar.Image 
                 size={80} 
-                source={{ uri: userProfile?.profileImage || 'https://via.placeholder.com/150' }}
+                source={{ uri: userProfile?.profileImage || 'https://via.placeholder.com/150' }} 
                 style={styles.avatar}
               />
               <View style={styles.profileInfo}>
                 <Title style={styles.name}>{userProfile?.name || 'Loading...'}</Title>
                 <Paragraph style={styles.email}>{userProfile?.email || ''}</Paragraph>
+                <Paragraph style={styles.role}>Construction Worker</Paragraph>
               </View>
             </View>
-
-            <Button
-              mode="outlined"
+            
+            <Button 
+              mode="outlined" 
               onPress={() => setEditProfileVisible(true)}
-              icon="account-edit"
               style={styles.editProfileButton}
             >
               Edit Profile
@@ -208,14 +210,6 @@ export default function SettingsScreen() {
             
             <Divider />
             
-            <List.Item
-              title="Privacy Settings"
-              description="Manage your privacy preferences"
-              left={() => <List.Icon icon="shield-account" color={theme.colors.primary} />}
-              right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => Alert.alert('Privacy', 'Privacy settings would be implemented here.')}
-              style={styles.settingsItem}
-            />
           </Card.Content>
         </Card>
 
@@ -246,25 +240,34 @@ export default function SettingsScreen() {
         {/* Support */}
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.cardTitle}>Support</Title>
+            <Title style={styles.cardTitle}>Support & Legal</Title>
             
             <List.Item
-              title="Contact Support"
-              description="Get in touch with our team"
-              left={() => <List.Icon icon="phone" color={theme.colors.primary} />}
+              title="Privacy Policy"
+              description="Read our privacy policy"
+              left={() => <List.Icon icon="shield-check" color={theme.colors.primary} />}
               right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => Alert.alert('Support', 'Contact support would be implemented here.')}
+              onPress={() => Alert.alert('Privacy Policy', 'Privacy policy would be opened here.')}
               style={styles.settingsItem}
             />
             
             <Divider />
             
             <List.Item
-              title="About"
-              description="App version and information"
-              left={() => <List.Icon icon="information" color={theme.colors.primary} />}
+              title="Terms of Service"
+              description="Read our terms of service"
+              left={() => <List.Icon icon="file-document" color={theme.colors.primary} />}
               right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => Alert.alert('About', 'SitePulse v1.0.0\nConstruction Management App')}
+              onPress={() => Alert.alert('Terms of Service', 'Terms of service would be opened here.')}
+              style={styles.settingsItem}
+            />
+            
+            <Divider />
+            
+            <List.Item
+              title="App Version"
+              description="SitePulse v2.1.4"
+              left={() => <List.Icon icon="information" color={theme.colors.primary} />}
               style={styles.settingsItem}
             />
           </Card.Content>
@@ -291,7 +294,7 @@ export default function SettingsScreen() {
         <Modal
           visible={editProfileVisible}
           onDismiss={() => setEditProfileVisible(false)}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={styles.innerModalContainer}
         >
           <Surface style={styles.modalSurface}>
             <Title style={styles.modalTitle}>Edit Profile</Title>
@@ -340,7 +343,7 @@ export default function SettingsScreen() {
         <Modal
           visible={changePasswordVisible}
           onDismiss={() => setChangePasswordVisible(false)}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={styles.innerModalContainer}
         >
           <Surface style={styles.modalSurface}>
             <Title style={styles.modalTitle}>Change Password</Title>
@@ -405,7 +408,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: 0,
+    paddingBottom: spacing.md,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -453,6 +458,11 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     marginBottom: spacing.xs,
   },
+  role: {
+    fontSize: fontSizes.sm,
+    color: constructionColors.complete,
+    fontWeight: '500',
+  },
   phone: {
     fontSize: fontSizes.sm,
     color: theme.colors.placeholder,
@@ -473,6 +483,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   modalContainer: {
+    flex: 1,
+    marginTop: 40,
+    marginHorizontal: 16,
+    marginBottom: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+  },
+  innerModalContainer: {
     flex: 1,
     justifyContent: 'center',
     padding: spacing.md,

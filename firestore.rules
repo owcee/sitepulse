@@ -122,10 +122,17 @@ service cloud.firestore {
     
     // Chat messages - all project members can read and create
     match /chat_messages/{messageId} {
-      allow read, create: if isAuthenticated() && (
+      // Read: check existing message's projectId
+      allow read: if isAuthenticated() && (
         isEngineerForProject(resource.data.projectId) || 
         getUserProjectId() == resource.data.projectId
       );
+      // Create: check new message's projectId from request
+      allow create: if isAuthenticated() && (
+        isEngineerForProject(request.resource.data.projectId) || 
+        getUserProjectId() == request.resource.data.projectId
+      );
+      // Update/Delete: only sender can modify their own messages
       allow update, delete: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
     }

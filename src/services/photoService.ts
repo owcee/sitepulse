@@ -374,3 +374,9 @@ export async function uploadTaskPhotoWithProgress(
 
 
 
+
+
+
+
+
+

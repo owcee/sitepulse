@@ -95,6 +95,10 @@ export async function getNotifications(): Promise<Notification[]> {
 
     snapshot.forEach((doc) => {
       const data = doc.data();
+      // Filter out deleted notifications
+      if (data.deleted === true) {
+        return;
+      }
       notifications.push({
         id: doc.id,
         userId: data.userId,
@@ -140,6 +144,10 @@ export function subscribeToNotifications(
     const notifications: Notification[] = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
+      // Filter out deleted notifications
+      if (data.deleted === true) {
+        return;
+      }
       notifications.push({
         id: doc.id,
         userId: data.userId,
@@ -254,6 +262,10 @@ export async function getUnreadCount(): Promise<number> {
     return 0;
   }
 }
+
+
+
+
 
 
 

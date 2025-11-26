@@ -8,9 +8,11 @@ import {
   Button, 
   Surface,
   Divider,
-  Chip
+  Chip,
+  IconButton
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { createProject } from '../../services/firebaseService';
 
@@ -19,7 +21,14 @@ interface CreateNewProjectScreenProps {
   onProjectCreated?: () => void;
 }
 
-export default function CreateNewProjectScreen({ navigation, onProjectCreated }: CreateNewProjectScreenProps = {}) {
+export default function CreateNewProjectScreen({ navigation: propNavigation, onProjectCreated }: CreateNewProjectScreenProps = {}) {
+  let navigation: any = null;
+  try {
+    navigation = useNavigation();
+  } catch (error) {
+    // Navigation not available, use propNavigation or no-op
+    navigation = propNavigation || { goBack: () => {}, canGoBack: () => false };
+  }
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -57,23 +66,23 @@ export default function CreateNewProjectScreen({ navigation, onProjectCreated }:
       };
 
       const createdProject = await createProject(projectData);
+      console.log('✅ Project created:', createdProject.id);
       
-      // Refresh parent to update user state with new projectId
+      // Refresh immediately without waiting for user to press OK
+      // This ensures the project data loads as soon as possible
       if (onProjectCreated) {
-        onProjectCreated();
+        // Longer delay to ensure Firestore updates fully propagate
+        console.log('⏳ Waiting for Firestore to propagate updates...');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log('🔄 Calling onProjectCreated to refresh...');
+        await onProjectCreated();
+        console.log('✅ Refresh complete');
       }
       
       Alert.alert(
         'Project Created!',
-        `Project "${projectName}" has been created successfully. You'll now be redirected to your dashboard.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // The parent will automatically navigate to dashboard after refresh
-            }
-          }
-        ]
+        `Project "${projectName}" has been created successfully. Loading dashboard...`,
+        [{ text: 'OK' }]
       );
     } catch (error: any) {
       Alert.alert('Error', `Failed to create project: ${error.message}`);
@@ -83,14 +92,30 @@ export default function CreateNewProjectScreen({ navigation, onProjectCreated }:
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Title style={styles.screenTitle}>Create New Project</Title>
-          <Paragraph style={styles.subtitle}>
-            Set up a new construction project with basic information
-          </Paragraph>
+          <View style={styles.headerRow}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              onPress={() => {
+                if (propNavigation?.goBack) {
+                  propNavigation.goBack();
+                } else if (navigation.canGoBack()) {
+                  navigation.goBack();
+                }
+              }}
+              iconColor={theme.colors.primary}
+            />
+            <View style={styles.headerText}>
+              <Title style={styles.screenTitle} numberOfLines={1}>Create New Project</Title>
+              <Paragraph style={styles.subtitle} numberOfLines={2}>
+                Set up a new construction project
+              </Paragraph>
+            </View>
+          </View>
         </View>
 
         {/* Project Information */}
@@ -140,13 +165,13 @@ export default function CreateNewProjectScreen({ navigation, onProjectCreated }:
             <Title style={styles.cardTitle}>Budget & Timeline</Title>
             
             <TextInput
-              label="Total Budget *"
+              label="Total Budget (₱) *"
               value={budget}
               onChangeText={setBudget}
               keyboardType="numeric"
               style={styles.input}
-              placeholder="Enter total budget"
-              left={<TextInput.Icon icon="currency-usd" />}
+              placeholder="e.g., 250000"
+              left={<TextInput.Icon icon="cash" />}
             />
 
             <TextInput
@@ -160,8 +185,8 @@ export default function CreateNewProjectScreen({ navigation, onProjectCreated }:
             />
 
             <Surface style={styles.infoBox}>
-              <Paragraph style={styles.infoText}>
-                ℹ️ Timeline can be adjusted later from Project Tools. Budget includes materials, labor, and equipment costs.
+              <Paragraph style={styles.infoText} numberOfLines={4}>
+                ℹ️ Timeline adjustable later. Budget includes all costs. Enter amount in Philippine Peso (₱).
               </Paragraph>
             </Surface>
           </Card.Content>
@@ -170,9 +195,9 @@ export default function CreateNewProjectScreen({ navigation, onProjectCreated }:
         {/* Quick Setup Options */}
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.cardTitle}>Quick Setup</Title>
-            <Paragraph style={styles.subtitle}>
-              After creating the project, you'll be able to:
+            <Title style={styles.cardTitle} numberOfLines={1}>Quick Setup</Title>
+            <Paragraph style={styles.subtitle} numberOfLines={2}>
+              After creation, you can:
             </Paragraph>
             
             <View style={styles.featureList}>
@@ -231,6 +256,14 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: spacing.lg,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerText: {
+    flex: 1,
+    marginLeft: spacing.xs,
+  },
   screenTitle: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
@@ -270,10 +303,11 @@ const styles = StyleSheet.create({
   featureList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
     marginTop: spacing.md,
+    marginHorizontal: -spacing.xs,
   },
   featureItem: {
+    marginHorizontal: spacing.xs,
     marginBottom: spacing.sm,
   },
   featureChip: {
@@ -284,14 +318,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.lg,
     marginBottom: spacing.xl,
-    gap: spacing.md,
   },
   cancelButton: {
     flex: 1,
+    marginRight: spacing.sm,
     borderColor: theme.colors.outline,
   },
   createButton: {
     flex: 1,
+    marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
 });

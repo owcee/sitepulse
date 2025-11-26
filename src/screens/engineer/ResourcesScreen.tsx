@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
-import { 
+import {
   Card, 
   Title, 
   Paragraph, 
@@ -11,12 +11,12 @@ import {
   Divider,
   IconButton,
   DataTable,
-  Badge 
+  Badge,
+  Button
 } from 'react-native-paper';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ResourceBudget, Worker, InventoryItem } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
 
@@ -24,98 +24,59 @@ const screenWidth = Dimensions.get('window').width;
 
 type TabType = 'budget' | 'inventory';
 
-// Mock resource data
-const mockBudgetData: ResourceBudget = {
-  id: 'budget-1',
-  projectId: 'project-1',
-  totalBudget: 850000,
-  spentAmount: 425000,
-  categories: [
-    { name: 'Materials', allocated: 400000, spent: 220000 },
-    { name: 'Labor', allocated: 300000, spent: 150000 },
-    { name: 'Equipment', allocated: 100000, spent: 45000 },
-    { name: 'Permits', allocated: 30000, spent: 8000 },
-    { name: 'Other', allocated: 20000, spent: 2000 },
-  ],
-};
-
-
-const mockInventory: InventoryItem[] = [
-  {
-    id: 'inv-1',
-    name: 'Portland Cement',
-    currentStock: 45,
-    minStock: 20,
-    unit: 'bags',
-    lastUpdated: '2024-01-22',
-    cost: 12.50,
-  },
-  {
-    id: 'inv-2',
-    name: 'Steel Rebar',
-    currentStock: 8,
-    minStock: 15,
-    unit: 'tons',
-    lastUpdated: '2024-01-21',
-    cost: 650.00,
-  },
-  {
-    id: 'inv-3',
-    name: 'Lumber 2x4',
-    currentStock: 120,
-    minStock: 50,
-    unit: 'pieces',
-    lastUpdated: '2024-01-23',
-    cost: 8.75,
-  },
-  {
-    id: 'inv-4',
-    name: 'Electrical Wire',
-    currentStock: 5,
-    minStock: 10,
-    unit: 'rolls',
-    lastUpdated: '2024-01-20',
-    cost: 85.00,
-  },
-  {
-    id: 'inv-5',
-    name: 'PVC Pipes',
-    currentStock: 35,
-    minStock: 25,
-    unit: 'pieces',
-    lastUpdated: '2024-01-22',
-    cost: 15.25,
-  },
-];
-
 export default function ResourcesScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('budget');
+  const [isExporting, setIsExporting] = useState(false);
   const { state } = useProjectData();
 
-  // Calculate budget data from context
-  const totalMaterialsCost = state.materials.reduce((sum, material) => sum + (material.quantity * material.price), 0);
-  const totalWorkersCost = state.workers.reduce((sum, worker) => sum + worker.rate, 0);
-  const totalEquipmentCost = state.equipment.filter(eq => eq.type === 'rental').reduce((sum, eq) => sum + (eq.dailyRate || 0), 0);
-  const totalExpenses = state.budgetLogs.filter(log => log.type === 'expense').reduce((sum, log) => sum + log.amount, 0);
-  const totalIncome = state.budgetLogs.filter(log => log.type === 'income').reduce((sum, log) => sum + log.amount, 0);
+  // Calculate budget data matching Budget Management page
+  const equipmentSpent = state.equipment.reduce((total, equip) => {
+    if (equip.type === 'rental' && equip.dailyRate) {
+      return total + equip.dailyRate;
+    }
+    return total;
+  }, 0);
+
+  const materialsSpent = state.materials.reduce((total, material) => {
+    return total + (material.quantity * material.price);
+  }, 0);
+
+  // Budget allocations from Budget Management (matching the default values)
+  const equipmentAllocated = 50000; // ₱50,000
+  const materialsAllocated = 150000; // ₱150,000
+  const totalBudget = 250000; // ₱250,000
+  const totalSpent = equipmentSpent + materialsSpent;
   
-  const budgetUsagePercent = totalExpenses / state.totalBudget;
-  const lowStockItems = state.materials.filter(material => material.quantity <= 10); // Simple low stock threshold
+  const budgetUsagePercent = totalSpent / totalBudget;
+  
+  // Combined low stock items from materials and equipment
+  const lowStockMaterials = state.materials
+    .filter(material => material.quantity <= 10)
+    .map(material => ({
+      ...material,
+      currentStock: material.quantity,
+      minStock: 10,
+      type: 'material' as const,
+    }));
+
+  const lowStockEquipment = state.equipment
+    .filter(equip => equip.status === 'maintenance')
+    .map(equip => ({
+      ...equip,
+      name: equip.name,
+      type: 'equipment' as const,
+    }));
 
   // Pie chart data for budget breakdown
   const budgetChartData = [
-    { name: 'Materials', population: totalMaterialsCost, color: '#2196F3', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: 'Workers', population: totalWorkersCost, color: '#4CAF50', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: 'Equipment', population: totalEquipmentCost, color: '#FF9800', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: 'Other', population: totalExpenses - totalMaterialsCost - totalWorkersCost - totalEquipmentCost, color: '#F44336', legendFontColor: '#7F7F7F', legendFontSize: 12 },
+    { name: 'Equipment', population: equipmentSpent, color: '#FF9800', legendFontColor: '#7F7F7F', legendFontSize: 12 },
+    { name: 'Materials', population: materialsSpent, color: '#2196F3', legendFontColor: '#7F7F7F', legendFontSize: 12 },
   ].filter(item => item.population > 0);
 
-  // Bar chart data for budget vs spent
+  // Bar chart data for budget vs spent (matching Budget Management)
   const categories = [
-    { name: 'Materials', allocated: state.totalBudget * 0.4, spent: totalMaterialsCost },
-    { name: 'Workers', allocated: state.totalBudget * 0.3, spent: totalWorkersCost },
-    { name: 'Equipment', allocated: state.totalBudget * 0.2, spent: totalEquipmentCost },
-    { name: 'Other', allocated: state.totalBudget * 0.1, spent: Math.max(0, totalExpenses - totalMaterialsCost - totalWorkersCost - totalEquipmentCost) },
+    { name: 'Equipment', allocated: equipmentAllocated, spent: equipmentSpent },
+    { name: 'Materials', allocated: materialsAllocated, spent: materialsSpent },
   ];
   
   const budgetBarData = {
@@ -123,13 +84,12 @@ export default function ResourcesScreen() {
     datasets: [
       {
         data: categories.map(c => c.allocated / 1000),
-        color: () => '#E3F2FD',
       },
       {
         data: categories.map(c => c.spent / 1000),
-        color: () => '#2196F3',
       },
     ],
+    legend: ['Allocated', 'Spent'],
   };
 
   const renderBudgetTab = () => (
@@ -155,19 +115,19 @@ export default function ResourcesScreen() {
             <View style={styles.budgetItem}>
               <Paragraph style={styles.budgetLabel}>Total Budget</Paragraph>
               <Paragraph style={styles.budgetValue}>
-                ${(state.totalBudget / 1000).toFixed(0)}K
+                ₱{(totalBudget / 1000).toFixed(0)}K
               </Paragraph>
             </View>
             <View style={styles.budgetItem}>
               <Paragraph style={styles.budgetLabel}>Spent</Paragraph>
               <Paragraph style={[styles.budgetValue, { color: constructionColors.urgent }]}>
-                ${(totalExpenses / 1000).toFixed(0)}K
+                ₱{(totalSpent / 1000).toFixed(0)}K
               </Paragraph>
             </View>
             <View style={styles.budgetItem}>
               <Paragraph style={styles.budgetLabel}>Remaining</Paragraph>
               <Paragraph style={[styles.budgetValue, { color: constructionColors.complete }]}>
-                ${((state.totalBudget - totalExpenses) / 1000).toFixed(0)}K
+                ₱{((totalBudget - totalSpent) / 1000).toFixed(0)}K
               </Paragraph>
             </View>
           </View>
@@ -203,27 +163,10 @@ export default function ResourcesScreen() {
       {/* Category Details */}
       <Card style={styles.card}>
         <Card.Content>
-          <Title style={styles.cardTitle}>Budget vs Actual by Category</Title>
+          <Title style={styles.cardTitle}>Budget by Category</Title>
           
-          <BarChart
-            data={budgetBarData}
-            width={screenWidth - 80}
-            height={220}
-            yAxisLabel="$"
-            yAxisSuffix="K"
-            chartConfig={{
-              backgroundColor: '#ffffff',
-              backgroundGradientFrom: '#ffffff',
-              backgroundGradientTo: '#ffffff',
-              decimalPlaces: 0,
-              color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
-              labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-            }}
-            style={styles.chart}
-          />
-
           <View style={styles.categoryList}>
-            {mockBudgetData.categories.map((category, index) => {
+            {categories.map((category, index) => {
               const usagePercent = category.spent / category.allocated;
               return (
                 <View key={index}>
@@ -236,10 +179,10 @@ export default function ResourcesScreen() {
                     </View>
                     <View style={styles.categoryAmounts}>
                       <Paragraph style={styles.categorySpent}>
-                        Spent: ${(category.spent / 1000).toFixed(0)}K
+                        Spent: ₱{(category.spent / 1000).toFixed(0)}K
                       </Paragraph>
                       <Paragraph style={styles.categoryBudget}>
-                        Budget: ${(category.allocated / 1000).toFixed(0)}K
+                        Budget: ₱{(category.allocated / 1000).toFixed(0)}K
                       </Paragraph>
                     </View>
                     <ProgressBar 
@@ -248,7 +191,7 @@ export default function ResourcesScreen() {
                       style={styles.categoryProgress}
                     />
                   </View>
-                  {index < mockBudgetData.categories.length - 1 && <Divider />}
+                  {index < categories.length - 1 && <Divider />}
                 </View>
               );
             })}
@@ -262,7 +205,7 @@ export default function ResourcesScreen() {
   const renderInventoryTab = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       {/* Inventory Alerts */}
-      {lowStockItems.length > 0 && (
+      {(lowStockMaterials.length > 0 || lowStockEquipment.length > 0) && (
         <Card style={[styles.card, styles.alertCard]}>
           <Card.Content>
             <View style={styles.alertHeader}>
@@ -272,24 +215,36 @@ export default function ResourcesScreen() {
                 iconColor={constructionColors.urgent}
               />
               <Title style={[styles.cardTitle, { color: constructionColors.urgent }]}>
-                Low Stock Alerts
+                Low Stock & Maintenance Alerts
               </Title>
               <Badge 
                 style={[styles.alertBadge, { backgroundColor: constructionColors.urgent }]}
               >
-                {lowStockItems.length}
+                {lowStockMaterials.length + lowStockEquipment.length}
               </Badge>
             </View>
             
-            {lowStockItems.map((item, index) => (
+            {lowStockMaterials.map((item, index) => (
               <View key={item.id}>
                 <View style={styles.alertItem}>
-                  <Paragraph style={styles.alertItemName}>{item.name}</Paragraph>
+                  <Paragraph style={styles.alertItemName}>{item.name} (Material)</Paragraph>
                   <Paragraph style={styles.alertItemStock}>
                     {item.currentStock} {item.unit} remaining (Min: {item.minStock})
                   </Paragraph>
                 </View>
-                {index < lowStockItems.length - 1 && <Divider />}
+                {(index < lowStockMaterials.length - 1 || lowStockEquipment.length > 0) && <Divider />}
+              </View>
+            ))}
+            
+            {lowStockEquipment.map((item, index) => (
+              <View key={item.id}>
+                <View style={styles.alertItem}>
+                  <Paragraph style={styles.alertItemName}>{item.name} (Equipment)</Paragraph>
+                  <Paragraph style={styles.alertItemStock}>
+                    Needs Maintenance
+                  </Paragraph>
+                </View>
+                {index < lowStockEquipment.length - 1 && <Divider />}
               </View>
             ))}
           </Card.Content>
@@ -311,19 +266,17 @@ export default function ResourcesScreen() {
 
           <View style={styles.inventorySummary}>
             <View style={styles.summaryItem}>
-              <Paragraph style={styles.summaryLabel}>Total Items</Paragraph>
-              <Paragraph style={styles.summaryValue}>{mockInventory.length}</Paragraph>
+              <Paragraph style={styles.summaryLabel}>Materials</Paragraph>
+              <Paragraph style={styles.summaryValue}>{state.materials.length}</Paragraph>
             </View>
             <View style={styles.summaryItem}>
-              <Paragraph style={styles.summaryLabel}>Low Stock</Paragraph>
+              <Paragraph style={styles.summaryLabel}>Equipment</Paragraph>
+              <Paragraph style={styles.summaryValue}>{state.equipment.length}</Paragraph>
+            </View>
+            <View style={styles.summaryItem}>
+              <Paragraph style={styles.summaryLabel}>Alerts</Paragraph>
               <Paragraph style={[styles.summaryValue, { color: constructionColors.urgent }]}>
-                {lowStockItems.length}
-              </Paragraph>
-            </View>
-            <View style={styles.summaryItem}>
-              <Paragraph style={styles.summaryLabel}>Total Value</Paragraph>
-              <Paragraph style={styles.summaryValue}>
-                ${mockInventory.reduce((sum, item) => sum + (item.currentStock * item.cost), 0).toLocaleString()}
+                {lowStockMaterials.length + lowStockEquipment.length}
               </Paragraph>
             </View>
           </View>
@@ -332,65 +285,101 @@ export default function ResourcesScreen() {
 
       {/* Inventory List */}
       <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.cardTitle}>Current Inventory</Title>
+        <Card.Content style={{ overflow: 'visible' }}>
+          <Title style={styles.cardTitle}>Materials ({state.materials.length})</Title>
           
-          {mockInventory.map((item, index) => {
-            const isLowStock = item.currentStock <= item.minStock;
-            const stockPercent = item.currentStock / (item.minStock * 2); // Assuming good stock is 2x min stock
-            
-            return (
-              <View key={item.id}>
-                <View style={styles.inventoryItem}>
-                  <View style={styles.itemHeader}>
-                    <View style={styles.itemInfo}>
-                      <Paragraph style={styles.itemName}>{item.name}</Paragraph>
-                      <Paragraph style={styles.itemUnit}>
-                        {item.currentStock} {item.unit} • ${item.cost.toFixed(2)} each
+          {state.materials.length === 0 ? (
+            <Paragraph style={styles.emptyText}>No materials in inventory</Paragraph>
+          ) : (
+            state.materials.map((item, index) => {
+              const isLowStock = item.quantity <= 10;
+              const totalValue = item.quantity * item.price;
+              
+              return (
+                <View key={item.id}>
+                  <View style={styles.inventoryItem}>
+                    <View style={styles.itemHeader}>
+                      <View style={styles.itemInfo}>
+                        <Paragraph style={styles.itemName}>{item.name}</Paragraph>
+                        <Paragraph style={styles.itemUnit}>
+                          {item.quantity} {item.unit} • ₱{item.price.toFixed(2)} each
+                        </Paragraph>
+                      </View>
+                      
+                      {isLowStock && (
+                        <Chip 
+                          icon="alert" 
+                          style={[styles.lowStockChip, { backgroundColor: constructionColors.urgent }]}
+                          textStyle={{ color: 'white', fontSize: 12 }}
+                        >
+                          LOW
+                        </Chip>
+                      )}
+                    </View>
+
+                    <View style={styles.itemFooter}>
+                      <Paragraph style={styles.itemValue}>
+                        Total Value: ₱{totalValue.toLocaleString()}
                       </Paragraph>
                     </View>
-                    
-                    {isLowStock && (
+                  </View>
+                  {index < state.materials.length - 1 && <Divider />}
+                </View>
+              );
+            })
+          )}
+        </Card.Content>
+      </Card>
+
+      {/* Equipment List */}
+      <Card style={styles.card}>
+        <Card.Content style={{ overflow: 'visible' }}>
+          <Title style={styles.cardTitle}>Equipment ({state.equipment.length})</Title>
+          
+          {state.equipment.length === 0 ? (
+            <Paragraph style={styles.emptyText}>No equipment in inventory</Paragraph>
+          ) : (
+            state.equipment.map((item, index) => {
+              const needsMaintenance = item.status === 'maintenance';
+              const statusColor = item.status === 'available' ? constructionColors.complete : 
+                                 item.status === 'in_use' ? constructionColors.inProgress : 
+                                 constructionColors.urgent;
+              
+              return (
+                <View key={item.id}>
+                  <View style={styles.inventoryItem}>
+                    <View style={styles.itemHeader}>
+                      <View style={styles.itemInfo}>
+                        <Paragraph style={styles.itemName}>{item.name}</Paragraph>
+                        <Paragraph style={styles.itemUnit}>
+                          {item.category} • {item.type === 'rental' ? 'Rental' : 'Owned'}
+                        </Paragraph>
+                      </View>
+                      
                       <Chip 
-                        icon="alert" 
-                        style={[styles.lowStockChip, { backgroundColor: constructionColors.urgent }]}
+                        style={[styles.lowStockChip, { backgroundColor: statusColor }]}
                         textStyle={{ color: 'white', fontSize: 12 }}
                       >
-                        LOW
+                        {item.status.replace('_', ' ').toUpperCase()}
                       </Chip>
-                    )}
-                  </View>
-                  
-                  <View style={styles.stockInfo}>
-                    <View style={styles.stockLevels}>
-                      <Paragraph style={styles.stockCurrent}>
-                        Current: {item.currentStock} {item.unit}
-                      </Paragraph>
-                      <Paragraph style={styles.stockMin}>
-                        Min: {item.minStock} {item.unit}
+                    </View>
+
+                    <View style={styles.itemFooter}>
+                      {item.type === 'rental' && item.dailyRate && (
+                        <Paragraph style={styles.itemValue}>
+                          Daily Rate: ₱{item.dailyRate.toLocaleString()}
+                        </Paragraph>
+                      )}
+                      <Paragraph style={styles.itemUnit}>
+                        Condition: {item.condition.replace('_', ' ')}
                       </Paragraph>
                     </View>
-                    
-                    <ProgressBar 
-                      progress={Math.min(stockPercent, 1)} 
-                      color={isLowStock ? constructionColors.urgent : constructionColors.complete}
-                      style={styles.stockProgress}
-                    />
                   </View>
-                  
-                  <View style={styles.itemFooter}>
-                    <Paragraph style={styles.lastUpdated}>
-                      Updated: {new Date(item.lastUpdated).toLocaleDateString()}
-                    </Paragraph>
-                    <Paragraph style={styles.itemValue}>
-                      Value: ${(item.currentStock * item.cost).toFixed(2)}
-                    </Paragraph>
-                  </View>
+                  {index < state.equipment.length - 1 && <Divider />}
                 </View>
-                {index < mockInventory.length - 1 && <Divider />}
-              </View>
-            );
-          })}
+              );
+            })
+          )}
         </Card.Content>
       </Card>
     </ScrollView>
@@ -407,11 +396,41 @@ export default function ResourcesScreen() {
     }
   };
 
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      if (activeTab === 'budget') {
+        // Export budget data
+        Alert.alert('Export Budget', 'Budget PDF export feature coming soon');
+      } else {
+        // Export inventory data
+        Alert.alert('Export Inventory', 'Inventory PDF export feature coming soon');
+      }
+    } catch (error) {
+      Alert.alert('Export Failed', 'Unable to generate PDF. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
-        <Title style={styles.screenTitle}>Resource Management</Title>
+        <View style={styles.headerLeft}>
+          <Title style={styles.screenTitle}>Resource Management</Title>
+        </View>
+        <Button
+          mode="contained"
+          icon="file-pdf-box"
+          onPress={handleExportPDF}
+          loading={isExporting}
+          disabled={isExporting}
+          style={styles.exportButton}
+          labelStyle={{ fontSize: 13 }}
+        >
+          Export PDF
+        </Button>
       </View>
 
       {/* Tab Navigation */}
@@ -441,19 +460,30 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 1,
+  },
+  headerLeft: {
+    flex: 1,
   },
   screenTitle: {
     fontSize: fontSizes.xxl,
     fontWeight: 'bold',
     color: theme.colors.text,
   },
+  exportButton: {
+    marginLeft: spacing.sm,
+  },
   tabContainer: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
   },
   segmentedButtons: {
@@ -466,6 +496,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
+    overflow: 'visible',
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -509,6 +540,27 @@ const styles = StyleSheet.create({
   chart: {
     marginVertical: spacing.sm,
     borderRadius: theme.roundness,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.lg,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  legendBox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurface,
   },
   categoryList: {
     marginTop: spacing.md,
@@ -602,15 +654,19 @@ const styles = StyleSheet.create({
   },
   inventoryItem: {
     paddingVertical: spacing.md,
+    overflow: 'visible',
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.sm,
+    overflow: 'visible',
   },
   itemInfo: {
     flex: 1,
+    marginRight: spacing.sm,
+    maxWidth: '70%',
   },
   itemName: {
     fontSize: fontSizes.md,
@@ -622,7 +678,9 @@ const styles = StyleSheet.create({
     color: theme.colors.placeholder,
   },
   lowStockChip: {
+    minWidth: 50,
     height: 24,
+    alignSelf: 'flex-start',
   },
   stockInfo: {
     marginBottom: spacing.sm,
@@ -659,6 +717,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: constructionColors.complete,
   },
+  emptyText: {
+    fontSize: fontSizes.md,
+    color: theme.colors.onSurfaceVariant,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+    fontStyle: 'italic',
+  },
 });
-
 

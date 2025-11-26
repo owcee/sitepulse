@@ -16,8 +16,10 @@ import {
   Avatar,
   List,
   Divider,
+  Button,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
@@ -93,6 +95,7 @@ const mockNotifications: Notification[] = [
 ];
 
 export default function NotificationsScreen() {
+  const navigation = useNavigation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -102,13 +105,57 @@ export default function NotificationsScreen() {
     loadNotifications();
   }, []);
 
+  // Update tab badge when unread count changes
+  useEffect(() => {
+    const unreadCount = notifications.filter(n => !n.isRead).length;
+    navigation.setOptions({
+      tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+    });
+  }, [notifications, navigation]);
+
   const loadNotifications = async () => {
     try {
       if (!auth.currentUser) return;
       
       setLoading(true);
       const userNotifications = await getUserNotifications();
-      setNotifications(userNotifications);
+      
+      // Filter out read notifications and project_assignment notifications for accepted assignments
+      const filteredNotifications = await Promise.all(
+        userNotifications.map(async (n) => {
+          // Filter out read notifications
+          if (n.isRead) return null;
+          
+          // For project_assignment notifications, check if assignment has been accepted
+          // The assignmentId in notification is the workerId (document ID in worker_assignments)
+          if (n.type === 'project_assignment') {
+            try {
+              const { getDoc, doc } = await import('firebase/firestore');
+              const { db } = await import('../../firebaseConfig');
+              // Check if this worker's assignment has been accepted
+              const assignmentRef = doc(db, 'worker_assignments', auth.currentUser.uid);
+              const assignmentDoc = await getDoc(assignmentRef);
+              
+              if (assignmentDoc.exists()) {
+                const assignmentData = assignmentDoc.data();
+                // If assignment is accepted or rejected, filter out the notification
+                if (assignmentData.status === 'accepted' || assignmentData.status === 'rejected') {
+                  return null;
+                }
+              }
+            } catch (error) {
+              console.error('Error checking assignment status:', error);
+              // If we can't check, keep the notification to be safe
+            }
+          }
+          
+          return n;
+        })
+      );
+      
+      // Remove null values (filtered out notifications)
+      const validNotifications = filteredNotifications.filter(n => n !== null) as Notification[];
+      setNotifications(validNotifications);
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {
@@ -125,11 +172,8 @@ export default function NotificationsScreen() {
   const markAsRead = async (id: string) => {
     try {
       await markNotificationAsRead(id);
-      setNotifications(prev =>
-        prev.map(notification =>
-          notification.id === id ? { ...notification, isRead: true } : notification
-        )
-      );
+      // Remove notification from list immediately
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -141,9 +185,8 @@ export default function NotificationsScreen() {
       await Promise.all(
         unreadNotifications.map(notification => markNotificationAsRead(notification.id))
       );
-      setNotifications(prev =>
-        prev.map(notification => ({ ...notification, isRead: true }))
-      );
+      // Remove all unread notifications from list immediately
+      setNotifications(prev => prev.filter(n => n.isRead));
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
@@ -152,21 +195,68 @@ export default function NotificationsScreen() {
   const handleAcceptAssignment = async (notification: Notification) => {
     if (!notification.assignmentId || !notification.projectId) return;
     
+    // Check if worker already has a project (get from auth user)
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    
     try {
-      await acceptProjectAssignment(
-        notification.id, 
-        notification.assignmentId, 
-        notification.projectId
-      );
+      // Get worker's current project status
+      const { getCurrentUser } = await import('../../services/authService');
+      const user = await getCurrentUser();
+      const hasExistingProject = user?.projectId && user.projectId !== null;
       
-      // Refresh notifications to show updated status
-      await loadNotifications();
-      
-      Alert.alert(
-        'Assignment Accepted!',
-        'You have successfully joined the project. Welcome to the team!',
-        [{ text: 'OK' }]
-      );
+      if (hasExistingProject) {
+        // Show warning for project switch
+        Alert.alert(
+          'Switch Project?',
+          `You are currently assigned to another project. Accepting this invitation will switch you to the new project.\n\nDo you want to continue?`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Switch Project',
+              onPress: async () => {
+                try {
+                  await acceptProjectAssignment(
+                    notification.id, 
+                    notification.assignmentId, 
+                    notification.projectId
+                  );
+                  
+                  // Remove notification from list immediately
+                  setNotifications(prev => prev.filter(n => n.id !== notification.id));
+                  
+                  Alert.alert(
+                    'Project Switched!',
+                    'You have successfully switched to the new project. Welcome to the team!',
+                    [{ text: 'OK' }]
+                  );
+                } catch (error: any) {
+                  Alert.alert('Error', `Failed to accept assignment: ${error.message}`);
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        // Regular acceptance
+        await acceptProjectAssignment(
+          notification.id, 
+          notification.assignmentId, 
+          notification.projectId
+        );
+        
+        // Remove notification from list immediately
+        setNotifications(prev => prev.filter(n => n.id !== notification.id));
+        
+        Alert.alert(
+          'Assignment Accepted!',
+          'You have successfully joined the project. Welcome to the team!',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error: any) {
       Alert.alert('Error', `Failed to accept assignment: ${error.message}`);
     }
@@ -276,7 +366,7 @@ export default function NotificationsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
@@ -285,19 +375,21 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Notifications</Text>
         {unreadCount > 0 && (
           <View style={styles.headerActions}>
-            <Badge style={styles.unreadBadge}>{unreadCount}</Badge>
-            <IconButton
-              icon="check-all"
-              size={24}
+            <Button
+              mode="text"
               onPress={markAllAsRead}
-              iconColor={theme.colors.primary}
-            />
+              textColor={theme.colors.primary}
+              style={styles.markAsReadButton}
+              labelStyle={styles.markAsReadLabel}
+            >
+              Mark as read
+            </Button>
           </View>
         )}
       </View>
@@ -325,9 +417,11 @@ export default function NotificationsScreen() {
       {/* Notifications List */}
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        showsVerticalScrollIndicator={false}
       >
         {filteredNotifications.length === 0 ? (
           <Card style={styles.emptyCard}>
@@ -355,16 +449,18 @@ export default function NotificationsScreen() {
                 title={notification.title}
                 description={notification.message}
                 left={(props) => (
-                  <Avatar.Icon
-                    {...props}
-                    icon={getNotificationIcon(notification.type)}
-                    style={[
-                      styles.notificationIcon,
-                      { backgroundColor: getNotificationColor(notification.type, notification.priority) }
-                    ]}
-                    color="white"
-                    size={48}
-                  />
+                  <View style={styles.iconContainer}>
+                    <Avatar.Icon
+                      {...props}
+                      icon={getNotificationIcon(notification.type)}
+                      style={[
+                        styles.notificationIcon,
+                        { backgroundColor: getNotificationColor(notification.type, notification.priority) }
+                      ]}
+                      color="white"
+                      size={48}
+                    />
+                  </View>
                 )}
                 right={(props) => (
                   <View style={styles.notificationMeta}>
@@ -379,13 +475,6 @@ export default function NotificationsScreen() {
                           onPress={() => handleAcceptAssignment(notification)}
                           iconColor={constructionColors.complete}
                           style={styles.acceptButton}
-                        />
-                        <IconButton
-                          icon="close"
-                          size={20}
-                          onPress={() => handleRejectAssignment(notification)}
-                          iconColor={constructionColors.urgent}
-                          style={styles.rejectButton}
                         />
                       </View>
                     ) : !notification.isRead ? (
@@ -404,9 +493,20 @@ export default function NotificationsScreen() {
                   !notification.isRead && styles.unreadTitle
                 ]}
                 descriptionStyle={styles.notificationDescription}
-                onPress={() => markAsRead(notification.id)}
+                onPress={() => {
+                  // For project_assignment notifications, don't mark as read on click
+                  // Only the check button should mark as read
+                  if (notification.type === 'project_assignment') {
+                    // Could navigate to project details or do nothing
+                    return;
+                  }
+                  // For other notifications, mark as read on click
+                  if (!notification.isRead) {
+                    markAsRead(notification.id);
+                  }
+                }}
+                style={styles.listItem}
               />
-              {index < filteredNotifications.length - 1 && <Divider />}
             </Card>
           ))
         )}
@@ -425,7 +525,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -439,9 +540,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  unreadBadge: {
-    backgroundColor: constructionColors.urgent,
-    marginRight: spacing.xs,
+  markAsReadButton: {
+    marginRight: -spacing.sm,
+  },
+  markAsReadLabel: {
+    fontSize: fontSizes.sm,
+    fontWeight: '500',
   },
   filterContainer: {
     flexDirection: 'row',
@@ -464,24 +568,35 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     padding: spacing.md,
+    paddingBottom: spacing.xl,
   },
   notificationCard: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     backgroundColor: 'white',
     elevation: 2,
+    borderRadius: 8,
   },
   unreadCard: {
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
   },
+  iconContainer: {
+    marginRight: spacing.sm,
+  },
   notificationIcon: {
-    marginLeft: spacing.sm,
+    marginLeft: 0,
   },
   notificationMeta: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    marginRight: spacing.sm,
+    marginRight: spacing.xs,
+    minWidth: 80,
+  },
+  listItem: {
+    paddingVertical: spacing.sm,
   },
   timestamp: {
     fontSize: fontSizes.sm,

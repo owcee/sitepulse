@@ -162,7 +162,7 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
   }
 
   const content = (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -259,17 +259,6 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
             <Title style={styles.cardTitle}>Support & Legal</Title>
             
             <List.Item
-              title="Report a Bug"
-              description="Let us know about any issues"
-              left={() => <List.Icon icon="bug" color={theme.colors.primary} />}
-              right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => Alert.alert('Bug Report', 'Bug reporting would be implemented here.')}
-              style={styles.settingsItem}
-            />
-            
-            <Divider />
-            
-            <List.Item
               title="Privacy Policy"
               description="Read our privacy policy"
               left={() => <List.Icon icon="shield-check" color={theme.colors.primary} />}
@@ -321,7 +310,7 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
         <Modal
           visible={editProfileVisible}
           onDismiss={() => setEditProfileVisible(false)}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={styles.innerModalContainer}
         >
           <Surface style={styles.modalSurface}>
             <Title style={styles.modalTitle}>Edit Profile</Title>
@@ -360,7 +349,7 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
         <Modal
           visible={changePasswordVisible}
           onDismiss={() => setChangePasswordVisible(false)}
-          contentContainerStyle={styles.modalContainer}
+          contentContainerStyle={styles.innerModalContainer}
         >
           <Surface style={styles.modalSurface}>
             <Title style={styles.modalTitle}>Change Password</Title>
@@ -433,7 +422,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: 0,
+    paddingBottom: spacing.md,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
@@ -514,6 +505,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   modalContainer: {
+    flex: 1,
+    marginTop: 40,
+    marginHorizontal: 16,
+    marginBottom: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+  },
+  innerModalContainer: {
     flex: 1,
     justifyContent: 'center',
     padding: spacing.md,

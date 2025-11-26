@@ -35,7 +35,7 @@ export const theme = {
       fontWeight: '100' as const,
     },
   },
-  roundness: 8, // Rounded corners for buttons and cards
+  roundness: 12, // Rounded corners for buttons and cards
 };
 
 // Construction-specific color scheme

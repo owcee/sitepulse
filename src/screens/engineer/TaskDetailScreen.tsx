@@ -112,7 +112,7 @@ export default function TaskDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <IconButton
@@ -134,38 +134,38 @@ export default function TaskDetailScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.taskHeader}>
-              <Title style={styles.taskTitle}>{task.title}</Title>
-              <View style={styles.taskMeta}>
-                <Chip 
-                  icon="clock" 
-                  style={[styles.statusChip, { backgroundColor: getStatusColor(task.status) }]}
-                  textStyle={{ color: 'white' }}
-                >
-                  {task.status.replace('_', ' ').toUpperCase()}
-                </Chip>
-              </View>
+              <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
+                {task.title}
+              </Title>
+              <Chip 
+                icon="clock" 
+                style={[styles.statusChip, { backgroundColor: getStatusColor(task.status) }]}
+                textStyle={styles.chipText}
+              >
+                {task.status.replace('_', ' ').toUpperCase()}
+              </Chip>
             </View>
 
-            <Paragraph style={styles.taskDescription}>
+            <Paragraph style={styles.taskDescription} numberOfLines={4} ellipsizeMode="tail">
               {task.description}
             </Paragraph>
 
             <View style={styles.taskDetails}>
               <View style={styles.detailRow}>
                 <Paragraph style={styles.detailLabel}>Assigned to:</Paragraph>
-                <Paragraph style={styles.detailValue}>Worker {task.assignedTo.split('-')[1]}</Paragraph>
+                <Paragraph style={styles.detailValue} numberOfLines={1}>Worker {task.assignedTo.split('-')[1]}</Paragraph>
               </View>
               <View style={styles.detailRow}>
                 <Paragraph style={styles.detailLabel}>Due Date:</Paragraph>
-                <Paragraph style={styles.detailValue}>{formatDate(task.dueDate)}</Paragraph>
+                <Paragraph style={styles.detailValue} numberOfLines={1}>{formatDate(task.dueDate)}</Paragraph>
               </View>
               <View style={styles.detailRow}>
                 <Paragraph style={styles.detailLabel}>Created:</Paragraph>
-                <Paragraph style={styles.detailValue}>{formatDate(task.createdAt)}</Paragraph>
+                <Paragraph style={styles.detailValue} numberOfLines={1}>{formatDate(task.createdAt)}</Paragraph>
               </View>
               <View style={styles.detailRow}>
                 <Paragraph style={styles.detailLabel}>Last Updated:</Paragraph>
-                <Paragraph style={styles.detailValue}>{formatDate(task.updatedAt)}</Paragraph>
+                <Paragraph style={styles.detailValue} numberOfLines={1}>{formatDate(task.updatedAt)}</Paragraph>
               </View>
             </View>
           </Card.Content>
@@ -176,7 +176,9 @@ export default function TaskDetailScreen() {
           <Card style={styles.card}>
             <Card.Content>
               <View style={styles.photoHeader}>
-                <Title style={styles.cardTitle}>Latest Photo Submission</Title>
+                <Title style={styles.cardTitle} numberOfLines={1} ellipsizeMode="tail">
+                  Latest Photo Submission
+                </Title>
                 <Badge 
                   style={[
                     styles.verificationBadge, 
@@ -217,7 +219,7 @@ export default function TaskDetailScreen() {
                   </View>
                   
                   <View style={styles.cnnResult}>
-                    <Paragraph style={styles.cnnClassification}>
+                    <Paragraph style={styles.cnnClassification} numberOfLines={2} ellipsizeMode="tail">
                       {task.lastPhoto.cnnClassification}
                     </Paragraph>
                     <Chip 
@@ -225,9 +227,9 @@ export default function TaskDetailScreen() {
                         styles.confidenceChip, 
                         { backgroundColor: getConfidenceColor(task.lastPhoto.confidence || 0) }
                       ]}
-                      textStyle={{ color: 'white', fontWeight: 'bold' }}
+                      textStyle={styles.confidenceText}
                     >
-                      {Math.round((task.lastPhoto.confidence || 0) * 100)}% Confidence
+                      {Math.round((task.lastPhoto.confidence || 0) * 100)}%
                     </Chip>
                   </View>
                 </Card.Content>
@@ -237,13 +239,15 @@ export default function TaskDetailScreen() {
               {task.lastPhoto.notes && (
                 <View style={styles.workerNotes}>
                   <Paragraph style={styles.notesLabel}>Worker Notes:</Paragraph>
-                  <Paragraph style={styles.notesText}>{task.lastPhoto.notes}</Paragraph>
+                  <Paragraph style={styles.notesText} numberOfLines={3} ellipsizeMode="tail">
+                    {task.lastPhoto.notes}
+                  </Paragraph>
                 </View>
               )}
 
               {/* Upload Info */}
               <View style={styles.uploadInfo}>
-                <Paragraph style={styles.uploadText}>
+                <Paragraph style={styles.uploadText} numberOfLines={2} ellipsizeMode="tail">
                   Uploaded by Worker {task.lastPhoto.uploadedBy.split('-')[1]} on {formatDate(task.lastPhoto.uploadedAt)}
                 </Paragraph>
               </View>
@@ -337,7 +341,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 2,
   },
@@ -355,20 +360,24 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
   },
   taskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: spacing.md,
   },
   taskTitle: {
-    fontSize: fontSizes.xl,
+    flex: 1,
+    fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: spacing.sm,
-  },
-  taskMeta: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+    marginRight: spacing.sm,
   },
   statusChip: {
-    height: 32,
+    height: 28,
+  },
+  chipText: {
+    color: 'white',
+    fontSize: fontSizes.xs,
   },
   taskDescription: {
     fontSize: fontSizes.md,
@@ -453,6 +462,11 @@ const styles = StyleSheet.create({
   confidenceChip: {
     height: 28,
   },
+  confidenceText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: fontSizes.xs,
+  },
   workerNotes: {
     backgroundColor: '#fff3cd',
     padding: spacing.md,
@@ -486,7 +500,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    gap: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   actionButton: {
     flex: 1,

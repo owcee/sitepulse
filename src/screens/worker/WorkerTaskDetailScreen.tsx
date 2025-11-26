@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, Alert, Text as RNText } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -146,7 +146,7 @@ export default function WorkerTaskDetailScreen() {
   const verificationInfo = task.lastPhoto ? getVerificationStatusInfo(task.lastPhoto.verificationStatus) : null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <IconButton
@@ -234,7 +234,7 @@ export default function WorkerTaskDetailScreen() {
           <Card.Content>
             <View style={styles.instructionsHeader}>
               <Title style={styles.cardTitle}>Task Instructions</Title>
-              <IconButton icon="clipboard-list" size={20} iconColor={theme.colors.primary} />
+              <IconButton icon="clipboard-outline" size={20} iconColor={theme.colors.primary} />
             </View>
             
             <View style={styles.instructionsList}>
@@ -252,27 +252,27 @@ export default function WorkerTaskDetailScreen() {
 
         {/* Previous Approved Photos */}
         {mockApprovedPhotos.length > 0 && (
-          <Card style={styles.card}>
-            <Card.Content>
+          <Card style={[styles.card, { overflow: 'visible' }]}>
+            <Card.Content style={{ overflow: 'visible' }}>
               <View style={styles.photosHeader}>
                 <Title style={styles.cardTitle}>Previously Approved Photos</Title>
                 <IconButton icon="check-circle" size={20} iconColor={constructionColors.complete} />
               </View>
               
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.approvedPhotosContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ overflow: 'visible' }}>
+                <View style={[styles.approvedPhotosContainer, { overflow: 'visible' }]}>
                   {mockApprovedPhotos.map((photo) => (
-                    <View key={photo.id} style={styles.approvedPhotoCard}>
+                    <View key={photo.id} style={[styles.approvedPhotoCard, { overflow: 'visible' }]}>
                       <Image 
                         source={{ uri: photo.imageUri }} 
                         style={styles.approvedPhotoThumbnail}
                         resizeMode="cover"
                       />
-                      <Badge 
-                        style={[styles.approvedBadge, { backgroundColor: constructionColors.complete }]}
-                      >
-                        ✓
-                      </Badge>
+                      <View style={styles.approvedBadgeContainer}>
+                        <View style={[styles.approvedBadge, { backgroundColor: constructionColors.complete }]}>
+                          <RNText style={styles.badgeText}>✓</RNText>
+                        </View>
+                      </View>
                       <Paragraph style={styles.approvedPhotoDescription}>
                         {photo.description}
                       </Paragraph>
@@ -289,15 +289,17 @@ export default function WorkerTaskDetailScreen() {
 
         {/* Current Photo Status */}
         {task.lastPhoto && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <View style={styles.photoHeader}>
+          <Card style={[styles.card, { overflow: 'visible' }]}>
+            <Card.Content style={{ overflow: 'visible' }}>
+              <View style={[styles.photoHeader, { overflow: 'visible' }]}>
                 <Title style={styles.cardTitle}>Latest Photo Submission</Title>
-                <Badge 
-                  style={[styles.verificationBadge, { backgroundColor: verificationInfo?.color }]}
-                >
-                  {task.lastPhoto.verificationStatus.toUpperCase()}
-                </Badge>
+                <View style={styles.verificationBadgeContainer}>
+                  <View style={[styles.verificationBadge, { backgroundColor: verificationInfo?.color }]}>
+                    <RNText style={styles.badgeText}>
+                      {task.lastPhoto.verificationStatus.toUpperCase()}
+                    </RNText>
+                  </View>
+                </View>
               </View>
 
               {/* Photo Preview */}
@@ -432,7 +434,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 2,
   },
@@ -466,7 +469,12 @@ const styles = StyleSheet.create({
   },
   taskMeta: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexWrap: 'wrap',
+    marginHorizontal: -spacing.xs,
+  },
+  taskMetaChip: {
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.xs,
   },
   statusChip: {
     height: 32,
@@ -516,11 +524,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   instructionsList: {
-    gap: spacing.md,
+    marginVertical: -spacing.sm,
   },
   instructionItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginVertical: spacing.sm,
   },
   instructionNumber: {
     width: 32,
@@ -551,12 +560,17 @@ const styles = StyleSheet.create({
   },
   approvedPhotosContainer: {
     flexDirection: 'row',
-    gap: spacing.md,
+    marginLeft: -spacing.sm,
+  },
+  approvedPhotoWrapper: {
+    marginLeft: spacing.md,
   },
   approvedPhotoCard: {
     width: 120,
     alignItems: 'center',
     position: 'relative',
+    overflow: 'visible',
+    marginRight: spacing.md,
   },
   approvedPhotoThumbnail: {
     width: 100,
@@ -564,12 +578,31 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     marginBottom: spacing.sm,
   },
-  approvedBadge: {
+  approvedBadgeContainer: {
     position: 'absolute',
-    top: -5,
-    right: 10,
-    minWidth: 24,
-    height: 24,
+    top: -12,
+    right: -4,
+    zIndex: 10,
+    overflow: 'visible',
+  },
+  approvedBadge: {
+    minWidth: 32,
+    height: 32,
+    overflow: 'visible',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 16,
+    textAlign: 'center',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   approvedPhotoDescription: {
     fontSize: fontSizes.sm,
@@ -588,9 +621,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    overflow: 'visible',
+  },
+  verificationBadgeContainer: {
+    overflow: 'visible',
+    padding: 4,
   },
   verificationBadge: {
-    alignSelf: 'flex-start',
+    minHeight: 28,
+    height: 28,
+    overflow: 'visible',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   photoContainer: {
     marginBottom: spacing.md,
@@ -679,10 +724,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   actionButtons: {
-    gap: spacing.md,
+    marginVertical: -spacing.xs,
   },
   actionButton: {
-    marginBottom: spacing.sm,
+    marginVertical: spacing.xs,
   },
   actionButtonContent: {
     paddingVertical: spacing.sm,

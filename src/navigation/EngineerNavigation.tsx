@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Appbar, Avatar, Menu, Divider, IconButton, Badge, ActivityIndicator, Text } from 'react-native-paper';
+import { Appbar, IconButton, Badge, ActivityIndicator, Text } from 'react-native-paper';
 import { View } from 'react-native';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
@@ -38,7 +38,6 @@ interface Props {
 
 // Custom header component with SitePulse branding
 const CustomHeader = ({ user, project, onLogout }: Props) => {
-  const [menuVisible, setMenuVisible] = React.useState(false);
   const [notificationsVisible, setNotificationsVisible] = React.useState(false);
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const unreadNotifications = 2; // This would come from context/props
@@ -53,7 +52,7 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
       />
       
       {/* Notifications Icon */}
-      <View style={{ position: 'relative', marginRight: 8 }}>
+      <View style={{ position: 'relative', marginRight: 0 }}>
         <IconButton
           icon="bell"
           iconColor="white"
@@ -83,27 +82,6 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
         onPress={() => setSettingsVisible(true)}
         style={{ marginRight: 8 }}
       />
-      
-      <Menu
-        visible={menuVisible}
-        onDismiss={() => setMenuVisible(false)}
-        anchor={
-          <Avatar.Image 
-            size={32} 
-            source={{ uri: user.profileImage || 'https://via.placeholder.com/32' }}
-            style={{ marginRight: 16 }}
-            onTouchEnd={() => setMenuVisible(true)}
-          />
-        }
-      >
-        <Menu.Item 
-          onPress={() => {
-            setMenuVisible(false);
-            onLogout && onLogout();
-          }} 
-          title="Logout" 
-        />
-      </Menu>
 
       {/* Notifications Modal */}
       <NotificationsScreen 
@@ -197,7 +175,11 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
     return (
       <View style={{ flex: 1 }}>
         <CustomHeader user={user} project={project} onLogout={onLogout} />
-        <CreateNewProjectScreen navigation={{ goBack: () => {}, navigate: () => {} }} />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="CreateNewProject">
+            {(props) => <CreateNewProjectScreen {...props} />}
+          </Stack.Screen>
+        </Stack.Navigator>
       </View>
     );
   }

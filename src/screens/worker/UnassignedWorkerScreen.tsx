@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, Text, ScrollView } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -53,6 +53,47 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
   };
 
   const handleAccept = async (invite: WorkerAssignment) => {
+    // Check if this is a project switch
+    if (invite.isProjectSwitch && user.projectId) {
+      Alert.alert(
+        'Switch Project?',
+        `You are currently assigned to another project. Accepting this invitation will switch you to "${invite.projectName}".\n\nDo you want to continue?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Switch Project',
+            onPress: async () => {
+              setAccepting(true);
+              try {
+                await acceptAssignment(user.uid, invite.projectId);
+                Alert.alert(
+                  'Project Switched! 🎉',
+                  `You've joined ${invite.projectName}. Refreshing...`,
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        if (onRefresh) onRefresh();
+                      }
+                    }
+                  ]
+                );
+              } catch (error: any) {
+                Alert.alert('Error', error.message || 'Failed to accept invitation');
+              } finally {
+                setAccepting(false);
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Regular acceptance (no existing project)
     setAccepting(true);
     try {
       await acceptAssignment(user.uid, invite.projectId);
@@ -102,8 +143,13 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
         {/* Header Section */}
         <View style={styles.header}>
           <Avatar.Image
@@ -126,54 +172,61 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
             </Card.Content>
           </Card>
         ) : invitations.length > 0 ? (
-          invitations.map((invite) => (
-            <Card key={invite.projectId} style={styles.invitationCard}>
-              <Card.Content>
-                <View style={styles.invitationHeader}>
-                  <Ionicons 
-                    name="mail" 
-                    size={32} 
-                    color={theme.colors.primary} 
-                  />
-                  <Title style={styles.invitationTitle}>Project Invitation!</Title>
-                </View>
-                
-                <Paragraph style={styles.invitationText}>
-                  <strong>{invite.invitedByName}</strong> has invited you to join:
-                </Paragraph>
-                
-                <Title style={styles.projectName}>{invite.projectName}</Title>
-                
-                <Paragraph style={styles.invitationDate}>
-                  Invited on {new Date(invite.invitedAt).toLocaleDateString()}
-                </Paragraph>
-                
-                <View style={styles.invitationActions}>
-                  <Button
-                    mode="contained"
-                    onPress={() => handleAccept(invite)}
-                    loading={accepting}
-                    disabled={accepting || rejecting}
-                    icon="check"
-                    style={styles.acceptButton}
-                  >
-                    Accept
-                  </Button>
+          <>
+            {invitations.length > 1 && (
+              <Paragraph style={styles.invitationsCount}>
+                You have {invitations.length} project invitation{invitations.length > 1 ? 's' : ''}
+              </Paragraph>
+            )}
+            {invitations.map((invite, index) => (
+              <Card key={invite.projectId} style={[styles.invitationCard, index < invitations.length - 1 && styles.invitationCardMargin]}>
+                <Card.Content>
+                  <View style={styles.invitationHeader}>
+                    <Ionicons 
+                      name="mail" 
+                      size={32} 
+                      color={theme.colors.primary} 
+                    />
+                    <Title style={styles.invitationTitle}>Project Invitation!</Title>
+                  </View>
                   
-                  <Button
-                    mode="outlined"
-                    onPress={() => handleReject(invite)}
-                    loading={rejecting}
-                    disabled={accepting || rejecting}
-                    icon="close"
-                    style={styles.rejectButton}
-                  >
-                    Reject
-                  </Button>
-                </View>
-              </Card.Content>
-            </Card>
-          ))
+                  <Paragraph style={styles.invitationText}>
+                    <Text style={styles.boldText}>{invite.invitedByName}</Text> has invited you to join:
+                  </Paragraph>
+                  
+                  <Title style={styles.projectName}>{invite.projectName}</Title>
+                  
+                  <Paragraph style={styles.invitationDate}>
+                    Invited on {new Date(invite.invitedAt).toLocaleDateString()}
+                  </Paragraph>
+                  
+                  <View style={styles.invitationActions}>
+                    <Button
+                      mode="contained"
+                      onPress={() => handleAccept(invite)}
+                      loading={accepting}
+                      disabled={accepting || rejecting}
+                      icon="check"
+                      style={styles.acceptButton}
+                    >
+                      Accept
+                    </Button>
+                    
+                    <Button
+                      mode="outlined"
+                      onPress={() => handleReject(invite)}
+                      loading={rejecting}
+                      disabled={accepting || rejecting}
+                      icon="close"
+                      style={styles.rejectButton}
+                    >
+                      Reject
+                    </Button>
+                  </View>
+                </Card.Content>
+              </Card>
+            ))}
+          </>
         ) : (
           <Card style={styles.statusCard}>
             <Card.Content style={styles.statusContent}>
@@ -181,7 +234,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
                 <Ionicons 
                   name="time-outline" 
                   size={48} 
-                  color={constructionColors.inProgress} 
+                  color={theme.colors.primary} 
                 />
               </View>
               <Title style={styles.statusTitle}>Waiting for Project Assignment</Title>
@@ -283,7 +336,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
         >
           Check for Updates
         </Button>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -293,9 +346,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     padding: spacing.md,
+    paddingBottom: spacing.xl,
+    flexGrow: 1,
   },
   header: {
     alignItems: 'center',
@@ -320,9 +377,9 @@ const styles = StyleSheet.create({
   statusCard: {
     marginBottom: spacing.lg,
     elevation: 3,
-    backgroundColor: constructionColors.inProgress + '10',
+    backgroundColor: theme.colors.surface,
     borderLeftWidth: 4,
-    borderLeftColor: constructionColors.inProgress,
+    borderLeftColor: theme.colors.primary,
   },
   statusContent: {
     alignItems: 'center',
@@ -355,12 +412,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   availableActions: {
-    gap: spacing.md,
+    marginVertical: -spacing.sm,
   },
   actionItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: spacing.sm,
+    marginVertical: spacing.sm,
   },
   actionText: {
     flex: 1,
@@ -382,11 +440,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   stepsList: {
-    gap: spacing.md,
+    marginVertical: -spacing.sm,
   },
   stepItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: spacing.sm,
   },
   stepNumber: {
     width: 32,
@@ -413,12 +472,22 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     borderColor: theme.colors.outline,
   },
+  invitationsCount: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
   invitationCard: {
     marginBottom: spacing.lg,
     elevation: 4,
     backgroundColor: theme.colors.primaryContainer,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
+  },
+  invitationCardMargin: {
+    marginBottom: spacing.md,
   },
   invitationHeader: {
     flexDirection: 'row',
@@ -436,6 +505,9 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurface,
     marginBottom: spacing.sm,
   },
+  boldText: {
+    fontWeight: 'bold',
+  },
   projectName: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
@@ -449,10 +521,10 @@ const styles = StyleSheet.create({
   },
   invitationActions: {
     flexDirection: 'row',
-    gap: spacing.md,
   },
   acceptButton: {
     flex: 1,
+    marginRight: spacing.sm,
     backgroundColor: constructionColors.complete,
   },
   rejectButton: {

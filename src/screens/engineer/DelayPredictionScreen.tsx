@@ -202,21 +202,20 @@ export default function DelayPredictionScreen() {
 
   const renderTaskPrediction = (prediction: DelayPrediction) => (
     <Card key={prediction.taskId} style={styles.taskCard}>
-      <Card.Content>
+      <Card.Content style={{ overflow: 'visible' }}>
         <View style={styles.taskHeader}>
           <View style={styles.taskInfo}>
             <Title style={styles.taskTitle}>{prediction.taskTitle}</Title>
             <Chip 
               style={[styles.statusChip, { backgroundColor: getStatusColor(prediction.currentStatus) }]}
-              textStyle={{ color: 'white', fontSize: 12 }}
+              textStyle={styles.statusChipText}
             >
               {prediction.currentStatus.replace('_', ' ').toUpperCase()}
             </Chip>
           </View>
           <Chip 
-            icon="brain" 
             style={[styles.confidenceChip, { backgroundColor: theme.colors.primary }]}
-            textStyle={{ color: 'white', fontSize: 10 }}
+            textStyle={styles.confidenceChipText}
           >
             {Math.round(prediction.confidenceLevel * 100)}%
           </Chip>
@@ -269,7 +268,7 @@ export default function DelayPredictionScreen() {
                 <Paragraph style={styles.factorName}>{factor.name}</Paragraph>
                 <Chip 
                   style={[styles.impactChip, { backgroundColor: getImpactColor(factor.impact) }]}
-                  textStyle={{ color: 'white', fontWeight: 'bold', fontSize: 10 }}
+                  textStyle={styles.impactChipText}
                 >
                   {factor.impact > 0 ? '+' : ''}{Math.round(factor.impact * 100)}%
                 </Chip>
@@ -328,7 +327,7 @@ export default function DelayPredictionScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <Title style={styles.screenTitle}>Task Delay Prediction</Title>
@@ -503,7 +502,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 1,
   },
@@ -516,27 +516,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   summaryCard: {
-    margin: spacing.md,
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.sm,
     elevation: 2,
     borderRadius: theme.roundness,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    paddingVertical: spacing.xs,
   },
   summaryItem: {
     alignItems: 'center',
+    flex: 1,
   },
   summaryNumber: {
     fontSize: fontSizes.xxl,
     fontWeight: 'bold',
     color: theme.colors.primary,
+    lineHeight: 32,
   },
   summaryLabel: {
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.xs,
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
   tabContainer: {
     paddingHorizontal: spacing.md,
@@ -553,16 +557,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     elevation: 2,
     borderRadius: theme.roundness,
+    overflow: 'visible',
   },
   taskHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   taskInfo: {
     flex: 1,
     marginRight: spacing.sm,
+    maxWidth: '70%',
   },
   taskTitle: {
     fontSize: fontSizes.lg,
@@ -571,11 +578,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   statusChip: {
-    height: 28,
     alignSelf: 'flex-start',
+    minWidth: 50,
+  },
+  statusChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   confidenceChip: {
-    height: 28,
+    minWidth: 50,
+    height: 24,
+    alignSelf: 'flex-start',
   },
   predictionDetails: {
     marginBottom: spacing.md,
@@ -637,15 +653,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.xs,
+    overflow: 'visible',
   },
   factorName: {
     fontSize: fontSizes.sm,
     fontWeight: '500',
     color: theme.colors.text,
     flex: 1,
+    marginRight: spacing.sm,
+  },
+  confidenceChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   impactChip: {
-    height: 24,
+    minWidth: 55,
+    alignSelf: 'flex-start',
+  },
+  impactChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   factorDescription: {
     fontSize: fontSizes.sm,

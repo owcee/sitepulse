@@ -28,12 +28,16 @@ export const pauseProject = projectService.pauseProject;
 
 export const getAvailableWorkers = assignmentService.getAvailableWorkers;
 export const getProjectWorkers = assignmentService.getProjectWorkers;
+export const getPendingInvitations = assignmentService.getPendingInvitations;
 export const inviteWorker = assignmentService.inviteWorker;
 export const sendProjectAssignmentNotification = assignmentService.sendProjectAssignmentNotification;
 export const getWorkerInvites = assignmentService.getWorkerInvites;
 export const acceptAssignment = assignmentService.acceptAssignment;
 export const rejectAssignment = assignmentService.rejectAssignment;
 export const removeWorkerFromProject = assignmentService.removeWorkerFromProject;
+export const getWorkerProjects = assignmentService.getWorkerProjects;
+
+export const updateWorkerAssignedTasks = assignmentService.updateWorkerAssignedTasks;
 
 // Legacy compatibility
 export async function assignWorkerToProject(workerId, projectId) {
@@ -83,8 +87,8 @@ export async function acceptProjectAssignment(notificationId, assignmentId, proj
   // Accept the assignment
   await assignmentService.acceptAssignment(auth.currentUser.uid, projectId);
   
-  // Mark notification as read
-  await notificationService.markAsRead(notificationId);
+  // Delete the project assignment notification (it's been handled, no need to keep it)
+  await notificationService.deleteNotification(notificationId);
   
   // Send confirmation notification (optional)
   await notificationService.sendNotification(auth.currentUser.uid, {

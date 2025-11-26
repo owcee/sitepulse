@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +21,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [showSignUp, setShowSignUp] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSigningUp, setIsSigningUp] = useState(false);
 
   const [currentProject, setCurrentProject] = useState<any>(null);
 
@@ -39,10 +40,44 @@ export default function App() {
   const handleRefresh = async () => {
     try {
       setIsLoading(true);
+      
+      // Small delay to ensure Firestore updates have propagated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Force re-fetch user data from Firestore
       const { getCurrentUser } = await import('./src/services/authService');
       const refreshedUser = await getCurrentUser();
+      console.log('🔄 Refreshed user:', refreshedUser);
       setUser(refreshedUser);
+      
+      // If user has a project, load it
+      if (refreshedUser && refreshedUser.projectId) {
+        try {
+          const { getProject } = await import('./src/services/projectService');
+          
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Project loading timeout after 10 seconds')), 10000)
+          );
+          
+          const projectPromise = getProject(refreshedUser.projectId);
+          const project = await Promise.race([projectPromise, timeoutPromise]) as any;
+          
+          if (project) {
+            setCurrentProject(project);
+            console.log('✅ Project loaded after refresh:', project.id, project.name);
+          } else {
+            console.warn('⚠️ Project not found after refresh');
+            setCurrentProject(null);
+          }
+        } catch (error) {
+          console.error('Error loading project after refresh:', error);
+          setCurrentProject(null);
+        }
+      } else {
+        console.log('ℹ️ User has no projectId');
+        setCurrentProject(null);
+      }
     } catch (error) {
       console.error('Error refreshing user:', error);
     } finally {
@@ -57,7 +92,8 @@ export default function App() {
       setUser(authUser);
       
       // Register for push notifications when user logs in
-      if (authUser) {
+      // Skip during sign-up process to avoid errors (user gets signed out immediately)
+      if (authUser && !isSigningUp) {
         try {
           await registerForPushNotifications();
           console.log('✅ Push notifications registered');
@@ -66,32 +102,27 @@ export default function App() {
         }
       }
       
-      // Load user's project if they have one
+      // Load user's project if they have one (with timeout to prevent freezing)
       if (authUser && authUser.projectId) {
         try {
-          console.log('📦 Loading project:', authUser.projectId);
           const { getProject } = await import('./src/services/projectService');
           
-          // Add timeout to prevent infinite loading
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Project load timeout')), 10000)
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Project loading timeout after 10 seconds')), 10000)
           );
           
-          const project = await Promise.race([
-            getProject(authUser.projectId),
-            timeoutPromise
-          ]) as any;
+          const projectPromise = getProject(authUser.projectId);
+          const project = await Promise.race([projectPromise, timeoutPromise]) as any;
           
           if (project) {
-            console.log('✅ Project loaded successfully:', project.name);
             setCurrentProject(project);
           } else {
-            console.error('❌ Project not found');
             setCurrentProject(null);
           }
         } catch (error) {
-          console.error('❌ Error loading project:', error);
-          // Set null to prevent infinite loading - user can create new project
+          console.error('Error loading project:', error);
+          // Set to null on error/timeout so app can continue
           setCurrentProject(null);
         }
       } else {
@@ -102,7 +133,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isSigningUp]);
 
   // Show loading screen while checking auth state
   if (isLoading) {
@@ -125,8 +156,19 @@ export default function App() {
           <NavigationContainer>
             {showSignUp ? (
               <SignUpScreen 
-                onSignUp={setUser}
-                onBackToLogin={() => setShowSignUp(false)}
+                onSignUp={(user) => {
+                  // Don't set user here - let auth state change handle it
+                  // The sign-out will happen in SignUpScreen, which will trigger auth state change
+                }}
+                onBackToLogin={() => {
+                  setShowSignUp(false);
+                  setIsSigningUp(false);
+                }}
+                onSignUpStart={() => setIsSigningUp(true)}
+                onSignUpComplete={() => {
+                  // Reset flag after sign-out completes (handled by auth state change)
+                  setTimeout(() => setIsSigningUp(false), 1000);
+                }}
               />
             ) : (
               <LoginScreen 
@@ -151,15 +193,35 @@ export default function App() {
     isNull: user.projectId === null,
     isUndefined: user.projectId === undefined,
     isEmpty: user.projectId === '',
-    condition: user.role === 'engineer' && !user.projectId
+    condition: user.role === 'engineer' && !user.projectId,
+    isSigningUp: isSigningUp
   });
   
-  if (user.role === 'engineer' && !user.projectId) {
+  // Don't show CreateNewProjectScreen if we're in the middle of sign-up process
+  // This prevents the flash of CreateNewProjectScreen before sign-out
+  if (user.role === 'engineer' && !user.projectId && !isSigningUp) {
     console.log('📝 Engineer has no projects - showing CreateNewProjectScreen');
     return (
       <PaperProvider theme={theme}>
         <SafeAreaProvider>
-          <CreateNewProjectScreen onProjectCreated={handleRefresh} />
+          <NavigationContainer>
+            <CreateNewProjectScreen onProjectCreated={handleRefresh} />
+            <StatusBar style="auto" />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </PaperProvider>
+    );
+  }
+  
+  // If signing up, show loading to prevent navigation flash
+  if (isSigningUp) {
+    return (
+      <PaperProvider theme={theme}>
+        <SafeAreaProvider>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={{ marginTop: 16, color: theme.colors.text }}>Creating account...</Text>
+          </View>
         </SafeAreaProvider>
       </PaperProvider>
     );
@@ -219,24 +281,13 @@ export default function App() {
     );
   }
 
-  // Fallback: If user has projectId but project failed to load, show create screen
-  if (user.projectId && !currentProject && !isLoading) {
-    console.log('⚠️ Project ID exists but project not loaded - showing create screen');
-    return (
-      <PaperProvider theme={theme}>
-        <SafeAreaProvider>
-          <CreateNewProjectScreen onProjectCreated={handleRefresh} />
-        </SafeAreaProvider>
-      </PaperProvider>
-    );
-  }
-
   // Loading project data
   return (
     <PaperProvider theme={theme}>
       <SafeAreaProvider>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text>Loading project data...</Text>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ marginTop: 16, color: theme.colors.text }}>Loading project data...</Text>
         </View>
       </SafeAreaProvider>
     </PaperProvider>

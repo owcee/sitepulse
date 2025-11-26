@@ -81,15 +81,21 @@ export default function MaterialsManagementPage() {
     const quantity = parseFloat(formData.quantity);
     const pricePerUnit = parseFloat(formData.pricePerUnit);
 
-    const materialData = {
+    const materialData: Record<string, any> = {
       name: formData.name.trim(),
       quantity,
       unit: formData.unit,
       price: pricePerUnit, // Using 'price' to match context interface
       category: 'Construction Materials', // Default category
-      supplier: formData.supplier.trim() || undefined,
       dateAdded: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
     };
+
+    const supplierValue = formData.supplier.trim();
+    if (supplierValue) {
+      materialData.supplier = supplierValue;
+    } else if (editingMaterial && editingMaterial.supplier) {
+      materialData.supplier = editingMaterial.supplier;
+    }
 
     if (editingMaterial) {
       updateMaterial(editingMaterial.id, materialData);
@@ -124,7 +130,7 @@ export default function MaterialsManagementPage() {
   const totalCost = materials.reduce((sum, material) => sum + (material.quantity * material.price), 0);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -132,7 +138,7 @@ export default function MaterialsManagementPage() {
             icon="arrow-left"
             size={24}
             onPress={() => navigation.goBack()}
-            iconColor={theme.colors.onSurface}
+            iconColor={theme.colors.primary}
           />
           <View style={styles.headerText}>
             <Text style={styles.title}>Materials Management</Text>
@@ -151,7 +157,7 @@ export default function MaterialsManagementPage() {
         </Card>
         <Card style={styles.summaryCard}>
           <Card.Content style={styles.summaryContent}>
-            <Text style={styles.summaryNumber}>${totalCost.toLocaleString()}</Text>
+            <Text style={styles.summaryNumber}>₱{totalCost.toLocaleString()}</Text>
             <Text style={styles.summaryLabel}>Total Value</Text>
           </Card.Content>
         </Card>
@@ -205,13 +211,13 @@ export default function MaterialsManagementPage() {
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Price per {material.unit}:</Text>
                     <Text style={styles.detailValue}>
-                      ${material.price.toFixed(2)}
+                      ₱{material.price.toFixed(2)}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Total Cost:</Text>
                     <Text style={[styles.detailValue, styles.totalCost]}>
-                      ${(material.quantity * material.price).toFixed(2)}
+                      ₱{(material.quantity * material.price).toFixed(2)}
                     </Text>
                   </View>
                   {material.supplier && (
@@ -293,7 +299,7 @@ export default function MaterialsManagementPage() {
 
             <TextInput
               mode="outlined"
-              label="Price per Unit ($) *"
+              label="Price per Unit (₱) *"
               value={formData.pricePerUnit}
               onChangeText={(text) => setFormData(prev => ({ ...prev, pricePerUnit: text }))}
               keyboardType="numeric"
@@ -314,7 +320,7 @@ export default function MaterialsManagementPage() {
             {formData.quantity && formData.pricePerUnit && (
               <View style={styles.costPreview}>
                 <Text style={styles.costPreviewText}>
-                  Total Cost: ${(parseFloat(formData.quantity) * parseFloat(formData.pricePerUnit)).toFixed(2)}
+                  Total Cost: ₱{(parseFloat(formData.quantity) * parseFloat(formData.pricePerUnit)).toFixed(2)}
                 </Text>
               </View>
             )}
@@ -345,7 +351,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-    paddingVertical: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   headerContent: {
     flexDirection: 'row',
@@ -370,10 +377,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    gap: spacing.md,
   },
   summaryCard: {
     flex: 1,
+    marginHorizontal: spacing.sm,
     backgroundColor: 'white',
   },
   summaryContent: {
@@ -506,12 +513,12 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: 'row',
-    gap: spacing.md,
     marginBottom: spacing.md,
   },
   inputHalf: {
     flex: 1,
     marginBottom: 0,
+    marginHorizontal: spacing.xs,
   },
   unitSelector: {
     flex: 1,
@@ -523,10 +530,12 @@ const styles = StyleSheet.create({
   },
   unitChips: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    flexWrap: 'wrap',
+    marginHorizontal: -spacing.xs,
   },
   unitChip: {
-    marginRight: spacing.xs,
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.xs,
   },
   chipText: {
     color: theme.colors.onSurfaceVariant,
@@ -552,7 +561,10 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: spacing.md,
+  },
+  modalActionButton: {
+    flex: 1,
+    marginHorizontal: spacing.xs,
   },
 });
 

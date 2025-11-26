@@ -114,7 +114,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <Title style={styles.screenTitle}>My Profile</Title>
@@ -161,7 +161,7 @@ export default function ProfileScreen() {
                 <Paragraph style={styles.statLabel}>Hours This Month</Paragraph>
               </View>
               <View style={styles.statItem}>
-                <Paragraph style={styles.statNumber}>${mockWorkerProfile.hourlyRate}</Paragraph>
+                <Paragraph style={styles.statNumber}>₱{mockWorkerProfile.hourlyRate}</Paragraph>
                 <Paragraph style={styles.statLabel}>Hourly Rate</Paragraph>
               </View>
               <View style={styles.statItem}>
@@ -421,7 +421,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     backgroundColor: 'white',
     elevation: 1,
   },
@@ -501,12 +502,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   workSummary: {
-    gap: spacing.md,
+    marginVertical: -spacing.sm,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginVertical: spacing.sm,
   },
   summaryLabel: {
     fontSize: fontSizes.md,
@@ -542,7 +544,11 @@ const styles = StyleSheet.create({
   specialties: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    marginHorizontal: -spacing.xs,
+  },
+  specialtyChipWrapper: {
+    marginHorizontal: spacing.xs,
+    marginVertical: spacing.xs,
   },
   specialtyChip: {
     backgroundColor: '#e3f2fd',
@@ -609,10 +615,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   accountActions: {
-    gap: spacing.md,
+    marginVertical: -spacing.xs,
   },
   actionButton: {
-    marginBottom: spacing.sm,
+    marginVertical: spacing.xs,
   },
 });
 
