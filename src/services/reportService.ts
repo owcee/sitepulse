@@ -26,6 +26,10 @@ export interface VerificationLog {
   rawTimestamp: Date; // For sorting
   taskTitle?: string; // For task completion photos
   itemName?: string; // For material/equipment/damage
+  // CNN fields for task photos
+  cnnEligible?: boolean; // Whether the task is CNN eligible
+  cnnLabel?: string; // CNN prediction label (e.g., "Concrete pouring - Not started")
+  cnnConfidence?: number; // CNN confidence (0-1)
 }
 
 export interface WorkerVerificationData {
@@ -81,22 +85,35 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
     const logs: VerificationLog[] = [];
 
     // Process Photos
-    const taskCache = new Map<string, string>(); // Cache task titles
+    const taskCache = new Map<string, { title: string; cnnEligible: boolean }>(); // Cache task data
     
     for (const docSnapshot of photosSnapshot.docs || []) {
       const data = docSnapshot.data();
       
-      // Fetch task title if not cached
+      // DEBUG LOGGING
+      if (data.cnnClassification) {
+        console.log(`[DEBUG] Photo ${docSnapshot.id} has CNN data:`, JSON.stringify(data.cnnClassification));
+      } else {
+        console.log(`[DEBUG] Photo ${docSnapshot.id} has NO CNN data`);
+      }
+      
+      // Fetch task data if not cached
       let taskTitle = 'Unknown Task';
+      let cnnEligible = false;
+      
       if (data.taskId) {
         if (taskCache.has(data.taskId)) {
-          taskTitle = taskCache.get(data.taskId)!;
+          const cached = taskCache.get(data.taskId)!;
+          taskTitle = cached.title;
+          cnnEligible = cached.cnnEligible;
         } else {
           try {
             const taskDoc = await getDoc(doc(db, 'tasks', data.taskId));
             if (taskDoc.exists()) {
-              taskTitle = taskDoc.data().title || 'Untitled Task';
-              taskCache.set(data.taskId, taskTitle);
+              const taskData = taskDoc.data();
+              taskTitle = taskData.title || 'Untitled Task';
+              cnnEligible = taskData.cnnEligible || false;
+              taskCache.set(data.taskId, { title: taskTitle, cnnEligible });
             }
           } catch (err) {
             console.error('Error fetching task:', err);
@@ -104,7 +121,29 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         }
       }
       
-      logs.push({
+        // Handle CNN classification
+        let cnnLabel = data.cnnLabel || null; // Prefer the direct field
+        let cnnConfidence = data.cnnConfidence || data.confidence || null;
+
+        // Fallback logic if direct field is missing
+        if (!cnnLabel && data.cnnClassification) {
+          if (typeof data.cnnClassification === 'string') {
+            cnnLabel = data.cnnClassification;
+          } else if (typeof data.cnnClassification === 'object') {
+            cnnLabel = data.cnnClassification.classification || 
+                       data.cnnClassification.label || 
+                       'Unknown Label';
+                       
+            if (!cnnConfidence && data.cnnClassification.confidence) {
+              cnnConfidence = data.cnnClassification.confidence;
+            }
+          }
+        } else if (!cnnLabel && data.cnnResult) { 
+           cnnLabel = data.cnnResult.label || data.cnnResult.classification;
+           if (!cnnConfidence) cnnConfidence = data.cnnResult.confidence || data.cnnResult.score;
+        }
+
+        logs.push({
         id: docSnapshot.id,
         workerId: data.uploaderId,
         workerName: data.uploaderName || 'Unknown Worker',
@@ -117,7 +156,10 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         verifiedBy: data.verifiedBy,
         verifiedAt: data.verifiedAt?.toDate().toISOString(),
         rawTimestamp: data.uploadedAt?.toDate() || new Date(),
-        taskTitle: taskTitle
+        taskTitle: taskTitle,
+        cnnEligible: cnnEligible,
+        cnnLabel: cnnLabel,
+        cnnConfidence: cnnConfidence
       });
     }
 

@@ -23,8 +23,11 @@ export interface Task {
   assignedTo: string;
   projectId: string;
   status: 'not_started' | 'in_progress' | 'completed';
+  progressPercent: number; // 0-100
+  cnnEligible?: boolean;
   dueDate: string;
   lastPhoto?: TaskPhoto;
+  delayPrediction?: DelayPrediction;
   createdAt: string;
   updatedAt: string;
 }

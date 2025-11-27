@@ -5,6 +5,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -42,6 +43,9 @@ const db = getFirestore(app);
 // Initialize Firebase Storage with explicit bucket
 const storage = getStorage(app, 'gs://sitepulse-2d882.firebasestorage.app');
 
+// Initialize Cloud Functions
+const functions = getFunctions(app);
+
 // Enable offline persistence for web
 if (Platform.OS === 'web') {
   enableIndexedDbPersistence(db).catch((err) => {
@@ -53,6 +57,6 @@ if (Platform.OS === 'web') {
   });
 }
 
-export { auth, db, storage };
+export { auth, db, storage, functions };
 export default app;
 

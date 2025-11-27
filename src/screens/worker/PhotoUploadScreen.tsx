@@ -25,6 +25,7 @@ import { Task } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { uploadTaskPhoto } from '../../services/firebaseService';
 import { auth } from '../../firebaseConfig';
+import { cnnService, CNNPrediction } from '../../services/cnnService';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -35,23 +36,20 @@ const mockTasks: Pick<Task, 'id' | 'title' | 'status'>[] = [
   { id: '6', title: 'Equipment Maintenance', status: 'not_started' },
 ];
 
-// Mock CNN classification results
-const mockClassificationResults = [
-  'Foundation Work',
-  'Concrete Pouring',
-  'Electrical Work',
-  'Plumbing',
-  'Framing',
-  'Roofing',
-  'Drywall',
-  'Flooring',
+// CNN-eligible task types and their status variations
+const cnnTaskTypes = [
+  'Concrete pouring',
+  'CHB laying',
+  'Roof sheeting',
+  'Tile laying',
   'Painting',
-  'HVAC Installation',
-  'Insulation',
-  'Windows/Doors',
-  'Site Cleanup',
-  'Equipment',
-  'Safety Check',
+];
+
+const cnnStatusTypes = [
+  'Not started',
+  'In progress',
+  'Near completion',
+  'Completed',
 ];
 
 export default function PhotoUploadScreen() {
@@ -66,10 +64,7 @@ export default function PhotoUploadScreen() {
   const [taskMenuVisible, setTaskMenuVisible] = useState(false);
   const [notes, setNotes] = useState('');
   const [isClassifying, setIsClassifying] = useState(false);
-  const [classificationResult, setClassificationResult] = useState<{
-    classification: string;
-    confidence: number;
-  } | null>(null);
+  const [classificationResult, setClassificationResult] = useState<CNNPrediction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
@@ -80,26 +75,24 @@ export default function PhotoUploadScreen() {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === 'granted');
+      
+      // Initialize CNN model
+      await cnnService.initialize();
     })();
   }, []);
 
-  const simulateCNNClassification = async (imageUri: string) => {
+  const runCNNClassification = async (imageUri: string) => {
     setIsClassifying(true);
     
-    // Simulate CNN processing time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Mock classification result
-    const randomClassification = mockClassificationResults[
-      Math.floor(Math.random() * mockClassificationResults.length)
-    ];
-    const confidence = Math.random() * 0.4 + 0.6; // Random confidence between 0.6-1.0
-    
-    setClassificationResult({
-      classification: randomClassification,
-      confidence: confidence,
-    });
-    setIsClassifying(false);
+    try {
+      const result = await cnnService.predict(imageUri);
+      setClassificationResult(result);
+    } catch (error) {
+      console.error('CNN classification failed:', error);
+      Alert.alert('AI Analysis Error', 'Failed to analyze photo. You can still submit it for manual review.');
+    } finally {
+      setIsClassifying(false);
+    }
   };
 
   const takePicture = async () => {
@@ -113,7 +106,7 @@ export default function PhotoUploadScreen() {
         setShowCamera(false);
         
         // Automatically run CNN classification
-        await simulateCNNClassification(photo.uri);
+        await runCNNClassification(photo.uri);
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture. Please try again.');
       }
@@ -129,7 +122,7 @@ export default function PhotoUploadScreen() {
 
     if (!result.canceled && result.assets[0]) {
       setCapturedImage(result.assets[0].uri);
-      await simulateCNNClassification(result.assets[0].uri);
+      await runCNNClassification(result.assets[0].uri);
     }
   };
 
@@ -166,7 +159,10 @@ export default function PhotoUploadScreen() {
       const photoData = await uploadTaskPhoto(selectedTask, capturedImage, {
         projectId: userProfile.projectId,
         uploaderName: userProfile.name,
-        cnnClassification: classificationResult,
+        cnnClassification: classificationResult ? {
+          classification: classificationResult.label,
+          confidence: classificationResult.confidence
+        } : null,
         notes: notes || undefined,
       });
 
@@ -424,7 +420,7 @@ export default function PhotoUploadScreen() {
                     <View style={styles.classificationMain}>
                       <Paragraph style={styles.classificationLabel}>Classification:</Paragraph>
                       <Title style={styles.classificationValue} numberOfLines={2} ellipsizeMode="tail">
-                        {classificationResult.classification}
+                        {classificationResult.label}
                       </Title>
                     </View>
                     

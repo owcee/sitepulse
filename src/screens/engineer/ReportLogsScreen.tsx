@@ -225,6 +225,26 @@ export default function ReportLogsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* CNN Prediction (if available) */}
+        {(log.cnnLabel || log.cnnEligible) && (
+          <View style={styles.cnnPredictionSection}>
+            <View style={styles.cnnHeader}>
+              <Ionicons name="brain" size={20} color="#9C27B0" />
+              <Paragraph style={styles.cnnHeaderText}>AI Prediction</Paragraph>
+            </View>
+            <Surface style={styles.cnnContainer}>
+              <Paragraph style={styles.cnnLabelText}>
+                {log.cnnLabel || 'Analysis Pending / Not Available'}
+              </Paragraph>
+              {log.cnnConfidence !== null && log.cnnConfidence !== undefined && (
+                <Paragraph style={styles.cnnConfidenceText}>
+                  Confidence Level: {Math.round(log.cnnConfidence * 100)}%
+                </Paragraph>
+              )}
+            </Surface>
+          </View>
+        )}
+
         {/* Worker Notes */}
         <View style={styles.notesSection}>
           <Paragraph style={styles.notesLabel}>Worker Notes:</Paragraph>
@@ -632,6 +652,39 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     backgroundColor: theme.colors.surfaceVariant,
     borderRadius: theme.roundness,
+  },
+  cnnPredictionSection: {
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+  },
+  cnnHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  cnnHeaderText: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: '#9C27B0',
+    marginLeft: spacing.xs,
+  },
+  cnnContainer: {
+    padding: spacing.md,
+    backgroundColor: '#F3E5F5',
+    borderRadius: theme.roundness,
+    borderLeftWidth: 4,
+    borderLeftColor: '#9C27B0',
+  },
+  cnnLabelText: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
+    color: '#6A1B9A',
+    marginBottom: spacing.xs,
+  },
+  cnnConfidenceText: {
+    fontSize: fontSizes.sm,
+    color: '#7B1FA2',
+    fontWeight: '500',
   },
   engineerNotesContainer: {
     padding: spacing.sm,

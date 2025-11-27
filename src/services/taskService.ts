@@ -31,10 +31,18 @@ export interface Task {
   planned_end_date: string;
   actual_start_date?: string;
   actual_end_date?: string;
+  progressPercent?: number; // 0-100
   assigned_worker_ids: string[];
   assigned_worker_names: string[];
   cnnEligible: boolean;
   notes?: string;
+  delayPrediction?: {
+    predictedDuration: number;
+    delayDays: number;
+    riskLevel: 'Low' | 'Medium' | 'High';
+    factors: string[];
+    timestamp: string;
+  };
   verification?: {
     lastSubmissionId?: string;
     engineerStatus?: 'pending' | 'approved' | 'rejected';
@@ -87,8 +95,10 @@ export async function createTask(taskData: {
       assigned_worker_ids: taskData.assigned_worker_ids,
       assigned_worker_names: taskData.assigned_worker_names,
       cnnEligible: taskData.cnnEligible,
+      progressPercent: 0, // Initial progress
       notes: taskData.notes || null,
       verification: null,
+      delayPrediction: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       createdBy: auth.currentUser.uid
@@ -107,6 +117,7 @@ export async function createTask(taskData: {
       assigned_worker_ids: taskData.assigned_worker_ids,
       assigned_worker_names: taskData.assigned_worker_names,
       cnnEligible: taskData.cnnEligible,
+      progressPercent: 0,
       notes: taskData.notes,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -370,10 +381,12 @@ export async function updateTask(
     planned_end_date: string;
     actual_start_date: string;
     actual_end_date: string;
+    progressPercent: number;
     assigned_worker_ids: string[];
     assigned_worker_names: string[];
     notes: string;
     verification: Task['verification'];
+    delayPrediction: Task['delayPrediction'];
   }>
 ): Promise<void> {
   try {

@@ -26,6 +26,7 @@ const mockTaskDetail: Task = {
   assignedTo: 'worker-2',
   projectId: 'project-1',
   status: 'in_progress',
+  progressPercent: 50,
   dueDate: '2024-01-25',
   createdAt: '2024-01-20',
   updatedAt: '2024-01-22',

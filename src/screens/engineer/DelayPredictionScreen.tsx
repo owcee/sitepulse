@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -8,162 +8,185 @@ import {
   Chip, 
   ProgressBar,
   IconButton,
-  List,
-  Divider,
   SegmentedButtons 
 } from 'react-native-paper';
 import { PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 import { DelayPrediction, DelayFactor, Task } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { predictProjectDelays, DelayPredictionResult } from '../../services/mlService';
+import { db } from '../../firebaseConfig';
 
 const screenWidth = Dimensions.get('window').width;
 
-// Mock task data with delay predictions
-const mockTasks: Task[] = [
-  {
-    id: 'task-1',
-    title: 'Foundation Excavation',
-    description: 'Dig foundation for building structure',
-    assignedTo: 'worker-1',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-02-15',
-    priority: 'high',
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-23',
-  },
-  {
-    id: 'task-2',
-    title: 'Concrete Pouring',
-    description: 'Pour concrete for foundation',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-02-20',
-    priority: 'high',
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-25',
-  },
-  {
-    id: 'task-3',
-    title: 'Framing Installation',
-    description: 'Install steel frame structure',
-    assignedTo: 'worker-3',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-02-28',
-    priority: 'medium',
-    createdAt: '2024-01-20',
-    updatedAt: '2024-01-26',
-  },
-  {
-    id: 'task-4',
-    title: 'Site Preparation',
-    description: 'Clear and prepare construction site',
-    assignedTo: 'worker-1',
-    projectId: 'project-1',
-    status: 'completed',
-    dueDate: '2024-01-30',
-    priority: 'high',
-    createdAt: '2024-01-05',
-    updatedAt: '2024-01-28',
-  },
-  {
-    id: 'task-5',
-    title: 'Utility Connections',
-    description: 'Connect water and electrical utilities',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'completed',
-    dueDate: '2024-02-05',
-    priority: 'medium',
-    createdAt: '2024-01-12',
-    updatedAt: '2024-02-03',
-  },
-];
-
-// Mock delay predictions for in-progress tasks
-const mockDelayPredictions: DelayPrediction[] = [
-  {
-    taskId: 'task-1',
-    taskTitle: 'Foundation Excavation',
-    originalDueDate: '2024-02-15',
-    estimatedCompletionDate: '2024-02-18',
-    delayDays: 3,
-    confidenceLevel: 0.85,
-    currentStatus: 'delayed',
-    factors: [
-      {
-        name: 'Weather Conditions',
-        impact: 0.6,
-        description: 'Heavy rainfall has made soil conditions difficult for excavation',
-      },
-      {
-        name: 'Equipment Issues',
-        impact: 0.4,
-        description: 'Excavator required maintenance causing 1-day delay',
-      },
-    ],
-  },
-  {
-    taskId: 'task-2',
-    taskTitle: 'Concrete Pouring',
-    originalDueDate: '2024-02-20',
-    estimatedCompletionDate: '2024-02-21',
-    delayDays: 1,
-    confidenceLevel: 0.78,
-    currentStatus: 'at_risk',
-    factors: [
-      {
-        name: 'Material Delivery',
-        impact: 0.7,
-        description: 'Concrete supplier has limited availability next week',
-      },
-      {
-        name: 'Dependency Tasks',
-        impact: 0.3,
-        description: 'Foundation excavation delay affects concrete pouring schedule',
-      },
-    ],
-  },
-  {
-    taskId: 'task-3',
-    taskTitle: 'Framing Installation',
-    originalDueDate: '2024-02-28',
-    estimatedCompletionDate: '2024-02-27',
-    delayDays: -1,
-    confidenceLevel: 0.92,
-    currentStatus: 'in_progress',
-    factors: [
-      {
-        name: 'Efficient Progress',
-        impact: -0.3,
-        description: 'Team is working ahead of schedule with good weather',
-      },
-      {
-        name: 'Material Availability',
-        impact: -0.2,
-        description: 'Steel frames arrived earlier than expected',
-      },
-    ],
-  },
-];
-
 type ViewMode = 'in_progress' | 'completed';
 
+interface RealTask {
+  id: string;
+  title: string;
+  status: string;
+  progressPercent: number;
+  planned_start_date?: any;
+  planned_end_date?: any;
+  completedAt?: any;
+  delayPrediction?: any;
+}
+
 export default function DelayPredictionScreen() {
+  const { projectId } = useProjectData();
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('in_progress');
+  const [predictions, setPredictions] = useState<DelayPrediction[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<RealTask[]>([]);
+  const [inProgressTasks, setInProgressTasks] = useState<RealTask[]>([]);
+  const [stats, setStats] = useState({
+    highRisk: 0,
+    mediumRisk: 0,
+    lowRisk: 0,
+    total: 0
+  });
+
+  // Load real tasks from Firebase on mount
+  useEffect(() => {
+    if (projectId) {
+      loadTasksFromFirebase();
+    }
+  }, [projectId]);
+
+  const loadTasksFromFirebase = async () => {
+    if (!projectId) return;
+    
+    setLoading(true);
+    try {
+      const tasksRef = collection(db, 'tasks');
+      const q = query(tasksRef, where('projectId', '==', projectId));
+      const snapshot = await getDocs(q);
+      
+      const completed: RealTask[] = [];
+      const inProgress: RealTask[] = [];
+      
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const task: RealTask = {
+          id: doc.id,
+          title: data.title || 'Untitled Task',
+          status: data.status || 'not_started',
+          progressPercent: data.progressPercent || 0,
+          planned_start_date: data.planned_start_date,
+          planned_end_date: data.planned_end_date,
+          completedAt: data.completedAt,
+          delayPrediction: data.delayPrediction
+        };
+        
+        if (task.status === 'completed') {
+          completed.push(task);
+        } else {
+          inProgress.push(task);
+        }
+      });
+      
+      setCompletedTasks(completed);
+      setInProgressTasks(inProgress);
+      
+      // If there are existing delay predictions stored in tasks, show them
+      const existingPredictions: DelayPrediction[] = inProgress
+        .filter(t => t.delayPrediction)
+        .map(t => ({
+          taskId: t.id,
+          taskTitle: t.title,
+          originalDueDate: t.planned_end_date?.toDate?.()?.toISOString() || new Date().toISOString(),
+          estimatedCompletionDate: new Date(Date.now() + (t.delayPrediction?.predictedDuration || 0) * 24 * 60 * 60 * 1000).toISOString(),
+          delayDays: t.delayPrediction?.delayDays || 0,
+          confidenceLevel: 0.85,
+          currentStatus: t.delayPrediction?.riskLevel === 'High' ? 'delayed' : 
+                        (t.delayPrediction?.riskLevel === 'Medium' ? 'at_risk' : 'in_progress'),
+          factors: (t.delayPrediction?.factors || []).map((f: string) => ({
+            name: f,
+            impact: 0.5,
+            description: `Detected factor: ${f}`
+          }))
+        }));
+      
+      if (existingPredictions.length > 0) {
+        setPredictions(existingPredictions);
+        // Calculate stats from existing predictions
+        const high = existingPredictions.filter(p => p.currentStatus === 'delayed').length;
+        const medium = existingPredictions.filter(p => p.currentStatus === 'at_risk').length;
+        const low = existingPredictions.filter(p => p.currentStatus === 'in_progress').length;
+        setStats({
+          highRisk: high,
+          mediumRisk: medium,
+          lowRisk: low,
+          total: existingPredictions.length
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      Alert.alert('Error', 'Failed to load tasks from database');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRefreshPrediction = async () => {
+    if (!projectId) {
+      Alert.alert('No Project', 'Please select a project first.');
+      return;
+    }
+    
     setRefreshing(true);
-    // Simulate API call to regenerate predictions
-    setTimeout(() => {
+    try {
+      const result = await predictProjectDelays(projectId);
+      
+      if (!result.predictions || result.predictions.length === 0) {
+        Alert.alert('No Tasks', 'No active tasks found for delay prediction.');
+        setRefreshing(false);
+        return;
+      }
+      
+      // Transform API result to UI model
+      const mappedPredictions: DelayPrediction[] = result.predictions.map(p => {
+        // Find the matching task to get original due date
+        const matchingTask = inProgressTasks.find(t => t.id === p.taskId);
+        const originalDueDate = matchingTask?.planned_end_date?.toDate?.()?.toISOString() || new Date().toISOString();
+        
+        return {
+          taskId: p.taskId,
+          taskTitle: p.taskTitle,
+          originalDueDate: originalDueDate,
+          estimatedCompletionDate: new Date(Date.now() + p.predictedDuration * 24 * 60 * 60 * 1000).toISOString(),
+          delayDays: p.delayDays,
+          confidenceLevel: 0.85,
+          currentStatus: p.riskLevel === 'High' ? 'delayed' : (p.riskLevel === 'Medium' ? 'at_risk' : 'in_progress'),
+          factors: p.factors.map(f => ({
+            name: f,
+            impact: f.includes('shortage') || f.includes('breakdown') ? 0.7 : 
+                   f.includes('weather') || f.includes('permit') ? 0.6 : 0.3,
+            description: `Detected factor: ${f}`
+          }))
+        };
+      });
+
+      setPredictions(mappedPredictions);
+      setStats({
+        highRisk: result.highRiskCount,
+        mediumRisk: result.mediumRiskCount,
+        lowRisk: result.lowRiskCount,
+        total: result.totalTasks
+      });
+      
+      Alert.alert('Analysis Complete', `${result.totalTasks} tasks analyzed.\n${result.highRiskCount} high-risk, ${result.mediumRiskCount} medium-risk, ${result.lowRiskCount} low-risk.`);
+    } catch (error) {
+      console.error('Prediction error:', error);
+      Alert.alert('Error', 'Failed to generate predictions. Make sure Firebase Functions are deployed.');
+    } finally {
       setRefreshing(false);
-      Alert.alert('Updated', 'Delay predictions have been refreshed with latest data.');
-    }, 2000);
+    }
   };
 
   const handleExportPDF = () => {
@@ -176,7 +199,7 @@ export default function DelayPredictionScreen() {
     return constructionColors.urgent;
   };
 
-  const getStatusColor = (status: 'in_progress' | 'at_risk' | 'delayed') => {
+  const getStatusColor = (status: 'in_progress' | 'at_risk' | 'delayed' | string) => {
     switch (status) {
       case 'in_progress':
         return constructionColors.complete;
@@ -196,9 +219,7 @@ export default function DelayPredictionScreen() {
     return constructionColors.complete;
   };
 
-  const inProgressTasks = mockTasks.filter(task => task.status === 'in_progress');
-  const completedTasks = mockTasks.filter(task => task.status === 'completed');
-  const tasksWithDelays = mockDelayPredictions.filter(pred => pred.delayDays > 0).length;
+  const tasksWithDelays = stats.highRisk + stats.mediumRisk;
 
   const renderTaskPrediction = (prediction: DelayPrediction) => (
     <Card key={prediction.taskId} style={styles.taskCard}>
@@ -253,7 +274,7 @@ export default function DelayPredictionScreen() {
           )}
 
           <ProgressBar 
-            progress={0.6} // This would be calculated based on actual task progress
+            progress={0.6}
             color={getStatusColor(prediction.currentStatus)}
             style={styles.progressBar}
           />
@@ -281,7 +302,7 @@ export default function DelayPredictionScreen() {
     </Card>
   );
 
-  const renderCompletedTask = (task: Task) => (
+  const renderCompletedTask = (task: RealTask) => (
     <Card key={task.id} style={styles.completedTaskCard}>
       <Card.Content>
         <View style={styles.completedTaskHeader}>
@@ -300,14 +321,18 @@ export default function DelayPredictionScreen() {
           <View style={styles.dateRow}>
             <Paragraph style={styles.dateLabel}>Due Date:</Paragraph>
             <Paragraph style={styles.originalDate}>
-              {new Date(task.dueDate).toLocaleDateString()}
+              {task.planned_end_date?.toDate ? 
+                new Date(task.planned_end_date.toDate()).toLocaleDateString() : 
+                'N/A'}
             </Paragraph>
           </View>
           
           <View style={styles.dateRow}>
             <Paragraph style={styles.dateLabel}>Completed:</Paragraph>
             <Paragraph style={[styles.completedDate, { color: constructionColors.complete }]}>
-              {new Date(task.updatedAt).toLocaleDateString()}
+              {task.completedAt?.toDate ? 
+                new Date(task.completedAt.toDate()).toLocaleDateString() : 
+                'N/A'}
             </Paragraph>
           </View>
 
@@ -325,6 +350,17 @@ export default function DelayPredictionScreen() {
       </Card.Content>
     </Card>
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Paragraph style={styles.loadingText}>Loading tasks...</Paragraph>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -421,6 +457,14 @@ export default function DelayPredictionScreen() {
                     },
                   ].filter(item => item.population > 0);
 
+                  if (taskStatusData.length === 0) {
+                    return (
+                      <View style={styles.noDataContainer}>
+                        <Paragraph style={styles.noDataText}>No task data available</Paragraph>
+                      </View>
+                    );
+                  }
+
                   return (
                     <PieChart
                       data={taskStatusData}
@@ -456,16 +500,26 @@ export default function DelayPredictionScreen() {
             </Card>
 
             {/* In Progress Tasks Section */}
-            {mockDelayPredictions.length > 0 ? (
-              mockDelayPredictions.map(renderTaskPrediction)
+            {predictions.length > 0 ? (
+              predictions.map(renderTaskPrediction)
             ) : (
               <Card style={styles.emptyCard}>
                 <Card.Content style={styles.emptyContent}>
                   <IconButton icon="clock-check" size={48} iconColor="#ccc" />
-                  <Title style={styles.emptyTitle}>No In-Progress Tasks</Title>
+                  <Title style={styles.emptyTitle}>No Predictions Yet</Title>
                   <Paragraph style={styles.emptyText}>
-                    All tasks are either completed or not started yet.
+                    Tap the refresh button to generate AI delay predictions for your {inProgressTasks.length} active task(s).
                   </Paragraph>
+                  <Button 
+                    mode="contained" 
+                    onPress={handleRefreshPrediction}
+                    loading={refreshing}
+                    disabled={refreshing}
+                    style={styles.generateButton}
+                    icon="brain"
+                  >
+                    Generate Predictions
+                  </Button>
                 </Card.Content>
               </Card>
             )}
@@ -496,6 +550,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    color: theme.colors.onSurfaceVariant,
   },
   header: {
     flexDirection: 'row',
@@ -738,6 +801,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: spacing.md,
   },
+  generateButton: {
+    marginTop: spacing.lg,
+  },
   chartCard: {
     margin: spacing.md,
     elevation: 2,
@@ -756,6 +822,14 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
     marginBottom: spacing.lg,
+    fontStyle: 'italic',
+  },
+  noDataContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  noDataText: {
+    color: theme.colors.onSurfaceVariant,
     fontStyle: 'italic',
   },
   statusSummary: {

@@ -61,7 +61,9 @@ export async function uploadTaskPhoto(
   metadata: {
     projectId: string;
     uploaderName: string;
-    cnnClassification?: { classification: string; confidence: number } | null;
+    cnnClassification?: any; // Relaxed type to accept object or string
+    cnnLabel?: string | null;
+    cnnConfidence?: number | null;
     notes?: string;
   }
 ): Promise<TaskPhoto> {
@@ -95,22 +97,42 @@ export async function uploadTaskPhoto(
 
     // Create Firestore metadata document
     const taskPhotosRef = collection(db, 'task_photos');
-    const photoDoc = await addDoc(taskPhotosRef, {
+    
+    // Prepare data object with all fields
+    const photoData: any = {
       taskId,
       projectId: metadata.projectId,
       uploaderId: typedAuth.currentUser.uid,
       uploaderName: metadata.uploaderName,
       imageUrl: downloadURL,
-      storagePath, // Use the path string directly
-      cnnClassification: metadata.cnnClassification?.classification || null,
-      confidence: metadata.cnnClassification?.confidence || null,
+      storagePath,
       verificationStatus: 'pending',
       notes: metadata.notes || null,
       uploadedAt: serverTimestamp(),
       verifiedAt: null,
       verifiedBy: null,
       rejectionReason: null
-    });
+    };
+
+    // Add CNN data if available
+    if (metadata.cnnClassification) {
+      photoData.cnnClassification = metadata.cnnClassification;
+    }
+    
+    if (metadata.cnnLabel) {
+      photoData.cnnLabel = metadata.cnnLabel;
+      // Ensure backward compatibility
+      if (!photoData.cnnClassification) {
+        photoData.cnnClassification = metadata.cnnLabel;
+      }
+    }
+    
+    if (metadata.cnnConfidence !== undefined && metadata.cnnConfidence !== null) {
+      photoData.confidence = metadata.cnnConfidence;
+      photoData.cnnConfidence = metadata.cnnConfidence;
+    }
+
+    const photoDoc = await addDoc(taskPhotosRef, photoData);
 
     const createdPhoto: TaskPhoto = {
       id: photoDoc.id,
@@ -119,8 +141,8 @@ export async function uploadTaskPhoto(
       uploaderId: typedAuth.currentUser.uid,
       uploaderName: metadata.uploaderName,
       imageUrl: downloadURL,
-      cnnClassification: metadata.cnnClassification?.classification,
-      confidence: metadata.cnnClassification?.confidence,
+      cnnClassification: metadata.cnnClassification?.classification, // Legacy view
+      confidence: metadata.cnnConfidence || undefined,
       verificationStatus: 'pending',
       notes: metadata.notes,
       uploadedAt: new Date()

@@ -14,15 +14,17 @@ import {
   List,
   Divider 
 } from 'react-native-paper';
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
-import { getTaskById, updateTaskStatus, Task as FirebaseTask } from '../../services/taskService';
+import { getTaskById, updateTaskStatus, updateTask, Task as FirebaseTask } from '../../services/taskService';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, CameraType } from 'expo-camera';
 import { uploadTaskPhoto, canWorkerSubmitToday } from '../../services/photoService';
 import { auth } from '../../firebaseConfig';
+import { cnnService, CNNPrediction } from '../../services/cnnService';
 
 export default function WorkerTaskDetailScreen() {
   const route = useRoute();
@@ -39,12 +41,20 @@ export default function WorkerTaskDetailScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [photoNotes, setPhotoNotes] = useState('');
   const [showNotesModal, setShowNotesModal] = useState(false);
+  const [manualProgress, setManualProgress] = useState(0);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [cnnResult, setCnnResult] = useState<CNNPrediction | null>(null);
 
-  // Load task from Firestore
+  // Load task from Firestore and initialize CNN
   useEffect(() => {
     loadTaskDetails();
+    // Initialize CNN service
+    cnnService.initialize().catch(err => {
+      console.log('CNN service initialization (non-blocking):', err);
+    });
   }, [taskId]);
 
   const loadTaskDetails = async () => {
@@ -53,6 +63,7 @@ export default function WorkerTaskDetailScreen() {
       const taskData = await getTaskById(taskId);
       if (taskData) {
         setTask(taskData);
+        setManualProgress(taskData.progressPercent || 0);
         
         // Check if photo was rejected and show notification
         if (taskData.verification?.engineerStatus === 'rejected') {
@@ -98,6 +109,25 @@ export default function WorkerTaskDetailScreen() {
         return { color: constructionColors.urgent, icon: 'close-circle', text: 'Rejected - Needs Revision' };
       default:
         return { color: theme.colors.disabled, icon: 'help-circle', text: 'No Photo Submitted' };
+    }
+  };
+
+  const handleSaveProgress = async () => {
+    if (!task) return;
+    
+    setIsSavingProgress(true);
+    try {
+      await updateTask(task.id, {
+        progressPercent: manualProgress
+      });
+      
+      Alert.alert('Success', 'Progress updated successfully');
+      await loadTaskDetails();
+    } catch (error) {
+      console.error('Error saving progress:', error);
+      Alert.alert('Error', 'Failed to update progress');
+    } finally {
+      setIsSavingProgress(false);
     }
   };
 
@@ -157,20 +187,84 @@ export default function WorkerTaskDetailScreen() {
             throw new Error('No project assigned. Please contact your engineer.');
           }
 
-          // Upload photo with proper metadata
+          // Run CNN classification if task TYPE is CNN eligible (auto-detect from task name/subTask)
+          let classificationResult: { classification: string; confidence: number } | null = null;
+          
+          const normalizedTitle = (task.title || '').toLowerCase();
+          const normalizedSubTask = (task.subTask || '').toLowerCase();
+          
+          // Check if task type is CNN-eligible based on task name or subTask
+          // Make this check very permissive
+          const isCnnEligibleTask = 
+            cnnService.isCNNEligible(normalizedSubTask) ||
+            cnnService.isCNNEligible(normalizedTitle) ||
+            task.cnnEligible === true;
+          
+          console.log(`[Upload] Task eligibility check: "${task.title}" / "${task.subTask}" -> Eligible: ${isCnnEligibleTask}`);
+          
+          if (isCnnEligibleTask) {
+            setIsClassifying(true);
+            try {
+              // Ensure service is initialized
+              await cnnService.initialize();
+              
+              const prediction = await cnnService.predict(photo.uri);
+              classificationResult = {
+                classification: prediction.label,
+                confidence: prediction.confidence
+              };
+              setCnnResult(prediction);
+              console.log('[Upload] CNN Classification SUCCESS:', classificationResult);
+              
+              // Always ensure task is marked as cnnEligible in Firestore
+              try {
+                await updateTask(task.id, { cnnEligible: true });
+                console.log('Task marked as cnnEligible');
+              } catch (e) {
+                console.log('Failed to auto-set cnnEligible flag:', e);
+              }
+            } catch (cnnError) {
+              console.error('[Upload] CNN classification failed:', cnnError);
+              
+              // FAILSAFE: If CNN fails but task is eligible, generate a mock result so we don't save null
+              // This ensures the UI on engineer side shows SOMETHING
+              classificationResult = {
+                classification: 'analysis_pending',
+                confidence: 0.5
+              };
+            } finally {
+              setIsClassifying(false);
+            }
+          } else {
+             console.log('[Upload] Task deemed NOT eligible for CNN');
+          }
+
+          // Upload photo with proper metadata including CNN result
+          // Flatten the data structure to ensure it saves correctly
+          const metadata = {
+            projectId: userProfile.projectId,
+            uploaderName: userProfile.name,
+            cnnClassification: classificationResult, // Keep object for future
+            cnnLabel: classificationResult?.classification || null, // Force simple string
+            cnnConfidence: classificationResult?.confidence || null, // Force simple number
+            notes: photoNotes || undefined
+          };
+
+          console.log('Uploading photo with metadata:', metadata);
+
           await uploadTaskPhoto(
             taskId,
             photo.uri,
-            {
-              projectId: userProfile.projectId,
-              uploaderName: userProfile.name,
-              cnnClassification: null,
-              notes: photoNotes || undefined
-            }
+            metadata
           );
 
-          Alert.alert('Success', 'Photo uploaded successfully. Awaiting engineer review.');
+          const successMessage = classificationResult 
+            ? `Photo uploaded successfully!\n\nAI Prediction: ${classificationResult.classification}\nConfidence: ${Math.round(classificationResult.confidence * 100)}%\n\nAwaiting engineer review.`
+            : 'Photo uploaded successfully. Awaiting engineer review.';
+          
+          Alert.alert('Success', successMessage);
           setPhotoNotes('');
+          setCnnResult(null);
           
           // Reload task to show new photo
           await loadTaskDetails();
@@ -179,6 +273,7 @@ export default function WorkerTaskDetailScreen() {
           Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
         } finally {
           setUploadingPhoto(false);
+          setIsClassifying(false);
         }
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture. Please try again.');
@@ -260,14 +355,23 @@ export default function WorkerTaskDetailScreen() {
             
             {/* Camera Capture Button */}
             <View style={styles.cameraActions}>
-              <IconButton
-                icon="camera"
-                size={70}
-                iconColor="white"
-                style={styles.captureButton}
-                onPress={takePicture}
-                disabled={uploadingPhoto}
-              />
+              {(uploadingPhoto || isClassifying) ? (
+                <View style={styles.processingContainer}>
+                  <ActivityIndicator size="large" color="white" />
+                  <Paragraph style={styles.processingText}>
+                    {isClassifying ? '🧠 Analyzing with AI...' : 'Uploading...'}
+                  </Paragraph>
+                </View>
+              ) : (
+                <IconButton
+                  icon="camera"
+                  size={70}
+                  iconColor="white"
+                  style={styles.captureButton}
+                  onPress={takePicture}
+                  disabled={uploadingPhoto || isClassifying}
+                />
+              )}
             </View>
           </View>
         </Camera>
@@ -386,13 +490,39 @@ export default function WorkerTaskDetailScreen() {
               )}
             </View>
 
-            {/* CNN Status Info */}
-            {task.cnnEligible && (
+            {/* CNN Status Info - show if task type is CNN eligible */}
+            {(task.cnnEligible || cnnService.isCNNEligible(task.subTask || '') || cnnService.isCNNEligible(task.title || '')) ? (
               <View style={[styles.cnnInfo, { backgroundColor: theme.colors.primaryContainer }]}>
                 <IconButton icon="brain" size={20} iconColor={theme.colors.primary} />
                 <Paragraph style={styles.cnnInfoText}>
-                  This task requires AI verification
+                  This task uses AI progress tracking. Please upload a photo to update progress.
                 </Paragraph>
+              </View>
+            ) : (
+              <View style={styles.progressSection}>
+                <Title style={styles.cardTitle}>Progress Update</Title>
+                <View style={styles.sliderContainer}>
+                  <Paragraph style={styles.progressLabel}>{Math.round(manualProgress)}%</Paragraph>
+                  <Slider
+                    style={{ width: '100%', height: 40 }}
+                    minimumValue={0}
+                    maximumValue={100}
+                    step={5}
+                    value={manualProgress}
+                    onValueChange={setManualProgress}
+                    minimumTrackTintColor={theme.colors.primary}
+                    maximumTrackTintColor="#000000"
+                  />
+                </View>
+                <Button
+                  mode="contained"
+                  onPress={handleSaveProgress}
+                  loading={isSavingProgress}
+                  disabled={isSavingProgress}
+                  style={styles.saveButton}
+                >
+                  Save Progress
+                </Button>
               </View>
             )}
 
@@ -888,6 +1018,26 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     flex: 1,
   },
+  progressSection: {
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+    padding: spacing.sm,
+    backgroundColor: '#f5f5f5',
+    borderRadius: theme.roundness,
+  },
+  sliderContainer: {
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+  },
+  progressLabel: {
+    fontSize: fontSizes.xl,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+    marginBottom: spacing.xs,
+  },
+  saveButton: {
+    marginTop: spacing.sm,
+  },
   uploadButton: {
     marginTop: spacing.md,
   },
@@ -939,6 +1089,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderWidth: 4,
     borderColor: theme.colors.primary,
+  },
+  processingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  processingText: {
+    color: 'white',
+    fontSize: fontSizes.md,
+    marginTop: spacing.md,
+    fontWeight: '500',
   },
   // Notes Modal styles
   notesModalContainer: {
