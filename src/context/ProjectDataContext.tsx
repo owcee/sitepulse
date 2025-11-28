@@ -48,12 +48,31 @@ export interface BudgetLog {
 }
 
 
+export interface BudgetCategory {
+  id: string;
+  name: string;
+  allocatedAmount: number;
+  spentAmount: number;
+  description?: string;
+  lastUpdated: Date;
+  isPrimary?: boolean;
+}
+
+export interface ProjectBudget {
+  totalBudget: number;
+  totalSpent: number;
+  categories: BudgetCategory[];
+  contingencyPercentage: number;
+  lastUpdated: Date;
+}
+
 export interface ProjectData {
   materials: Material[];
   workers: Worker[];
   equipment: Equipment[];
   budgetLogs: BudgetLog[];
   totalBudget: number;
+  budget?: ProjectBudget; // Optional shared budget state
   loading: boolean;
   error: string | null;
 }
@@ -75,7 +94,9 @@ type ProjectAction =
   | { type: 'ADD_BUDGET_LOG'; payload: BudgetLog }
   | { type: 'UPDATE_BUDGET_LOG'; payload: { id: string; updates: Partial<BudgetLog> } }
   | { type: 'DELETE_BUDGET_LOG'; payload: string }
-  | { type: 'UPDATE_BUDGET_SETTINGS'; payload: { totalBudget?: number } };
+  | { type: 'UPDATE_BUDGET_SETTINGS'; payload: { totalBudget?: number } }
+  | { type: 'SET_BUDGET'; payload: ProjectBudget }
+  | { type: 'UPDATE_BUDGET'; payload: Partial<ProjectBudget> };
 
 // Initial state - empty until loaded from Firebase
 const initialState: ProjectData = {
@@ -84,6 +105,7 @@ const initialState: ProjectData = {
   equipment: [],
   budgetLogs: [],
   totalBudget: 100000,
+  budget: undefined,
   loading: true,
   error: null,
 };
@@ -167,6 +189,16 @@ function projectDataReducer(state: ProjectData, action: ProjectAction): ProjectD
         ...state,
         totalBudget: action.payload.totalBudget ?? state.totalBudget,
       };
+    case 'SET_BUDGET':
+      return {
+        ...state,
+        budget: action.payload,
+      };
+    case 'UPDATE_BUDGET':
+      return {
+        ...state,
+        budget: state.budget ? { ...state.budget, ...action.payload } : undefined,
+      };
     default:
       return state;
   }
@@ -192,6 +224,8 @@ interface ProjectDataContextType {
   updateBudgetLog: (id: string, updates: Partial<BudgetLog>) => Promise<void>;
   deleteBudgetLog: (id: string) => Promise<void>;
   updateBudgetSettings: (settings: { totalBudget?: number }) => Promise<void>;
+  setBudget: (budget: ProjectBudget) => void;
+  updateBudget: (updates: Partial<ProjectBudget>) => void;
 }
 
 const ProjectDataContext = createContext<ProjectDataContextType | undefined>(undefined);
@@ -436,6 +470,14 @@ export function ProjectDataProvider({
     }
   };
 
+  const setBudget = (budget: ProjectBudget) => {
+    dispatch({ type: 'SET_BUDGET', payload: budget });
+  };
+
+  const updateBudget = (updates: Partial<ProjectBudget>) => {
+    dispatch({ type: 'UPDATE_BUDGET', payload: updates });
+  };
+
   const value: ProjectDataContextType = {
     state,
     dispatch,
@@ -454,6 +496,8 @@ export function ProjectDataProvider({
     updateBudgetLog,
     deleteBudgetLog,
     updateBudgetSettings,
+    setBudget,
+    updateBudget,
   };
 
   return <ProjectDataContext.Provider value={value}>{children}</ProjectDataContext.Provider>;

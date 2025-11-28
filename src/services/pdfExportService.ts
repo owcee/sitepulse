@@ -2,6 +2,19 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
 
+// Custom alert function for styled PDF export success messages
+const showPDFSuccessAlert = (title: string, message: string) => {
+  Alert.alert(
+    title,
+    message,
+    [{ text: 'OK', style: 'default' }],
+    {
+      // Note: React Native Alert doesn't support full styling, but we can use a custom component
+      // For now, we'll use the default Alert but with updated text
+    }
+  );
+};
+
 interface BudgetLog {
   id: string;
   category: string;
@@ -53,11 +66,9 @@ export async function exportBudgetToPDF(
         UTI: 'com.adobe.pdf',
       });
       
-      Alert.alert(
-        'PDF Exported Successfully',
-        'Your budget report has been saved and can be shared.',
-        [{ text: 'OK' }]
-      );
+      // Alert will be shown by the calling component with custom styling
+      // This alert is kept as fallback for non-UI contexts
+      console.log('PDF Exported Successfully - Your budget report has been shared.');
     } else {
       Alert.alert(
         'PDF Generated',
@@ -91,13 +102,20 @@ function generateBudgetHTML(
   });
 
   const budgetRemaining = projectInfo.totalBudget - totalSpent;
-  const percentageSpent = ((totalSpent / projectInfo.totalBudget) * 100).toFixed(1);
+  const percentageSpent = projectInfo.totalBudget > 0 ? ((totalSpent / projectInfo.totalBudget) * 100).toFixed(1) : '0.0';
   const contingency = projectInfo.contingencyPercentage || 0;
   const contingencyAmount = (projectInfo.totalBudget * contingency) / 100;
 
   // Debug: Log budget logs to see what we're working with
   console.log('PDF Export - Budget Logs Count:', budgetLogs.length);
   console.log('PDF Export - Budget Logs:', JSON.stringify(budgetLogs, null, 2));
+  console.log('PDF Export - Total Spent:', totalSpent);
+  console.log('PDF Export - Total Budget:', projectInfo.totalBudget);
+  
+  // Early return if no logs
+  if (!budgetLogs || budgetLogs.length === 0) {
+    console.warn('PDF Export - No budget logs provided!');
+  }
 
   // Group logs by category for summary - ensure we handle all categories
   const categorySummary = budgetLogs.reduce((acc, log) => {
@@ -106,12 +124,12 @@ function generateBudgetHTML(
       console.log('PDF Export - Skipping null/undefined log');
       return acc;
     }
-    if (!log.amount || log.amount <= 0) {
+    if (!log.amount || log.amount <= 0 || isNaN(log.amount)) {
       console.log('PDF Export - Skipping log with invalid amount:', log);
       return acc;
     }
     
-    // Normalize category: handle both string and union types, trim whitespace, default to 'Other'
+    // Normalize category: handle both string and union types, trim whitespace, default to 'other'
     let category = log.category;
     if (!category || typeof category !== 'string') {
       console.log('PDF Export - Category is not a string, defaulting to "other":', category);
@@ -129,15 +147,18 @@ function generateBudgetHTML(
     if (!acc[normalizedCategory]) {
       acc[normalizedCategory] = 0;
     }
-    acc[normalizedCategory] += log.amount;
+    acc[normalizedCategory] += Number(log.amount);
     return acc;
   }, {} as Record<string, number>);
 
   console.log('PDF Export - Category Summary:', JSON.stringify(categorySummary, null, 2));
+  console.log('PDF Export - Category Summary Keys:', Object.keys(categorySummary));
+  console.log('PDF Export - Category Summary Values:', Object.values(categorySummary));
 
   // Generate category summary HTML - capitalize first letter
   const categoryEntries = Object.entries(categorySummary);
   console.log('PDF Export - Category entries:', categoryEntries);
+  console.log('PDF Export - Category entries count:', categoryEntries.length);
   
   const categoryRows = categoryEntries
     .filter(([category, amount]) => {
@@ -167,39 +188,93 @@ function generateBudgetHTML(
   console.log('PDF Export - Category rows HTML length:', categoryRows.length);
   
   // If no category rows, show a message
-  const categoryTableContent = categoryRows || '<tr><td colspan="2" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
+  // But first, let's check if we have any logs at all
+  console.log('PDF Export - Category rows length:', categoryRows.length);
+  console.log('PDF Export - Category entries count:', categoryEntries.length);
+  
+  const categoryTableContent = categoryRows.length > 0 
+    ? categoryRows 
+    : '<tr><td colspan="2" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
 
   // Generate detailed logs HTML - sort by date descending
-  const logRows = budgetLogs
-    .filter(log => {
-      // Filter out invalid logs
-      if (!log || !log.amount || log.amount <= 0) return false;
-      if (!log.date) return false;
-      // Ensure category exists
-      let category = log.category;
-      if (typeof category !== 'string') {
-        category = 'Other';
-      }
-      category = category.trim();
-      return category !== '';
-    })
+  const validLogs = budgetLogs.filter(log => {
+    // Filter out invalid logs
+    if (!log) {
+      console.log('PDF Export - Filtering out null/undefined log');
+      return false;
+    }
+    if (!log.amount || log.amount <= 0) {
+      console.log('PDF Export - Filtering out log with invalid amount:', log);
+      return false;
+    }
+    // Ensure category exists
+    let category = log.category;
+    if (typeof category !== 'string') {
+      category = 'other';
+    }
+    category = category.trim().toLowerCase();
+    if (!category || category === '') {
+      console.log('PDF Export - Filtering out log with empty category:', log);
+      return false;
+    }
+    return true;
+  });
+  
+  console.log('PDF Export - Valid logs for detailed table:', validLogs.length);
+  
+  const logRows = validLogs
     .sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
+      // Handle date sorting - try to parse dates
+      let dateA = 0;
+      let dateB = 0;
+      try {
+        if (a.date) {
+          const parsedA = new Date(a.date);
+          dateA = isNaN(parsedA.getTime()) ? 0 : parsedA.getTime();
+        }
+      } catch (e) {
+        console.log('PDF Export - Error parsing date A:', a.date);
+      }
+      try {
+        if (b.date) {
+          const parsedB = new Date(b.date);
+          dateB = isNaN(parsedB.getTime()) ? 0 : parsedB.getTime();
+        }
+      } catch (e) {
+        console.log('PDF Export - Error parsing date B:', b.date);
+      }
       return dateB - dateA; // Descending order (newest first)
     })
     .map((log) => {
-      const logDate = log.date ? new Date(log.date).toLocaleDateString('en-US') : 'N/A';
+      // Format date
+      let logDate = 'N/A';
+      try {
+        if (log.date) {
+          const dateObj = new Date(log.date);
+          if (!isNaN(dateObj.getTime())) {
+            logDate = dateObj.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+          }
+        }
+      } catch (e) {
+        console.log('PDF Export - Error formatting date:', log.date);
+        logDate = String(log.date || 'N/A');
+      }
+      
       // Normalize category
       let category = log.category;
       if (typeof category !== 'string') {
-        category = 'Other';
+        category = 'other';
       }
-      category = category.trim();
+      category = category.trim().toLowerCase();
       if (!category || category === '') {
-        category = 'Other';
+        category = 'other';
       }
-      const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+      const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1);
+      
       const description = (log.description || 'No description').trim();
       const amount = log.amount || 0;
       const addedBy = (log.addedBy || 'Engineer').trim();
@@ -223,7 +298,12 @@ function generateBudgetHTML(
     .join('');
   
   // If no log rows, show a message
-  const logTableContent = logRows || '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
+  console.log('PDF Export - Log rows length:', logRows.length);
+  console.log('PDF Export - Valid logs count:', validLogs.length);
+  
+  const logTableContent = logRows.length > 0 
+    ? logRows 
+    : '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
 
   // HTML Template
   return `
@@ -516,11 +596,9 @@ export async function exportMaterialsToPDF(
         UTI: 'com.adobe.pdf',
       });
       
-      Alert.alert(
-        'PDF Exported Successfully',
-        'Your inventory report has been saved and can be shared.',
-        [{ text: 'OK' }]
-      );
+      // Alert will be shown by the calling component with custom styling
+      // This alert is kept as fallback for non-UI contexts
+      console.log('PDF Exported Successfully - Your inventory report has been shared.');
     } else {
       Alert.alert(
         'PDF Generated',

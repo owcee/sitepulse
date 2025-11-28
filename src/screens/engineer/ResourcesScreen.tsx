@@ -12,7 +12,9 @@ import {
   IconButton,
   DataTable,
   Badge,
-  Button
+  Button,
+  Dialog,
+  Portal
 } from 'react-native-paper';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,27 +31,57 @@ type TabType = 'budget' | 'inventory';
 export default function ResourcesScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('budget');
   const [isExporting, setIsExporting] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const { state, projectId } = useProjectData();
 
-  // Calculate budget data matching Budget Management page
-  const equipmentSpent = state.equipment.reduce((total, equip) => {
-    if (equip.type === 'rental' && equip.rentalCost) {
-      return total + equip.rentalCost;
-    }
-    return total;
-  }, 0);
+  // Get budget from shared state (from BudgetLogsManagementPage)
+  // If not available, calculate from inventory
+  const calculateEquipmentSpent = () => {
+    return state.equipment.reduce((total, equip) => {
+      if (equip.type === 'rental' && equip.rentalCost) {
+        return total + equip.rentalCost;
+      }
+      return total;
+    }, 0);
+  };
 
-  const materialsSpent = state.materials.reduce((total, material) => {
-    return total + (material.quantity * material.price);
-  }, 0);
+  const calculateMaterialsSpent = () => {
+    return state.materials.reduce((total, material) => {
+      return total + (material.quantity * material.price);
+    }, 0);
+  };
 
-  // Budget allocations from Budget Management (matching the default values)
-  const equipmentAllocated = 50000; // ₱50,000
-  const materialsAllocated = 150000; // ₱150,000
-  const totalBudget = 250000; // ₱250,000
-  const totalSpent = equipmentSpent + materialsSpent;
+  // Use shared budget if available, otherwise calculate from inventory
+  const budget = state.budget;
   
-  const budgetUsagePercent = totalSpent / totalBudget;
+  let totalBudget = 250000; // Default
+  let totalSpent = 0;
+  let categories: Array<{ name: string; allocated: number; spent: number }> = [];
+  
+  if (budget) {
+    // Use budget from BudgetLogsManagementPage
+    totalBudget = budget.totalBudget;
+    totalSpent = budget.totalSpent;
+    categories = budget.categories.map(cat => ({
+      name: cat.name,
+      allocated: cat.allocatedAmount,
+      spent: cat.spentAmount,
+    }));
+  } else {
+    // Fallback: calculate from inventory
+    const equipmentSpent = calculateEquipmentSpent();
+    const materialsSpent = calculateMaterialsSpent();
+    
+    categories = [
+      { name: 'Equipment', allocated: 50000, spent: equipmentSpent },
+      { name: 'Materials', allocated: 150000, spent: materialsSpent },
+    ];
+    
+    totalSpent = equipmentSpent + materialsSpent;
+  }
+  
+  const budgetUsagePercent = totalBudget > 0 ? totalSpent / totalBudget : 0;
   
   // Combined low stock items from materials and equipment
   const lowStockMaterials = state.materials
@@ -69,18 +101,18 @@ export default function ResourcesScreen() {
       type: 'equipment' as const,
     }));
 
-  // Pie chart data for budget breakdown
-  const budgetChartData = [
-    { name: 'Equipment', population: equipmentSpent, color: '#FF9800', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: 'Materials', population: materialsSpent, color: '#2196F3', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-  ].filter(item => item.population > 0);
+  // Pie chart data for budget breakdown (from all categories)
+  const budgetChartData = categories
+    .filter(cat => cat.spent > 0)
+    .map((cat, index) => ({
+      name: cat.name,
+      population: cat.spent,
+      color: index === 0 ? '#FF9800' : index === 1 ? '#2196F3' : '#4CAF50',
+      legendFontColor: '#7F7F7F',
+      legendFontSize: 12,
+    }));
 
   // Bar chart data for budget vs spent (matching Budget Management)
-  const categories = [
-    { name: 'Equipment', allocated: equipmentAllocated, spent: equipmentSpent },
-    { name: 'Materials', allocated: materialsAllocated, spent: materialsSpent },
-  ];
-  
   const budgetBarData = {
     labels: categories.map(c => c.name.substring(0, 8)),
     datasets: [
@@ -418,50 +450,142 @@ export default function ResourcesScreen() {
       }
 
       if (activeTab === 'budget') {
-        // Export budget data
-        console.log('Resources Screen - Total budget logs in state:', state.budgetLogs.length);
-        console.log('Resources Screen - Budget logs:', JSON.stringify(state.budgetLogs, null, 2));
+        // Export budget data using categories from shared budget state
+        // Generate budget logs from categories for PDF export
+        const budgetLogs: any[] = [];
         
-        const budgetLogs = state.budgetLogs
-          .filter(log => {
-            const isValid = log && log.type === 'expense' && log.amount > 0;
-            if (!isValid) {
-              console.log('Resources Screen - Filtering out log:', log);
-            }
-            return isValid;
-          })
-          .map(log => {
-            // Normalize category - ensure it's a valid string
-            let category = log.category || 'other';
-            if (typeof category !== 'string') {
-              category = 'other';
-            }
-            category = String(category).trim().toLowerCase();
-            if (!category || category === '') {
-              category = 'other';
-            }
-            // Capitalize first letter
-            const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1);
-            
-            console.log('Resources Screen - Processing log:', {
-              originalCategory: log.category,
-              normalizedCategory: category,
-              capitalizedCategory: capitalizedCategory,
-              amount: log.amount
+        // First, add all budget logs from state (these include all categories)
+        state.budgetLogs.forEach(log => {
+          if (log.type === 'expense' && log.amount > 0) {
+            budgetLogs.push({
+              id: log.id,
+              category: log.category || 'other',
+              amount: log.amount,
+              description: log.description || 'No description',
+              date: log.date || new Date().toISOString().split('T')[0],
+              addedBy: 'Engineer'
             });
+          }
+        });
+        
+        // If we have shared budget state, ensure all categories are represented
+        if (budget && budget.categories) {
+          // Track which categories already have logs
+          const categoriesWithLogs = new Set(
+            budgetLogs.map(log => log.category.toLowerCase())
+          );
+          
+          // For each category in the budget, ensure it has at least one log entry
+          budget.categories.forEach(cat => {
+            const categoryName = cat.name.toLowerCase();
+            
+            // Skip if this category already has logs
+            if (categoriesWithLogs.has(categoryName)) {
+              return;
+            }
+            
+            // For primary categories (Equipment, Materials), generate logs from inventory
+            if (cat.id === 'equipment' && cat.spentAmount > 0) {
+              // Add logs from equipment
+              state.equipment.forEach(equipment => {
+                if (equipment.type === 'rental' && equipment.rentalCost && equipment.rentalCost > 0) {
+                  budgetLogs.push({
+                    id: `equipment-${equipment.id}`,
+                    category: 'equipment',
+                    amount: equipment.rentalCost,
+                    description: `${equipment.name} - Rental`,
+                    date: equipment.dateAcquired || new Date().toISOString().split('T')[0],
+                    addedBy: 'System'
+                  });
+                }
+              });
+            } else if (cat.id === 'materials' && cat.spentAmount > 0) {
+              // Add logs from materials
+              state.materials.forEach(material => {
+                if (material.quantity > 0 && material.price > 0) {
+                  budgetLogs.push({
+                    id: `material-${material.id}`,
+                    category: 'materials',
+                    amount: material.quantity * material.price,
+                    description: `${material.name} - ${material.quantity} ${material.unit}`,
+                    date: material.dateAdded || new Date().toISOString().split('T')[0],
+                    addedBy: 'System'
+                  });
+                }
+              });
+            } else if (cat.spentAmount > 0) {
+              // For custom categories without logs, create a summary log entry
+              budgetLogs.push({
+                id: `category-${cat.id}`,
+                category: categoryName,
+                amount: cat.spentAmount,
+                description: `${cat.name} - Total spending`,
+                date: cat.lastUpdated ? new Date(cat.lastUpdated).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                addedBy: 'Engineer'
+              });
+            }
+          });
+        } else {
+          // Fallback: if no shared budget, generate from inventory
+          // Add logs from materials (for materials category)
+          state.materials.forEach(material => {
+            if (material.quantity > 0 && material.price > 0) {
+              budgetLogs.push({
+                id: `material-${material.id}`,
+                category: 'materials',
+                amount: material.quantity * material.price,
+                description: `${material.name} - ${material.quantity} ${material.unit}`,
+                date: material.dateAdded || new Date().toISOString().split('T')[0],
+                addedBy: 'System'
+              });
+            }
+          });
+          
+          // Add logs from equipment (for equipment category)
+          state.equipment.forEach(equipment => {
+            if (equipment.type === 'rental' && equipment.rentalCost && equipment.rentalCost > 0) {
+              budgetLogs.push({
+                id: `equipment-${equipment.id}`,
+                category: 'equipment',
+                amount: equipment.rentalCost,
+                description: `${equipment.name} - Rental`,
+                date: equipment.dateAcquired || new Date().toISOString().split('T')[0],
+                addedBy: 'System'
+              });
+            }
+          });
+        }
+        
+        // Process logs for PDF
+        const processedLogs = budgetLogs
+          .filter(log => log.amount > 0)
+          .map(log => {
+            let category = (log.category || 'other').toLowerCase().trim();
+            if (!category || category === '') category = 'other';
+            
+            let dateStr = log.date;
+            if (!dateStr) {
+              dateStr = new Date().toISOString().split('T')[0];
+            } else if (typeof dateStr === 'string') {
+              try {
+                const dateObj = new Date(dateStr);
+                if (!isNaN(dateObj.getTime())) {
+                  dateStr = dateObj.toISOString().split('T')[0];
+                }
+              } catch (e) {
+                // Keep original
+              }
+            }
             
             return {
               id: log.id,
-              category: capitalizedCategory, // Pass capitalized to PDF service
-              amount: log.amount || 0,
+              category: category,
+              amount: Number(log.amount) || 0,
               description: (log.description || 'No description').trim(),
-              date: log.date || new Date().toISOString(),
-              addedBy: 'Engineer'
+              date: dateStr,
+              addedBy: log.addedBy || 'Engineer'
             };
           });
-        
-        console.log('Resources Screen - Filtered budget logs for PDF:', budgetLogs.length);
-        console.log('Resources Screen - Budget logs for PDF:', JSON.stringify(budgetLogs, null, 2));
 
         const projectInfo = {
           name: projectName,
@@ -469,8 +593,10 @@ export default function ResourcesScreen() {
           totalBudget: totalBudget,
           contingencyPercentage: 10
         };
-
-        await exportBudgetToPDF(budgetLogs, projectInfo, totalSpent);
+        
+        await exportBudgetToPDF(processedLogs, projectInfo, totalSpent);
+        setSuccessMessage('Your budget report has been shared.');
+        setShowSuccessDialog(true);
       } else {
         // Export inventory data (materials and equipment)
         const materials = state.materials.map(material => ({
@@ -501,6 +627,8 @@ export default function ResourcesScreen() {
         };
 
         await exportMaterialsToPDF(materials, projectInfo, 10, equipment);
+        setSuccessMessage('Your inventory report has been shared.');
+        setShowSuccessDialog(true);
       }
     } catch (error: any) {
       console.error('Export error:', error);
@@ -546,6 +674,32 @@ export default function ResourcesScreen() {
       {/* Content */}
       <View style={styles.content}>
         {renderContent()}
+      
+      {/* Custom Success Dialog */}
+      <Portal>
+        <Dialog 
+          visible={showSuccessDialog} 
+          onDismiss={() => setShowSuccessDialog(false)}
+          style={styles.successDialog}
+        >
+          <Dialog.Title style={styles.successDialogTitle}>
+            PDF Exported Successfully
+          </Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.successDialogMessage}>
+              {successMessage}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => setShowSuccessDialog(false)}
+              textColor={constructionColors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       </View>
     </SafeAreaView>
   );
@@ -839,6 +993,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.lg,
     fontStyle: 'italic',
+  },
+  successDialog: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+  },
+  successDialogTitle: {
+    color: constructionColors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  successDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
   },
 });
 

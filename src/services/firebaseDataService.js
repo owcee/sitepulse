@@ -302,17 +302,51 @@ export async function deleteEquipment(equipmentId) {
 export async function getBudgetLogs(projectId) {
   try {
     const logsRef = collection(db, 'budget_logs');
-    const q = query(
-      logsRef, 
-      where('projectId', '==', projectId),
-      orderBy('date', 'desc')
-    );
-    const snapshot = await getDocs(q);
     
-    return snapshot.docs.map(doc => ({
+    // Try with orderBy first, but if it fails (missing index), fall back to without orderBy
+    let q;
+    let snapshot;
+    
+    try {
+      q = query(
+        logsRef, 
+        where('projectId', '==', projectId),
+        orderBy('date', 'desc')
+      );
+      snapshot = await getDocs(q);
+    } catch (orderByError) {
+      // If orderBy fails (likely missing index), try without it
+      console.warn('OrderBy failed, fetching without sorting:', orderByError);
+      q = query(
+        logsRef, 
+        where('projectId', '==', projectId)
+      );
+      snapshot = await getDocs(q);
+      
+      // Sort in memory
+      const logs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Sort by date descending
+      logs.sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      console.log('getBudgetLogs - Fetched and sorted logs:', logs.length);
+      return logs;
+    }
+    
+    const logs = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    console.log('getBudgetLogs - Fetched logs:', logs.length);
+    return logs;
   } catch (error) {
     console.error('Error getting budget logs:', error);
     throw new Error('Failed to fetch budget logs');

@@ -28,6 +28,7 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { exportBudgetToPDF } from '../../services/pdfExportService';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { updateProject, getProject } from '../../services/projectService';
+import { getBudgetLogs } from '../../services/firebaseDataService';
 
 interface BudgetCategory {
   id: string;
@@ -54,14 +55,14 @@ interface ProjectInfo {
 
 export default function BudgetLogsManagementPage() {
   const navigation = useNavigation();
-  const { state, projectId } = useProjectData();
+  const { state, projectId, setBudget: setSharedBudget } = useProjectData();
   const [modalVisible, setModalVisible] = useState(false);
   const [categoriesModalVisible, setCategoriesModalVisible] = useState(false);
   const [totalBudgetModalVisible, setTotalBudgetModalVisible] = useState(false);
   const [projectInfoModalVisible, setProjectInfoModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
   const [loadingProjectInfo, setLoadingProjectInfo] = useState(true);
+  const isSyncingRef = React.useRef(false);
   
   // Calculate equipment and materials spent amounts from actual data
   const calculateEquipmentSpent = () => {
@@ -121,6 +122,12 @@ export default function BudgetLogsManagementPage() {
   const initialMaterialsSpent = calculateMaterialsSpent();
   
   const [budget, setBudget] = useState<ProjectBudget>(() => {
+    // Try to use shared budget from context if available
+    if (state.budget) {
+      return state.budget;
+    }
+    
+    // Otherwise use defaults
     const categories = [
       {
         id: 'equipment',
@@ -153,6 +160,27 @@ export default function BudgetLogsManagementPage() {
     };
   });
   
+  // Sync budget to shared state when budget changes (but not when shared budget changes)
+  React.useEffect(() => {
+    // Prevent infinite loops by checking if we're already syncing
+    if (isSyncingRef.current) {
+      return;
+    }
+    
+    // Only sync if the budget is different from the shared budget to avoid loops
+    if (budget && (!state.budget || 
+        budget.totalBudget !== state.budget.totalBudget ||
+        budget.totalSpent !== state.budget.totalSpent ||
+        budget.categories.length !== state.budget.categories.length)) {
+      isSyncingRef.current = true;
+      setSharedBudget(budget);
+      // Reset the flag after a short delay
+      setTimeout(() => {
+        isSyncingRef.current = false;
+      }, 100);
+    }
+  }, [budget, state.budget, setSharedBudget]); // Sync when local budget changes
+  
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -167,6 +195,7 @@ export default function BudgetLogsManagementPage() {
   });
 
   // Update primary categories when equipment or materials change
+  // Also update categories based on budget logs
   React.useEffect(() => {
     setBudget(prev => {
       const updatedCategories = prev.categories.map(cat => {
@@ -179,17 +208,47 @@ export default function BudgetLogsManagementPage() {
         return cat;
       });
       
+      // Calculate spent amounts from budget logs for each category
+      const logsByCategory = state.budgetLogs.reduce((acc, log) => {
+        if (log.type === 'expense' && log.amount > 0) {
+          const categoryName = log.category.toLowerCase();
+          if (!acc[categoryName]) {
+            acc[categoryName] = 0;
+          }
+          acc[categoryName] += log.amount;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+      
+      // Update categories with budget log amounts (for non-primary categories)
+      const finalCategories = updatedCategories.map(cat => {
+        const categoryName = cat.name.toLowerCase();
+        const logAmount = logsByCategory[categoryName] || 0;
+        
+        // For primary categories, keep auto-calculated amount
+        if (cat.isPrimary) {
+          return cat;
+        }
+        
+        // For non-primary categories, use budget log amounts
+        return {
+          ...cat,
+          spentAmount: logAmount,
+          lastUpdated: new Date(),
+        };
+      });
+      
       // Calculate new total spent from all categories
-      const newTotalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+      const newTotalSpent = finalCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
       
       return {
         ...prev,
-        categories: updatedCategories,
+        categories: finalCategories,
         totalSpent: newTotalSpent,
         lastUpdated: new Date(),
       };
     });
-  }, [state.equipment, state.materials]);
+  }, [state.equipment, state.materials, state.budgetLogs]);
 
   const resetForm = () => {
     setFormData({
@@ -409,74 +468,6 @@ export default function BudgetLogsManagementPage() {
     }
   };
 
-  const handleExportPDF = async () => {
-    try {
-      setIsExporting(true);
-      
-      // Use actual budget logs from state - filter only expenses
-      console.log('Budget Management - Total budget logs in state:', state.budgetLogs.length);
-      console.log('Budget Management - Budget logs:', JSON.stringify(state.budgetLogs, null, 2));
-      
-      const budgetLogs = state.budgetLogs
-        .filter(log => {
-          const isValid = log && log.type === 'expense' && log.amount > 0;
-          if (!isValid) {
-            console.log('Budget Management - Filtering out log:', log);
-          }
-          return isValid;
-        })
-        .map(log => {
-          // Normalize category - ensure it's a valid string
-          let category = log.category || 'other';
-          if (typeof category !== 'string') {
-            category = 'other';
-          }
-          category = String(category).trim().toLowerCase();
-          if (!category || category === '') {
-            category = 'other';
-          }
-          // Capitalize first letter
-          const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1);
-          
-          console.log('Budget Management - Processing log:', {
-            originalCategory: log.category,
-            normalizedCategory: category,
-            capitalizedCategory: capitalizedCategory,
-            amount: log.amount
-          });
-          
-          return {
-            id: log.id,
-            category: capitalizedCategory, // Pass capitalized to PDF service
-            amount: log.amount || 0,
-            description: (log.description || 'No description').trim(),
-            date: log.date || new Date().toISOString(),
-            addedBy: 'Engineer' // Default value since BudgetLog doesn't have addedBy field
-          };
-        });
-      
-      console.log('Budget Management - Filtered budget logs for PDF:', budgetLogs.length);
-      console.log('Budget Management - Budget logs for PDF:', JSON.stringify(budgetLogs, null, 2));
-
-      // Project info from loaded project data
-      const pdfProjectInfo = {
-        name: projectInfo.title || 'Construction Project',
-        description: projectInfo.description || 'Budget report for all project expenses',
-        totalBudget: budget.totalBudget,
-        contingencyPercentage: budget.contingencyPercentage
-      };
-
-      // Export to PDF
-      await exportBudgetToPDF(budgetLogs, pdfProjectInfo, budget.totalSpent);
-      
-    } catch (error) {
-      console.error('Export error:', error);
-      Alert.alert('Export Failed', 'Unable to generate PDF. Please try again.');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   const budgetUsagePercent = budget.totalSpent / budget.totalBudget;
   const contingencyAmount = budget.totalBudget * (budget.contingencyPercentage / 100);
   const effectiveBudget = budget.totalBudget - contingencyAmount;
@@ -497,17 +488,6 @@ export default function BudgetLogsManagementPage() {
             <Text style={styles.title}>Budget Management</Text>
             <Text style={styles.subtitle}>Edit all budget data and categories</Text>
           </View>
-          <Button
-            mode="contained"
-            icon="file-pdf-box"
-            onPress={handleExportPDF}
-            loading={isExporting}
-            disabled={isExporting}
-            style={styles.exportButton}
-            labelStyle={{ fontSize: 13 }}
-          >
-            Export PDF
-          </Button>
         </View>
       </View>
 
@@ -617,6 +597,7 @@ export default function BudgetLogsManagementPage() {
             Add New Budget Category
           </Button>
         </View>
+
       </ScrollView>
 
       {/* Add/Edit Category Modal */}
@@ -1051,6 +1032,93 @@ const styles = StyleSheet.create({
   addCategoryButtonLabel: {
     fontSize: 10,
     color: 'white',
+  },
+  
+  // Budget Logs Section
+  budgetLogsCard: {
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.md,
+    backgroundColor: theme.colors.surface,
+    elevation: 4,
+    borderRadius: theme.roundness,
+  },
+  budgetLogsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  budgetLogsTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+  },
+  addLogButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: theme.colors.onSurfaceVariant,
+    padding: spacing.lg,
+    fontSize: fontSizes.md,
+  },
+  logsList: {
+    gap: spacing.sm,
+  },
+  logCard: {
+    marginBottom: spacing.sm,
+    backgroundColor: theme.colors.surfaceVariant,
+  },
+  logHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  logInfo: {
+    flex: 1,
+  },
+  logDescription: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: spacing.xs,
+  },
+  logMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  categoryChip: {
+    height: 24,
+    backgroundColor: theme.colors.primaryContainer,
+  },
+  categoryChipText: {
+    fontSize: 10,
+    color: theme.colors.onPrimaryContainer,
+  },
+  logDate: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+  },
+  logAmount: {
+    alignItems: 'flex-end',
+  },
+  logAmountText: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  logActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: spacing.sm,
+  },
+  typeSection: {
+    marginBottom: spacing.md,
+  },
+  typeLabel: {
+    fontSize: fontSizes.md,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.xs,
   },
 
   // Info Section
