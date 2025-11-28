@@ -13,7 +13,8 @@ import {
   Modal,
   Portal,
   TextInput,
-  Divider
+  Divider,
+  Dialog
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +23,7 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import { getProjectVerificationLogs, WorkerVerificationData, VerificationLog } from '../../services/reportService';
 import { approvePhoto, rejectPhoto } from '../../services/photoService';
-import { approveUsageSubmission, rejectUsageSubmission } from '../../services/usageService';
+import { approveUsageSubmission, rejectUsageSubmission, approveBorrowRequest, rejectBorrowRequest } from '../../services/usageService';
 
 export default function ReportLogsScreen() {
   const { state, projectId } = useProjectData(); // Use projectId directly from context
@@ -38,6 +39,9 @@ export default function ReportLogsScreen() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'reports' | 'history'>('reports'); // Tab state
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null); // For expanding history items
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState('');
 
   useEffect(() => {
     loadData();
@@ -72,6 +76,7 @@ export default function ReportLogsScreen() {
       case 'material': return 'cube';
       case 'task': return 'checkmark-circle';
       case 'damage': return 'warning';
+      case 'borrow': return 'swap-horizontal';
       default: return 'document';
     }
   };
@@ -86,6 +91,8 @@ export default function ReportLogsScreen() {
         return `Task Completion${log.taskTitle ? `: ${log.taskTitle}` : ''}`;
       case 'damage':
         return `Damage Report${log.itemName ? `: ${log.itemName}` : ''}`;
+      case 'borrow':
+        return `Equipment Borrow Request${log.itemName ? `: ${log.itemName}` : ''}`;
       default:
         return 'Unknown';
     }
@@ -105,11 +112,14 @@ export default function ReportLogsScreen() {
     try {
       if (log.type === 'task') {
         await approvePhoto(log.id);
+      } else if (log.type === 'borrow') {
+        await approveBorrowRequest(log.id);
       } else {
         await approveUsageSubmission(log.id);
       }
       
-      Alert.alert('Success', 'Log approved successfully');
+      setDialogMessage('Log approved successfully');
+      setShowSuccessDialog(true);
       await loadData(); // Refresh data
       // Also update selected worker view if open
       if (selectedWorker) {
@@ -119,7 +129,8 @@ export default function ReportLogsScreen() {
       }
     } catch (error) {
       console.error('Error approving log:', error);
-      Alert.alert('Error', 'Failed to approve log');
+      setDialogMessage('Failed to approve log');
+      setShowErrorDialog(true);
     } finally {
       setIsProcessing(false);
     }
@@ -133,7 +144,8 @@ export default function ReportLogsScreen() {
 
   const submitRejection = async () => {
     if (!rejectionNotes.trim() || !selectedLog) {
-      Alert.alert('Missing Notes', 'Please enter rejection notes for the worker.');
+      setDialogMessage('Please enter rejection notes for the worker.');
+      setShowErrorDialog(true);
       return;
     }
 
@@ -141,11 +153,14 @@ export default function ReportLogsScreen() {
     try {
       if (selectedLog.type === 'task') {
         await rejectPhoto(selectedLog.id, rejectionNotes);
+      } else if (selectedLog.type === 'borrow') {
+        await rejectBorrowRequest(selectedLog.id, rejectionNotes);
       } else {
         await rejectUsageSubmission(selectedLog.id, rejectionNotes);
       }
 
-      Alert.alert('Success', 'Log rejected and worker notified');
+      setDialogMessage('Log rejected and worker notified');
+      setShowSuccessDialog(true);
       setShowRejectionModal(false);
       setRejectionNotes('');
       setSelectedLog(null);
@@ -159,7 +174,8 @@ export default function ReportLogsScreen() {
       }
     } catch (error) {
       console.error('Error rejecting log:', error);
-      Alert.alert('Error', 'Failed to reject log');
+      setDialogMessage('Failed to reject log');
+      setShowErrorDialog(true);
     } finally {
       setIsProcessing(false);
     }
@@ -210,20 +226,22 @@ export default function ReportLogsScreen() {
           </Chip>
         </View>
 
-        {/* Photo Evidence */}
-        <View style={styles.photoSection}>
-          <Paragraph style={styles.notesLabel}>Photo Evidence:</Paragraph>
-          <TouchableOpacity 
-            style={styles.photoContainer}
-            onPress={() => {
-              setSelectedImage(log.photo);
-              setShowImageModal(true);
-            }}
-          >
-            <Image source={{ uri: log.photo }} style={styles.submissionPhoto} />
-            <Paragraph style={styles.tapToEnlarge}>Tap to enlarge</Paragraph>
-          </TouchableOpacity>
-        </View>
+        {/* Photo Evidence - Only show if photo exists and not a borrow request */}
+        {log.photo && log.type !== 'borrow' && (
+          <View style={styles.photoSection}>
+            <Paragraph style={styles.notesLabel}>Photo Evidence:</Paragraph>
+            <TouchableOpacity 
+              style={styles.photoContainer}
+              onPress={() => {
+                setSelectedImage(log.photo);
+                setShowImageModal(true);
+              }}
+            >
+              <Image source={{ uri: log.photo }} style={styles.submissionPhoto} />
+              <Paragraph style={styles.tapToEnlarge}>Tap to enlarge</Paragraph>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Worker Notes */}
         <View style={styles.notesSection}>
@@ -503,6 +521,50 @@ export default function ReportLogsScreen() {
             />
           )}
         </Modal>
+      </Portal>
+
+      {/* Error Dialog */}
+      <Portal>
+        <Dialog
+          visible={showErrorDialog}
+          onDismiss={() => setShowErrorDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Error</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowErrorDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Success Dialog */}
+      <Portal>
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => setShowSuccessDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Success</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowSuccessDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </SafeAreaView>
   );
@@ -841,5 +903,14 @@ const styles = StyleSheet.create({
   },
   collapseButton: {
     marginVertical: spacing.md,
+  },
+  dialog: {
+    backgroundColor: '#000000',
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+  },
+  dialogMessage: {
+    color: theme.colors.text,
   },
 });

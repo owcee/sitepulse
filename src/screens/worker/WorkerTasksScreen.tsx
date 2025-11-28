@@ -254,9 +254,10 @@ export default function WorkerTasksScreen() {
     const isOverdue = !isCompleted && daysUntilDue < 0;
     const isDueSoon = !isCompleted && daysUntilDue <= 2 && daysUntilDue >= 0;
     
-    // For completed tasks, use View instead of TouchableOpacity
-    const CardWrapper = isCompleted ? View : TouchableOpacity;
-    const cardProps = isCompleted ? {} : { onPress: () => handleTaskPress(task) };
+    // For completed or not_started tasks, use View instead of TouchableOpacity
+    const isNotStarted = task.status === 'not_started';
+    const CardWrapper = (isCompleted || isNotStarted) ? View : TouchableOpacity;
+    const cardProps = (isCompleted || isNotStarted) ? {} : { onPress: () => handleTaskPress(task) };
     
     return (
       <CardWrapper 

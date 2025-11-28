@@ -50,6 +50,7 @@ export default function EquipmentManagementPage() {
     condition: 'good' as 'good' | 'fair' | 'needs_repair',
     status: 'available' as 'available' | 'in_use' | 'maintenance',
     rentalCost: '',
+    quantity: '1',
   });
 
   const equipmentTypes = [
@@ -65,6 +66,7 @@ export default function EquipmentManagementPage() {
       condition: 'good' as 'good' | 'fair' | 'needs_repair',
       status: 'available',
       rentalCost: '',
+      quantity: '1',
     });
     setEditingEquipment(null);
   };
@@ -75,13 +77,19 @@ export default function EquipmentManagementPage() {
   };
 
   const openEditModal = (equip: any) => {
+    // Calculate per-unit rental cost from total cost
+    const quantity = equip.quantity || 1;
+    const totalRentalCost = equip.rentalCost || 0;
+    const perUnitCost = quantity > 0 ? totalRentalCost / quantity : totalRentalCost;
+    
     setFormData({
       name: equip.name,
       category: equip.category,
       type: equip.type,
       condition: equip.condition,
       status: equip.status,
-      rentalCost: equip.rentalCost?.toString() || '',
+      rentalCost: perUnitCost.toString(),
+      quantity: quantity.toString(),
     });
     setEditingEquipment(equip);
     setModalVisible(true);
@@ -105,30 +113,50 @@ export default function EquipmentManagementPage() {
       return;
     }
 
-    // Prevent decreasing rental cost when editing
+    // Prevent decreasing rental cost per unit when editing
     if (editingEquipment && editingEquipment.type === 'rental' && formData.type === 'rental') {
-      const currentRentalCost = editingEquipment.rentalCost || 0;
-      const newRentalCost = parseFloat(formData.rentalCost);
-      if (newRentalCost < currentRentalCost) {
+      const currentQuantity = editingEquipment.quantity || 1;
+      const currentTotalRentalCost = editingEquipment.rentalCost || 0;
+      const currentRentalCostPerUnit = currentQuantity > 0 ? currentTotalRentalCost / currentQuantity : 0;
+      const newRentalCostPerUnit = parseFloat(formData.rentalCost);
+      if (newRentalCostPerUnit < currentRentalCostPerUnit) {
         setDialogTitle('Error');
-        setDialogMessage('Rental cost cannot be decreased. You can only increase the rental cost.');
+        setDialogMessage('Rental cost per unit cannot be decreased. You can only increase the rental cost per unit.');
         setIsError(true);
         setShowDialog(true);
         return;
       }
     }
 
+    // Prevent decreasing quantity when editing
+    if (editingEquipment) {
+      const currentQuantity = editingEquipment.quantity || 1;
+      const newQuantity = parseInt(formData.quantity) || 1;
+      if (newQuantity < currentQuantity) {
+        setDialogTitle('Error');
+        setDialogMessage('Quantity cannot be decreased. You can only increase the quantity.');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+    }
+
+    const quantity = parseInt(formData.quantity) || 1;
+    const baseRentalCost = formData.type === 'rental' && formData.rentalCost ? parseFloat(formData.rentalCost) : 0;
+    
     const equipmentData: Record<string, any> = {
       name: formData.name.trim(),
       category: formData.category.trim(),
       type: formData.type,
       condition: formData.condition,
       status: formData.status,
+      quantity: quantity,
       dateAcquired: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
     };
 
+    // For rental equipment, multiply base rental cost by quantity
     if (formData.type === 'rental' && formData.rentalCost) {
-      equipmentData.rentalCost = parseFloat(formData.rentalCost);
+      equipmentData.rentalCost = baseRentalCost * quantity;
     }
 
     if (editingEquipment) {
@@ -298,12 +326,25 @@ export default function EquipmentManagementPage() {
                     </Chip>
                   </View>
 
+                  {/* Quantity */}
+                  <View style={styles.ratesContainer}>
+                    <Text style={styles.ratesTitle}>Quantity:</Text>
+                    <Text style={styles.rateText}>
+                      {equip.quantity || 1} pcs
+                    </Text>
+                  </View>
+
                   {/* Rental Cost */}
                   {equip.type === 'rental' && (
                     <View style={styles.ratesContainer}>
                       <Text style={styles.ratesTitle}>Rental Cost:</Text>
                       <Text style={styles.rateText}>
                         ₱{equip.rentalCost ? equip.rentalCost.toLocaleString() : 'N/A'}
+                        {equip.quantity && equip.quantity > 1 && equip.rentalCost && (
+                          <Text style={styles.helperText}>
+                            {' '}(₱{Math.round(equip.rentalCost / equip.quantity).toLocaleString()} per unit)
+                          </Text>
+                        )}
                       </Text>
                     </View>
                   )}
@@ -392,12 +433,29 @@ export default function EquipmentManagementPage() {
                 />
               </View>
 
+              {/* Quantity */}
+              <TextInput
+                mode="outlined"
+                label="Quantity (pcs) *"
+                value={formData.quantity}
+                onChangeText={(text) => {
+                  const num = parseInt(text) || 1;
+                  if (num > 0) {
+                    setFormData(prev => ({ ...prev, quantity: text }));
+                  }
+                }}
+                keyboardType="numeric"
+                style={styles.input}
+                left={<TextInput.Icon icon="counter" />}
+                textColor={theme.colors.text}
+              />
+
               {/* Rental Cost (only show if rental) */}
               {formData.type === 'rental' && (
                 <View style={styles.ratesSection}>
                   <TextInput
                     mode="outlined"
-                    label="Rental Cost (₱) *"
+                    label="Rental Cost per Unit (₱) *"
                     value={formData.rentalCost}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, rentalCost: text }))}
                     keyboardType="numeric"
@@ -405,6 +463,11 @@ export default function EquipmentManagementPage() {
                     left={<TextInput.Icon icon="cash" />}
                     textColor={theme.colors.text}
                   />
+                  <Paragraph style={styles.helperText}>
+                    Total Rental Cost: ₱{formData.rentalCost && formData.quantity 
+                      ? (parseFloat(formData.rentalCost) * parseInt(formData.quantity) || 0).toLocaleString() 
+                      : '0'}
+                  </Paragraph>
                 </View>
               )}
 
@@ -809,6 +872,12 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.sm,
+  },
+  helperText: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
   },
   conditionButtonsContainer: {
     width: '100%',

@@ -453,6 +453,519 @@ export async function checkDuplicateUsage(
 }
 
 /**
+ * Get pending usage submissions for a material/equipment item
+ * @param projectId - Project ID
+ * @param itemId - Item ID
+ * @returns Promise<{count: number, totalQuantity: number, submissions: UsageSubmission[]}> - Pending submissions info
+ */
+export async function getPendingUsageForItem(
+  projectId: string,
+  itemId: string
+): Promise<{count: number, totalQuantity: number, submissions: UsageSubmission[]}> {
+  try {
+    const submissionsRef = collection(db, 'usage_submissions');
+    let q;
+    
+    // Try with orderBy first, fallback without if index is missing
+    try {
+      q = query(
+        submissionsRef,
+        where('projectId', '==', projectId),
+        where('itemId', '==', itemId),
+        where('status', '==', 'pending'),
+        orderBy('timestamp', 'asc')
+      );
+      await getDocs(q); // Test query
+    } catch (indexError) {
+      // If orderBy fails, query without it and sort in memory
+      q = query(
+        submissionsRef,
+        where('projectId', '==', projectId),
+        where('itemId', '==', itemId),
+        where('status', '==', 'pending')
+      );
+    }
+
+    const snapshot = await getDocs(q);
+    const submissions: UsageSubmission[] = [];
+    let totalQuantity = 0;
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      const submission: UsageSubmission = {
+        id: doc.id,
+        projectId: data.projectId,
+        workerId: data.workerId,
+        workerName: data.workerName,
+        type: data.type,
+        itemId: data.itemId,
+        itemName: data.itemName,
+        quantity: data.quantity,
+        unit: data.unit,
+        notes: data.notes,
+        photoUrl: data.photoUrl,
+        status: data.status,
+        rejectionReason: data.rejectionReason,
+        timestamp: data.timestamp?.toDate() || new Date(),
+        reviewedAt: data.reviewedAt?.toDate(),
+        reviewerId: data.reviewerId,
+        taskId: data.taskId
+      };
+      submissions.push(submission);
+      if (data.quantity) {
+        totalQuantity += data.quantity;
+      }
+    });
+
+    // Sort by timestamp if we didn't use orderBy
+    if (submissions.length > 0 && !submissions[0].timestamp) {
+      submissions.sort((a, b) => {
+        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : 0;
+        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    return {
+      count: submissions.length,
+      totalQuantity,
+      submissions
+    };
+  } catch (error) {
+    console.error('Error getting pending usage for item:', error);
+    return { count: 0, totalQuantity: 0, submissions: [] };
+  }
+}
+
+/**
+ * Equipment Borrow Request Interface
+ */
+export interface EquipmentBorrowRequest {
+  id: string;
+  projectId: string;
+  workerId: string;
+  workerName: string;
+  equipmentId: string;
+  equipmentName: string;
+  status: 'pending' | 'approved' | 'rejected' | 'returned';
+  requestedAt: Date;
+  approvedAt?: Date;
+  returnedAt?: Date;
+  approvedBy?: string;
+  rejectionReason?: string;
+  hasReportedUsage: boolean; // Whether worker has submitted usage report
+}
+
+/**
+ * Request to borrow equipment
+ */
+export async function requestBorrowEquipment(
+  equipmentId: string,
+  equipmentName: string
+): Promise<EquipmentBorrowRequest> {
+  try {
+    if (!typedAuth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const workerData = await getDoc(doc(db, 'worker_accounts', typedAuth.currentUser.uid));
+    if (!workerData.exists()) {
+      throw new Error('Worker data not found');
+    }
+
+    const workerInfo = workerData.data();
+    const projectId = workerInfo.projectId;
+    if (!projectId) {
+      throw new Error('Worker not assigned to a project');
+    }
+
+    // Check if worker already has a pending or approved borrow request for this equipment today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const borrowRequestsRef = collection(db, 'equipment_borrow_requests');
+    // Check for pending requests
+    const pendingQuery = query(
+      borrowRequestsRef,
+      where('projectId', '==', projectId),
+      where('workerId', '==', typedAuth.currentUser.uid),
+      where('equipmentId', '==', equipmentId),
+      where('status', '==', 'pending')
+    );
+    const pendingSnapshot = await getDocs(pendingQuery);
+    
+    // Check for approved requests
+    const approvedQuery = query(
+      borrowRequestsRef,
+      where('projectId', '==', projectId),
+      where('workerId', '==', typedAuth.currentUser.uid),
+      where('equipmentId', '==', equipmentId),
+      where('status', '==', 'approved')
+    );
+    const approvedSnapshot = await getDocs(approvedQuery);
+
+    // Combine results and check dates
+    const allRequests = [...pendingSnapshot.docs, ...approvedSnapshot.docs];
+    for (const docSnap of allRequests) {
+      const data = docSnap.data();
+      const requestedAt = data.requestedAt?.toDate() || new Date();
+      if (requestedAt >= today && requestedAt < tomorrow) {
+        throw new Error('You already have a pending or approved borrow request for this equipment today');
+      }
+    }
+
+    // Create borrow request
+    const requestDoc = await addDoc(borrowRequestsRef, {
+      projectId,
+      workerId: typedAuth.currentUser.uid,
+      workerName: workerInfo.name || 'Unknown Worker',
+      equipmentId,
+      equipmentName,
+      status: 'pending',
+      requestedAt: serverTimestamp(),
+      hasReportedUsage: false,
+    });
+
+    const request: EquipmentBorrowRequest = {
+      id: requestDoc.id,
+      projectId,
+      workerId: typedAuth.currentUser.uid,
+      workerName: workerInfo.name || 'Unknown Worker',
+      equipmentId,
+      equipmentName,
+      status: 'pending',
+      requestedAt: new Date(),
+      hasReportedUsage: false,
+    };
+
+    // Send notification to engineer
+    try {
+      const project = await getProject(projectId);
+      if (project && project.engineerId) {
+        await sendNotification(project.engineerId, {
+          title: 'Equipment Borrow Request',
+          body: `${workerInfo.name || 'A worker'} requested to borrow ${equipmentName}`,
+          type: 'usage_approved',
+          relatedId: requestDoc.id,
+          projectId: projectId,
+          status: 'info'
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+    }
+
+    return request;
+  } catch (error: any) {
+    console.error('Error requesting equipment borrow:', error);
+    throw new Error(error.message || 'Failed to request equipment borrow');
+  }
+}
+
+/**
+ * Get worker's current borrow requests
+ */
+export async function getWorkerBorrowRequests(workerId: string): Promise<EquipmentBorrowRequest[]> {
+  try {
+    const borrowRequestsRef = collection(db, 'equipment_borrow_requests');
+    const q = query(
+      borrowRequestsRef,
+      where('workerId', '==', workerId),
+      orderBy('requestedAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    const requests: EquipmentBorrowRequest[] = [];
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      requests.push({
+        id: doc.id,
+        projectId: data.projectId,
+        workerId: data.workerId,
+        workerName: data.workerName,
+        equipmentId: data.equipmentId,
+        equipmentName: data.equipmentName,
+        status: data.status,
+        requestedAt: data.requestedAt?.toDate() || new Date(),
+        approvedAt: data.approvedAt?.toDate(),
+        returnedAt: data.returnedAt?.toDate(),
+        approvedBy: data.approvedBy,
+        rejectionReason: data.rejectionReason,
+        hasReportedUsage: data.hasReportedUsage || false,
+      });
+    });
+
+    return requests;
+  } catch (error) {
+    console.error('Error getting worker borrow requests:', error);
+    return [];
+  }
+}
+
+/**
+ * Get worker's active borrow request for a specific equipment
+ */
+export async function getActiveBorrowRequest(
+  workerId: string,
+  equipmentId: string
+): Promise<EquipmentBorrowRequest | null> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const borrowRequestsRef = collection(db, 'equipment_borrow_requests');
+    // Check for pending requests
+    const pendingQuery = query(
+      borrowRequestsRef,
+      where('workerId', '==', workerId),
+      where('equipmentId', '==', equipmentId),
+      where('status', '==', 'pending')
+    );
+    const pendingSnapshot = await getDocs(pendingQuery);
+    
+    // Check for approved requests
+    const approvedQuery = query(
+      borrowRequestsRef,
+      where('workerId', '==', workerId),
+      where('equipmentId', '==', equipmentId),
+      where('status', '==', 'approved')
+    );
+    const approvedSnapshot = await getDocs(approvedQuery);
+
+    // Combine and check dates
+    const allRequests = [...pendingSnapshot.docs, ...approvedSnapshot.docs];
+    for (const docSnap of allRequests) {
+      const data = docSnap.data();
+      const requestedAt = data.requestedAt?.toDate() || new Date();
+      // Check if request is from today
+      if (requestedAt >= today && requestedAt < tomorrow) {
+        return {
+          id: docSnap.id,
+          projectId: data.projectId,
+          workerId: data.workerId,
+          workerName: data.workerName,
+          equipmentId: data.equipmentId,
+          equipmentName: data.equipmentName,
+          status: data.status,
+          requestedAt,
+          approvedAt: data.approvedAt?.toDate(),
+          returnedAt: data.returnedAt?.toDate(),
+          approvedBy: data.approvedBy,
+          rejectionReason: data.rejectionReason,
+          hasReportedUsage: data.hasReportedUsage || false,
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting active borrow request:', error);
+    return null;
+  }
+}
+
+/**
+ * Mark that worker has reported usage for borrowed equipment
+ */
+export async function markBorrowUsageReported(borrowRequestId: string): Promise<void> {
+  try {
+    const requestRef = doc(db, 'equipment_borrow_requests', borrowRequestId);
+    await updateDoc(requestRef, {
+      hasReportedUsage: true,
+    });
+  } catch (error) {
+    console.error('Error marking borrow usage reported:', error);
+    throw new Error('Failed to mark usage as reported');
+  }
+}
+
+/**
+ * Return borrowed equipment
+ */
+export async function returnBorrowedEquipment(borrowRequestId: string): Promise<void> {
+  try {
+    if (!typedAuth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const requestRef = doc(db, 'equipment_borrow_requests', borrowRequestId);
+    const requestSnap = await getDoc(requestRef);
+    
+    if (!requestSnap.exists()) {
+      throw new Error('Borrow request not found');
+    }
+
+    const requestData = requestSnap.data();
+    if (requestData.workerId !== typedAuth.currentUser.uid) {
+      throw new Error('You can only return equipment you borrowed');
+    }
+
+    if (requestData.status !== 'approved') {
+      throw new Error('Can only return approved borrow requests');
+    }
+
+    if (!requestData.hasReportedUsage) {
+      throw new Error('You must submit a usage report before returning the equipment');
+    }
+
+    await updateDoc(requestRef, {
+      status: 'returned',
+      returnedAt: serverTimestamp(),
+    });
+
+    console.log('Equipment returned:', borrowRequestId);
+  } catch (error: any) {
+    console.error('Error returning equipment:', error);
+    throw new Error(error.message || 'Failed to return equipment');
+  }
+}
+
+/**
+ * Approve equipment borrow request
+ */
+export async function approveBorrowRequest(borrowRequestId: string): Promise<void> {
+  try {
+    if (!typedAuth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const requestRef = doc(db, 'equipment_borrow_requests', borrowRequestId);
+    const requestSnap = await getDoc(requestRef);
+    
+    if (!requestSnap.exists()) {
+      throw new Error('Borrow request not found');
+    }
+
+    const requestData = requestSnap.data();
+    if (requestData.status !== 'pending') {
+      throw new Error('Can only approve pending requests');
+    }
+
+    await updateDoc(requestRef, {
+      status: 'approved',
+      approvedAt: serverTimestamp(),
+      approvedBy: typedAuth.currentUser.uid,
+    });
+
+    // Send notification to worker
+    try {
+      await sendNotification(requestData.workerId, {
+        title: 'Equipment Borrow Request Approved',
+        body: `Your request to borrow ${requestData.equipmentName} has been approved.`,
+        type: 'usage_approved',
+        relatedId: borrowRequestId,
+        projectId: requestData.projectId,
+        status: 'info'
+      });
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+    }
+
+    console.log('Borrow request approved:', borrowRequestId);
+  } catch (error: any) {
+    console.error('Error approving borrow request:', error);
+    throw new Error(error.message || 'Failed to approve borrow request');
+  }
+}
+
+/**
+ * Reject equipment borrow request
+ */
+export async function rejectBorrowRequest(
+  borrowRequestId: string,
+  reason: string
+): Promise<void> {
+  try {
+    if (!typedAuth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const requestRef = doc(db, 'equipment_borrow_requests', borrowRequestId);
+    const requestSnap = await getDoc(requestRef);
+    
+    if (!requestSnap.exists()) {
+      throw new Error('Borrow request not found');
+    }
+
+    const requestData = requestSnap.data();
+    if (requestData.status !== 'pending') {
+      throw new Error('Can only reject pending requests');
+    }
+
+    await updateDoc(requestRef, {
+      status: 'rejected',
+      rejectionReason: reason,
+      approvedBy: typedAuth.currentUser.uid,
+    });
+
+    // Send notification to worker
+    try {
+      await sendNotification(requestData.workerId, {
+        title: 'Equipment Borrow Request Rejected',
+        body: `Your request to borrow ${requestData.equipmentName} has been rejected. Reason: ${reason}`,
+        type: 'usage_approved',
+        relatedId: borrowRequestId,
+        projectId: requestData.projectId,
+        status: 'rejected'
+      });
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+    }
+
+    console.log('Borrow request rejected:', borrowRequestId);
+  } catch (error: any) {
+    console.error('Error rejecting borrow request:', error);
+    throw new Error(error.message || 'Failed to reject borrow request');
+  }
+}
+
+/**
+ * Get all borrow requests for a project
+ */
+export async function getProjectBorrowRequests(projectId: string): Promise<EquipmentBorrowRequest[]> {
+  try {
+    const borrowRequestsRef = collection(db, 'equipment_borrow_requests');
+    const q = query(
+      borrowRequestsRef,
+      where('projectId', '==', projectId),
+      orderBy('requestedAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    const requests: EquipmentBorrowRequest[] = [];
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      requests.push({
+        id: doc.id,
+        projectId: data.projectId,
+        workerId: data.workerId,
+        workerName: data.workerName,
+        equipmentId: data.equipmentId,
+        equipmentName: data.equipmentName,
+        status: data.status,
+        requestedAt: data.requestedAt?.toDate() || new Date(),
+        approvedAt: data.approvedAt?.toDate(),
+        returnedAt: data.returnedAt?.toDate(),
+        approvedBy: data.approvedBy,
+        rejectionReason: data.rejectionReason,
+        hasReportedUsage: data.hasReportedUsage || false,
+      });
+    });
+
+    return requests;
+  } catch (error) {
+    console.error('Error getting project borrow requests:', error);
+    return [];
+  }
+}
+
+/**
  * Helper: Convert URI to Blob (React Native compatible)
  */
 async function uriToBlob(uri: string): Promise<Blob> {

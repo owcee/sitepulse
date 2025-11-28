@@ -15,7 +15,7 @@ export interface VerificationLog {
   id: string;
   workerId: string;
   workerName: string;
-  type: 'equipment' | 'material' | 'task' | 'damage';
+  type: 'equipment' | 'material' | 'task' | 'damage' | 'borrow';
   photo: string;
   workerNotes: string;
   timestamp: string; // ISO string
@@ -77,7 +77,24 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       usageSnapshot = { forEach: () => {}, size: 0 }; // Fallback
     }
 
-    // 3. Process and normalize data
+    // 3. Fetch Equipment Borrow Requests
+    console.log('Fetching equipment borrow requests for project:', projectId);
+    const borrowRef = collection(db, 'equipment_borrow_requests');
+    const borrowQuery = query(
+      borrowRef,
+      where('projectId', '==', projectId)
+    );
+    
+    let borrowSnapshot;
+    try {
+      borrowSnapshot = await getDocs(borrowQuery);
+      console.log(`Fetched ${borrowSnapshot.size} borrow requests`);
+    } catch (e) {
+      console.error('Error fetching borrow requests:', e);
+      borrowSnapshot = { forEach: () => {}, size: 0 }; // Fallback
+    }
+
+    // 4. Process and normalize data
     const logs: VerificationLog[] = [];
 
     // Process Photos
@@ -146,7 +163,35 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       });
     });
 
-    // 4. Group by Worker
+    // Process Borrow Requests
+    borrowSnapshot.forEach(doc => {
+      const data = doc.data();
+      // Map status: 'pending' | 'approved' | 'rejected' | 'returned'
+      let status: 'pending' | 'approved' | 'rejected' = 'pending';
+      if (data.status === 'approved') status = 'approved';
+      if (data.status === 'rejected') status = 'rejected';
+      // Skip 'returned' status as they don't need verification
+
+      if (data.status !== 'returned') {
+        logs.push({
+          id: doc.id,
+          workerId: data.workerId,
+          workerName: data.workerName || 'Unknown Worker',
+          type: 'borrow',
+          photo: '', // No photo for borrow requests
+          workerNotes: `Request to borrow ${data.equipmentName}`,
+          timestamp: data.requestedAt?.toDate().toISOString() || new Date().toISOString(),
+          status: status,
+          engineerNotes: data.rejectionReason,
+          verifiedBy: data.approvedBy,
+          verifiedAt: data.approvedAt?.toDate().toISOString(),
+          rawTimestamp: data.requestedAt?.toDate() || new Date(),
+          itemName: data.equipmentName
+        });
+      }
+    });
+
+    // 5. Group by Worker
     const workerMap = new Map<string, WorkerVerificationData>();
 
     // Sort all logs by date desc

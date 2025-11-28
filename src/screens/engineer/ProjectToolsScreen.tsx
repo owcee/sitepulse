@@ -27,6 +27,8 @@ import { getEngineerProjects } from '../../services/projectService';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { getAuth } from 'firebase/auth';
+import { getBudget } from '../../services/firebaseDataService';
+import { ProjectBudget } from '../../context/ProjectDataContext';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -59,7 +61,34 @@ interface ProjectToolsScreenProps {
 
 export default function ProjectToolsScreen({ user, project, onLogout }: ProjectToolsScreenProps) {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const { state } = useProjectData();
+  const { state, projectId, setBudget } = useProjectData();
+  
+  // Load budget from Firebase on mount if not in shared state
+  // This ensures budget is available even if ProjectDataContext hasn't loaded it yet
+  useEffect(() => {
+    if (!projectId) return;
+    
+    // Only load if budget is not in state or if it's empty/undefined
+    if (state.budget && state.budget.categories && state.budget.categories.length > 0) {
+      return; // Budget already loaded
+    }
+    
+    let isMounted = true;
+    const loadBudget = async () => {
+      try {
+        const savedBudget = await getBudget(projectId);
+        if (isMounted && savedBudget) {
+          setBudget(savedBudget as ProjectBudget);
+          console.log('✅ Budget loaded in ProjectToolsScreen');
+        }
+      } catch (error) {
+        console.error('Error loading budget in ProjectToolsScreen:', error);
+      }
+    };
+    
+    loadBudget();
+    return () => { isMounted = false; };
+  }, [projectId, state.budget]); // Run when projectId changes or if budget is not loaded
   const chartScrollRef = useRef<FlatList>(null);
   const [projectMenuVisible, setProjectMenuVisible] = useState(false);
   const [engineerProjects, setEngineerProjects] = useState<any[]>([]);
@@ -123,29 +152,15 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
     }
   };
 
-  // Get budget data from shared state (same as ResourcesScreen)
+  // ALWAYS use shared budget from BudgetLogsManagementPage - no fallback calculations
+  // This ensures consistency across all screens (carousel, resource screen, etc.)
   const budget = state.budget;
-  const calculateEquipmentSpent = () => {
-    return state.equipment.reduce((total, equip) => {
-      if (equip.type === 'rental' && equip.rentalCost) {
-        return total + equip.rentalCost;
-      }
-      return total;
-    }, 0);
-  };
-
-  const calculateMaterialsSpent = () => {
-    return state.materials.reduce((total, material) => {
-      // Use totalBought if available, otherwise use quantity
-      const quantity = material.totalBought || material.quantity;
-      return total + (quantity * material.price);
-    }, 0);
-  };
-
+  
   // Prepare budget data for BudgetChart
+  // If budget is not loaded yet, use defaults (will be updated once BudgetLogsManagementPage loads)
   let budgetDataForChart;
-  if (budget) {
-    // Use budget from BudgetLogsManagementPage
+  if (budget && budget.categories.length > 0) {
+    // Use budget from BudgetLogsManagementPage (single source of truth)
     budgetDataForChart = {
       totalBudget: budget.totalBudget,
       totalSpent: budget.totalSpent,
@@ -156,15 +171,14 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
       })),
     };
   } else {
-    // Fallback: calculate from inventory
-    const equipmentSpent = calculateEquipmentSpent();
-    const materialsSpent = calculateMaterialsSpent();
+    // Only use defaults if budget hasn't been loaded yet
+    // This will be updated once BudgetLogsManagementPage loads the budget
     budgetDataForChart = {
       totalBudget: 250000,
-      totalSpent: equipmentSpent + materialsSpent,
+      totalSpent: 0,
       categories: [
-        { name: 'Equipment', allocatedAmount: 50000, spentAmount: equipmentSpent },
-        { name: 'Materials', allocatedAmount: 150000, spentAmount: materialsSpent },
+        { name: 'Equipment', allocatedAmount: 50000, spentAmount: 0 },
+        { name: 'Materials', allocatedAmount: 150000, spentAmount: 0 },
       ],
     };
   }
@@ -183,6 +197,7 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
       id: 'budget',
       component: (
         <BudgetChart 
+          key={`budget-${budget?.lastUpdated?.getTime() || Date.now()}`}
           onPress={() => navigation.navigate('BudgetLogsManagement')}
           budgetData={budgetDataForChart}
         />

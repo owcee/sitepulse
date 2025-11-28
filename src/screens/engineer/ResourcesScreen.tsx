@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
 import {
   Card, 
@@ -23,6 +23,7 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import { exportBudgetToPDF, exportMaterialsToPDF } from '../../services/pdfExportService';
 import { getProject } from '../../services/projectService';
+import { getBudget } from '../../services/firebaseDataService';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -33,7 +34,34 @@ export default function ResourcesScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const { state, projectId } = useProjectData();
+  const { state, projectId, setBudget } = useProjectData();
+  
+  // Load budget from Firebase on mount if not in shared state
+  // This ensures budget is available even if ProjectDataContext hasn't loaded it yet
+  useEffect(() => {
+    if (!projectId) return;
+    
+    // Only load if budget is not in state or if it's empty/undefined
+    if (state.budget && state.budget.categories && state.budget.categories.length > 0) {
+      return; // Budget already loaded
+    }
+    
+    let isMounted = true;
+    const loadBudget = async () => {
+      try {
+        const savedBudget = await getBudget(projectId);
+        if (isMounted && savedBudget) {
+          setBudget(savedBudget);
+          console.log('✅ Budget loaded in ResourcesScreen');
+        }
+      } catch (error) {
+        console.error('Error loading budget in ResourcesScreen:', error);
+      }
+    };
+    
+    loadBudget();
+    return () => { isMounted = false; };
+  }, [projectId, state.budget]); // Run when projectId changes or if budget is not loaded
 
   // Get budget from shared state (from BudgetLogsManagementPage)
   // If not available, calculate from inventory
@@ -54,15 +82,18 @@ export default function ResourcesScreen() {
     }, 0);
   };
 
-  // Use shared budget if available, otherwise calculate from inventory
+  // ALWAYS use shared budget from BudgetLogsManagementPage - no fallback calculations
+  // This ensures consistency across all screens
   const budget = state.budget;
   
-  let totalBudget = 250000; // Default
-  let totalSpent = 0;
+  // If budget is not loaded yet, show loading state or use defaults
+  // But never recalculate from inventory as that causes inconsistencies
+  let totalBudget = budget?.totalBudget || 250000;
+  let totalSpent = budget?.totalSpent || 0;
   let categories: Array<{ name: string; allocated: number; spent: number }> = [];
   
-  if (budget) {
-    // Use budget from BudgetLogsManagementPage
+  if (budget && budget.categories.length > 0) {
+    // Use budget from BudgetLogsManagementPage (single source of truth)
     totalBudget = budget.totalBudget;
     totalSpent = budget.totalSpent;
     categories = budget.categories.map(cat => ({
@@ -71,16 +102,12 @@ export default function ResourcesScreen() {
       spent: cat.spentAmount,
     }));
   } else {
-    // Fallback: calculate from inventory
-    const equipmentSpent = calculateEquipmentSpent();
-    const materialsSpent = calculateMaterialsSpent();
-    
+    // Only use defaults if budget hasn't been loaded yet
+    // This will be updated once BudgetLogsManagementPage loads the budget
     categories = [
-      { name: 'Equipment', allocated: 50000, spent: equipmentSpent },
-      { name: 'Materials', allocated: 150000, spent: materialsSpent },
+      { name: 'Equipment', allocated: 50000, spent: 0 },
+      { name: 'Materials', allocated: 150000, spent: 0 },
     ];
-    
-    totalSpent = equipmentSpent + materialsSpent;
   }
   
   const budgetUsagePercent = totalBudget > 0 ? totalSpent / totalBudget : 0;
@@ -104,13 +131,14 @@ export default function ResourcesScreen() {
     }));
 
   // Pie chart data for budget breakdown (from all categories)
+  // Format: Category name only (no amount)
   const budgetChartData = categories
     .filter(cat => cat.spent > 0)
     .map((cat, index) => ({
       name: cat.name,
       population: cat.spent,
       color: index === 0 ? '#FF9800' : index === 1 ? '#2196F3' : '#4CAF50',
-      legendFontColor: '#7F7F7F',
+      legendFontColor: '#FFFFFF',
       legendFontSize: 12,
     }));
 
@@ -182,16 +210,20 @@ export default function ResourcesScreen() {
           <Title style={styles.cardTitle}>Spending by Category</Title>
           
           <PieChart
+            key={`pie-${budget?.lastUpdated?.getTime() || Date.now()}`}
             data={budgetChartData}
             width={screenWidth - 80}
-            height={220}
+            height={180}
             chartConfig={{
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+              labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+              strokeWidth: 2,
             }}
             accessor="population"
             backgroundColor={theme.colors.surface}
             paddingLeft="15"
             absolute
+            hasLegend={true}
           />
         </Card.Content>
       </Card>

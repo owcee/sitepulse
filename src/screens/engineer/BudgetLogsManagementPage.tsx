@@ -305,7 +305,14 @@ export default function BudgetLogsManagementPage() {
   // Update primary categories when equipment or materials change
   // Also update categories based on budget logs
   React.useEffect(() => {
-    if (!budget || loadingBudget || isSyncingRef.current) return;
+    // Wait for budget to be loaded before updating
+    if (loadingBudget) return;
+    
+    // If no budget exists yet, don't update (will be initialized on load)
+    if (!budget) return;
+    
+    // Prevent updates during sync to avoid loops
+    if (isSyncingRef.current) return;
     
     const equipmentSpent = calculateEquipmentSpent();
     const materialsSpent = calculateMaterialsSpent();
@@ -317,65 +324,68 @@ export default function BudgetLogsManagementPage() {
     const equipmentChanged = equipmentCategory && Math.abs(equipmentCategory.spentAmount - equipmentSpent) > 0.01;
     const materialsChanged = materialsCategory && Math.abs(materialsCategory.spentAmount - materialsSpent) > 0.01;
     
-    if (equipmentChanged || materialsChanged) {
-      setBudget(prev => {
-        if (!prev) return getDefaultBudget();
-        const updatedCategories = prev.categories.map(cat => {
-          if (cat.id === 'equipment') {
-            return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
+    if (!equipmentChanged && !materialsChanged) return;
+    
+    // Update immediately (no debounce) to ensure changes persist
+    // This is the SINGLE source of truth for budget updates
+    setBudget(prev => {
+      if (!prev) return getDefaultBudget();
+      const updatedCategories = prev.categories.map(cat => {
+        if (cat.id === 'equipment') {
+          return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
+        }
+        if (cat.id === 'materials') {
+          return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+        }
+        return cat;
+      });
+      
+      // Calculate spent amounts from budget logs for each category
+      const logsByCategory = state.budgetLogs.reduce((acc, log) => {
+        if (log.type === 'expense' && log.amount > 0) {
+          const categoryName = log.category.toLowerCase();
+          if (!acc[categoryName]) {
+            acc[categoryName] = 0;
           }
-          if (cat.id === 'materials') {
-            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
-          }
+          acc[categoryName] += log.amount;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+      
+      // Update categories with budget log amounts (for non-primary categories)
+      const finalCategories = updatedCategories.map(cat => {
+        const categoryName = cat.name.toLowerCase();
+        const logAmount = logsByCategory[categoryName] || 0;
+        
+        // For primary categories, keep auto-calculated amount
+        if (cat.isPrimary) {
           return cat;
-        });
+        }
         
-        // Calculate spent amounts from budget logs for each category
-        const logsByCategory = state.budgetLogs.reduce((acc, log) => {
-          if (log.type === 'expense' && log.amount > 0) {
-            const categoryName = log.category.toLowerCase();
-            if (!acc[categoryName]) {
-              acc[categoryName] = 0;
-            }
-            acc[categoryName] += log.amount;
-          }
-          return acc;
-        }, {} as Record<string, number>);
-        
-        // Update categories with budget log amounts (for non-primary categories)
-        const finalCategories = updatedCategories.map(cat => {
-          const categoryName = cat.name.toLowerCase();
-          const logAmount = logsByCategory[categoryName] || 0;
-          
-          // For primary categories, keep auto-calculated amount
-          if (cat.isPrimary) {
-            return cat;
-          }
-          
-          // For non-primary categories, use budget log amounts
-          return {
-            ...cat,
-            spentAmount: logAmount,
-            lastUpdated: new Date(),
-          };
-        });
-        
-        // Calculate new total spent from all categories
-        const newTotalSpent = finalCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
-        
-        const updatedBudget: ProjectBudget = {
-          ...prev,
-          categories: finalCategories,
-          totalSpent: newTotalSpent,
+        // For non-primary categories, use budget log amounts
+        return {
+          ...cat,
+          spentAmount: logAmount,
           lastUpdated: new Date(),
         };
-        
-        // Save to Firebase and update shared state
-        saveBudgetToFirebase(updatedBudget);
-        
-        return updatedBudget;
       });
-    }
+      
+      // Calculate new total spent from all categories
+      const newTotalSpent = finalCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+      
+      const updatedBudget: ProjectBudget = {
+        ...prev,
+        categories: finalCategories,
+        totalSpent: newTotalSpent,
+        lastUpdated: new Date(),
+      };
+      
+      // Save to Firebase and update shared state IMMEDIATELY
+      // This ensures the change persists and all screens update
+      saveBudgetToFirebase(updatedBudget);
+      
+      return updatedBudget;
+    });
   }, [state.equipment, state.materials, state.budgetLogs, budget, loadingBudget]);
 
   const resetForm = () => {

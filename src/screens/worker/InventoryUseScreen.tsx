@@ -15,7 +15,8 @@ import {
   SegmentedButtons,
   DataTable,
   Modal,
-  Portal 
+  Portal,
+  Dialog
 } from 'react-native-paper';
 import { Camera, CameraType } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,7 +25,15 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import { UsageSubmission } from '../../types';
 import { submitUsageReport, checkDuplicateUsage } from '../../services/firebaseService';
-import { getWorkerSubmissions } from '../../services/usageService';
+import { 
+  getWorkerSubmissions, 
+  getPendingUsageForItem,
+  requestBorrowEquipment,
+  getActiveBorrowRequest,
+  markBorrowUsageReported,
+  returnBorrowedEquipment,
+  EquipmentBorrowRequest
+} from '../../services/usageService';
 // @ts-ignore - firebaseConfig exports auth which may have implicit any type
 import { auth } from '../../firebaseConfig';
 import type { Auth } from 'firebase/auth';
@@ -37,7 +46,7 @@ const { width: screenWidth } = Dimensions.get('window');
 // UsageSubmission interface moved to types/index.ts
 
 export default function InventoryUseScreen() {
-  const { state } = useProjectData();
+  const { state, projectId } = useProjectData();
   const [activeTab, setActiveTab] = useState('materials');
   const [usageHistory, setUsageHistory] = useState<UsageSubmission[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -57,6 +66,14 @@ export default function InventoryUseScreen() {
   const [currentTaskId, setCurrentTaskId] = useState<string>('');
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicateInfo, setDuplicateInfo] = useState<{count: number, itemName: string, quantity: string} | null>(null);
+  const [showOverLimitDialog, setShowOverLimitDialog] = useState(false);
+  const [overLimitMessage, setOverLimitMessage] = useState('');
+  const [equipmentBorrowRequests, setEquipmentBorrowRequests] = useState<Map<string, EquipmentBorrowRequest>>(new Map());
+  const [loadingBorrowRequests, setLoadingBorrowRequests] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState('');
 
   // Load usage history when history tab is active
   useEffect(() => {
@@ -64,6 +81,13 @@ export default function InventoryUseScreen() {
       loadUsageHistory();
     }
   }, [activeTab, typedAuth?.currentUser]);
+
+  // Load equipment borrow requests when equipment tab is active
+  useEffect(() => {
+    if (activeTab === 'equipment' && typedAuth?.currentUser) {
+      loadEquipmentBorrowRequests();
+    }
+  }, [activeTab, typedAuth?.currentUser, state.equipment]);
 
   const loadUsageHistory = async () => {
     if (!typedAuth?.currentUser) return;
@@ -93,6 +117,63 @@ export default function InventoryUseScreen() {
       Alert.alert('Error', 'Failed to load usage history');
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const loadEquipmentBorrowRequests = async () => {
+    if (!typedAuth?.currentUser) return;
+    
+    try {
+      setLoadingBorrowRequests(true);
+      const requestsMap = new Map<string, EquipmentBorrowRequest>();
+      
+      // Load active borrow request for each equipment
+      for (const equipment of state.equipment) {
+        const activeRequest = await getActiveBorrowRequest(typedAuth.currentUser.uid, equipment.id);
+        if (activeRequest) {
+          requestsMap.set(equipment.id, activeRequest);
+        }
+      }
+      
+      setEquipmentBorrowRequests(requestsMap);
+    } catch (error: any) {
+      console.error('Error loading equipment borrow requests:', error);
+    } finally {
+      setLoadingBorrowRequests(false);
+    }
+  };
+
+  const handleRequestBorrow = async (equipmentId: string, equipmentName: string) => {
+    if (!typedAuth?.currentUser) return;
+    
+    try {
+      setIsSubmitting(true);
+      await requestBorrowEquipment(equipmentId, equipmentName);
+      setSuccessMessage(`Borrow request for ${equipmentName} submitted. Waiting for engineer approval.`);
+      setShowSuccessModal(true);
+      await loadEquipmentBorrowRequests();
+    } catch (error: any) {
+      setDialogMessage(error.message || 'Failed to request equipment borrow');
+      setShowErrorDialog(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReturnEquipment = async (borrowRequestId: string, equipmentName: string) => {
+    if (!typedAuth?.currentUser) return;
+    
+    try {
+      setIsSubmitting(true);
+      await returnBorrowedEquipment(borrowRequestId);
+      setSuccessMessage(`${equipmentName} returned successfully. You can request again tomorrow.`);
+      setShowSuccessModal(true);
+      await loadEquipmentBorrowRequests();
+    } catch (error: any) {
+      setDialogMessage(error.message || 'Failed to return equipment');
+      setShowErrorDialog(true);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -149,15 +230,47 @@ export default function InventoryUseScreen() {
 
 
 
-  const checkForDuplicates = async (itemId: string, quantity: string, taskId: string): Promise<boolean> => {
+  const checkForDuplicates = async (itemId: string, quantity: string, taskId: string): Promise<{hasDuplicates: boolean, count: number}> => {
     try {
-      if (!typedAuth?.currentUser) return false;
+      if (!typedAuth?.currentUser) return { hasDuplicates: false, count: 0 };
       
       const duplicates = await checkDuplicateUsage(taskId, itemId, parseInt(quantity), typedAuth.currentUser.uid);
-      return duplicates.length > 0;
+      return { hasDuplicates: duplicates.length > 0, count: duplicates.length };
     } catch (error) {
       console.error('Error checking duplicates:', error);
-      return false;
+      return { hasDuplicates: false, count: 0 };
+    }
+  };
+
+  const checkPendingUsage = async (itemId: string, requestedQuantity: number): Promise<{canSubmit: boolean, message: string, pendingCount: number, pendingTotal: number}> => {
+    try {
+      if (!projectId || submissionType !== 'material') {
+        return { canSubmit: true, message: '', pendingCount: 0, pendingTotal: 0 };
+      }
+
+      const pendingInfo = await getPendingUsageForItem(projectId, itemId);
+      const material = state.materials.find(m => m.id === itemId);
+      const availableQuantity = material?.quantity || 0;
+      const totalRequested = pendingInfo.totalQuantity + requestedQuantity;
+
+      if (totalRequested > availableQuantity) {
+        return {
+          canSubmit: false,
+          message: `Cannot submit: ${pendingInfo.count} worker(s) have already requested ${pendingInfo.totalQuantity} ${material?.unit || 'units'}. Your request of ${requestedQuantity} ${material?.unit || 'units'} would exceed the available ${availableQuantity} ${material?.unit || 'units'}.`,
+          pendingCount: pendingInfo.count,
+          pendingTotal: pendingInfo.totalQuantity
+        };
+      }
+
+      return {
+        canSubmit: true,
+        message: `${pendingInfo.count} worker(s) have already requested ${pendingInfo.totalQuantity} ${material?.unit || 'units'}.`,
+        pendingCount: pendingInfo.count,
+        pendingTotal: pendingInfo.totalQuantity
+      };
+    } catch (error) {
+      console.error('Error checking pending usage:', error);
+      return { canSubmit: true, message: '', pendingCount: 0, pendingTotal: 0 };
     }
   };
 
@@ -183,18 +296,29 @@ export default function InventoryUseScreen() {
       return;
     }
 
-    // Check for duplicate submissions on same task
+    // Check for duplicate submissions on same task and pending usage limits
     if (submissionType === 'material' && quantity) {
-      const hasDuplicates = await checkForDuplicates(selectedItem, quantity, currentTaskId);
-      if (hasDuplicates) {
-        Alert.alert(
-          'Potential Duplicate Detected',
-          `Another worker on this task has already reported the same quantity (${quantity}) for this item. Do you want to continue?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Continue Anyway', onPress: () => proceedWithSubmission() }
-          ]
-        );
+      const requestedQty = parseInt(quantity);
+      const selectedItemInfo = getSelectedItemInfo();
+      const itemName = selectedItemInfo?.name || 'Unknown Item';
+
+      // Check pending usage to prevent exceeding available quantity
+      const pendingCheck = await checkPendingUsage(selectedItem, requestedQty);
+      if (!pendingCheck.canSubmit) {
+        setOverLimitMessage(pendingCheck.message);
+        setShowOverLimitDialog(true);
+        return;
+      }
+
+      // Check for duplicate submissions on same task
+      const duplicateCheck = await checkForDuplicates(selectedItem, quantity, currentTaskId);
+      if (duplicateCheck.hasDuplicates) {
+        setDuplicateInfo({
+          count: duplicateCheck.count,
+          itemName,
+          quantity
+        });
+        setShowDuplicateDialog(true);
         return;
       }
     }
@@ -226,11 +350,29 @@ export default function InventoryUseScreen() {
 
       const result = await submitUsageReport(reportData);
       
+      // If this is an equipment usage report, mark borrow request as having reported usage
+      if (submissionType === 'equipment' && selectedItem) {
+        const borrowRequest = equipmentBorrowRequests.get(selectedItem);
+        if (borrowRequest && borrowRequest.status === 'approved') {
+          try {
+            await markBorrowUsageReported(borrowRequest.id);
+            await loadEquipmentBorrowRequests(); // Refresh borrow requests
+          } catch (error) {
+            console.error('Error marking borrow usage reported:', error);
+          }
+        }
+      }
+      
       setIsSubmitting(false);
       
       // Refresh history if on history tab
       if (activeTab === 'history') {
         await loadUsageHistory();
+      }
+      
+      // Refresh borrow requests if on equipment tab
+      if (activeTab === 'equipment') {
+        await loadEquipmentBorrowRequests();
       }
       
       // Show custom success modal
@@ -471,45 +613,102 @@ export default function InventoryUseScreen() {
               <Divider style={styles.divider} />
               <Paragraph style={styles.sectionTitle}>Available Equipment</Paragraph>
               
-              {state.equipment.map((equipment) => (
-                <Surface key={equipment.id} style={styles.equipmentCard}>
-                  <List.Item
-                    title={equipment.name}
-                    description={`Status: ${equipment.status} | Condition: ${equipment.condition}`}
-                    left={() => (
-                      <List.Icon icon="hammer" color={theme.colors.primary} />
-                    )}
-                    style={{ backgroundColor: 'transparent' }}
-                    titleStyle={{ color: theme.colors.text }}
-                    descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
-                  />
-                  <View style={styles.equipmentActions}>
-                    <Button
-                      mode="contained"
-                      onPress={() => openUsageModal('equipment', equipment.id)}
-                      icon="clipboard-check"
-                      style={styles.reportUsageButton}
-                      contentStyle={styles.reportButtonContent}
-                      labelStyle={styles.reportButtonLabel}
-                    >
-                      Report Usage
-                    </Button>
-                    <Button
-                      mode="contained"
-                      onPress={() => {
-                        setSubmissionType('damage');
-                        openUsageModal('damage', equipment.id);
-                      }}
-                      icon="alert-circle"
-                      style={styles.reportDamageButton}
-                      contentStyle={styles.reportButtonContent}
-                      labelStyle={styles.reportButtonLabel}
-                    >
-                      Report Damage
-                    </Button>
-                  </View>
-                </Surface>
-              ))}
+              {loadingBorrowRequests ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={theme.colors.primary} />
+                  <Text style={styles.loadingText}>Loading equipment status...</Text>
+                </View>
+              ) : (
+                state.equipment.map((equipment) => {
+                  const borrowRequest = equipmentBorrowRequests.get(equipment.id);
+                  const isPending = borrowRequest?.status === 'pending';
+                  const isApproved = borrowRequest?.status === 'approved';
+                  const hasReportedUsage = borrowRequest?.hasReportedUsage || false;
+                  const canReturn = isApproved && hasReportedUsage;
+
+                  return (
+                    <Surface key={equipment.id} style={styles.equipmentCard}>
+                      <List.Item
+                        title={equipment.name}
+                        description={`Status: ${equipment.status} | Condition: ${equipment.condition}${equipment.quantity ? ` | ${equipment.quantity} pcs` : ''}`}
+                        left={() => (
+                          <List.Icon icon="hammer" color={theme.colors.primary} />
+                        )}
+                        style={{ backgroundColor: 'transparent' }}
+                        titleStyle={{ color: theme.colors.text }}
+                        descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+                      />
+                      <View style={styles.equipmentActions}>
+                        {!borrowRequest && (
+                          <Button
+                            mode="contained"
+                            onPress={() => handleRequestBorrow(equipment.id, equipment.name)}
+                            icon="hand-coin"
+                            style={styles.reportUsageButton}
+                            contentStyle={styles.reportButtonContent}
+                            labelStyle={styles.reportButtonLabel}
+                            disabled={isSubmitting}
+                            loading={isSubmitting}
+                          >
+                            Request Borrow
+                          </Button>
+                        )}
+                        {isPending && (
+                          <Button
+                            mode="outlined"
+                            icon="clock-outline"
+                            style={styles.reportUsageButton}
+                            contentStyle={styles.reportButtonContent}
+                            labelStyle={styles.reportButtonLabel}
+                            disabled
+                          >
+                            Pending Approval
+                          </Button>
+                        )}
+                        {isApproved && (
+                          <>
+                            <Button
+                              mode="contained"
+                              onPress={() => openUsageModal('equipment', equipment.id)}
+                              icon="clipboard-check"
+                              style={styles.reportUsageButton}
+                              contentStyle={styles.reportButtonContent}
+                              labelStyle={styles.reportButtonLabel}
+                            >
+                              Report Usage
+                            </Button>
+                            <Button
+                              mode="contained"
+                              onPress={() => {
+                                setSubmissionType('damage');
+                                openUsageModal('damage', equipment.id);
+                              }}
+                              icon="alert-circle"
+                              style={styles.reportDamageButton}
+                              contentStyle={styles.reportButtonContent}
+                              labelStyle={styles.reportButtonLabel}
+                            >
+                              Report Damage
+                            </Button>
+                            <Button
+                              mode="contained"
+                              onPress={() => borrowRequest && handleReturnEquipment(borrowRequest.id, equipment.name)}
+                              icon="hand-coin-outline"
+                              style={[styles.reportDamageButton, { backgroundColor: constructionColors.complete }]}
+                              contentStyle={styles.reportButtonContent}
+                              labelStyle={styles.reportButtonLabel}
+                              disabled={!canReturn || isSubmitting}
+                              loading={isSubmitting}
+                            >
+                              Return
+                            </Button>
+                          </>
+                        )}
+                      </View>
+                    </Surface>
+                  );
+                })
+              )}
             </Card.Content>
           </Card>
         )}
@@ -1093,6 +1292,85 @@ export default function InventoryUseScreen() {
 
       {/* Item Selector Modal */}
       {renderItemSelector()}
+
+      {/* Duplicate Detection Dialog */}
+      <Portal>
+        <Dialog
+          visible={showDuplicateDialog}
+          onDismiss={() => setShowDuplicateDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Potential Duplicate Detected</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>
+              {duplicateInfo && `${duplicateInfo.count} worker(s) on this task have already reported the same quantity (${duplicateInfo.quantity}) for ${duplicateInfo.itemName}. Do you want to continue?`}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowDuplicateDialog(false)}
+              textColor={theme.colors.text}
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={() => {
+                setShowDuplicateDialog(false);
+                proceedWithSubmission();
+              }}
+              textColor={theme.colors.primary}
+            >
+              Continue Anyway
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Over Limit Dialog */}
+      <Portal>
+        <Dialog
+          visible={showOverLimitDialog}
+          onDismiss={() => setShowOverLimitDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Request Exceeds Available Quantity</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>
+              {overLimitMessage}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowOverLimitDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Error Dialog */}
+      <Portal>
+        <Dialog
+          visible={showErrorDialog}
+          onDismiss={() => setShowErrorDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Error</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowErrorDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -1599,5 +1877,14 @@ const styles = StyleSheet.create({
   },
   successModalButton: {
     marginTop: spacing.sm,
+  },
+  dialog: {
+    backgroundColor: '#000000',
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+  },
+  dialogMessage: {
+    color: theme.colors.text,
   },
 });

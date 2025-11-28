@@ -34,6 +34,7 @@ export interface Equipment {
   category: string;
   condition: 'excellent' | 'good' | 'fair' | 'needs_repair';
   rentalCost?: number;
+  quantity?: number; // Number of pieces/units
   status: 'available' | 'in_use' | 'maintenance';
   dateAcquired: string;
 }
@@ -244,6 +245,11 @@ export function ProjectDataProvider({
   userRole?: string | null;
 }) {
   const [state, dispatch] = useReducer(projectDataReducer, initialState);
+  // Use a ref to store the latest state for async operations
+  const stateRef = React.useRef(state);
+  React.useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Helper function to add timeout to promises
   const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
@@ -318,19 +324,47 @@ export function ProjectDataProvider({
         },
       });
       
-      // Load budget if available
+      // Load budget if available and update primary categories with current spent amounts
       if (savedBudget) {
-        const loadedBudget: ProjectBudget = {
-          totalBudget: savedBudget.totalBudget,
-          totalSpent: savedBudget.totalSpent,
-          contingencyPercentage: savedBudget.contingencyPercentage,
-          lastUpdated: savedBudget.lastUpdated,
-          categories: savedBudget.categories.map((cat: any) => ({
+        // Calculate current spent amounts from loaded materials/equipment
+        const equipmentSpent = equipment.reduce((total, equip) => {
+          if (equip.type === 'rental' && equip.rentalCost) {
+            return total + equip.rentalCost;
+          }
+          return total;
+        }, 0);
+        
+        const materialsSpent = materials.reduce((total, material) => {
+          const quantity = material.totalBought || material.quantity;
+          return total + (quantity * material.price);
+        }, 0);
+        
+        // Update primary categories with current spent amounts
+        const updatedCategories = savedBudget.categories.map((cat: any) => {
+          if (cat.id === 'equipment') {
+            return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
+          }
+          if (cat.id === 'materials') {
+            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+          }
+          return {
             ...cat,
             lastUpdated: cat.lastUpdated || new Date(),
-          })),
+          };
+        });
+        
+        // Calculate total spent
+        const totalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+        
+        const loadedBudget: ProjectBudget = {
+          totalBudget: savedBudget.totalBudget,
+          totalSpent: totalSpent,
+          contingencyPercentage: savedBudget.contingencyPercentage,
+          lastUpdated: savedBudget.lastUpdated,
+          categories: updatedCategories,
         };
         dispatch({ type: 'SET_BUDGET', payload: loadedBudget });
+        console.log('✅ Budget loaded and updated with current spent amounts on app start');
       }
     } catch (error: any) {
       console.error('Error loading project data:', error);
@@ -360,11 +394,71 @@ export function ProjectDataProvider({
     await loadData();
   };
 
-  // Helper functions - now async and call Firebase
+  // Helper function to recalculate and update budget based on current materials/equipment
+  // Uses stateRef to get the latest state to avoid stale closures
+  const recalculateBudget = async () => {
+    // Use a small delay to ensure state has been updated after dispatch
+    setTimeout(async () => {
+      // Get the latest state from ref to avoid stale closure
+      const currentState = stateRef.current;
+      if (!currentState.budget || !projectId) {
+        console.log('⚠️ Cannot recalculate budget: budget or projectId missing');
+        return;
+      }
+      
+      try {
+        // Calculate equipment and materials spent from current state
+        const equipmentSpent = currentState.equipment.reduce((total, equip) => {
+          if (equip.type === 'rental' && equip.rentalCost) {
+            return total + equip.rentalCost;
+          }
+          return total;
+        }, 0);
+        
+        const materialsSpent = currentState.materials.reduce((total, material) => {
+          const quantity = material.totalBought || material.quantity;
+          return total + (quantity * material.price);
+        }, 0);
+        
+        console.log('📊 Recalculating budget:', { equipmentSpent, materialsSpent });
+        
+        // Update budget categories
+        const updatedCategories = currentState.budget.categories.map(cat => {
+          if (cat.id === 'equipment') {
+            return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
+          }
+          if (cat.id === 'materials') {
+            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+          }
+          return cat;
+        });
+        
+        // Calculate total spent
+        const newTotalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+        
+        const updatedBudget: ProjectBudget = {
+          ...currentState.budget,
+          categories: updatedCategories,
+          totalSpent: newTotalSpent,
+          lastUpdated: new Date(),
+        };
+        
+        // Save to Firebase and update shared state
+        await firebaseDataService.saveBudget(projectId, updatedBudget);
+        dispatch({ type: 'SET_BUDGET', payload: updatedBudget });
+        console.log('✅ Budget recalculated and updated after material/equipment change', updatedBudget);
+      } catch (error: any) {
+        console.error('Error recalculating budget:', error);
+      }
+    }, 200); // Delay to ensure state is updated after dispatch
+  };
+
   const addMaterial = async (material: Omit<Material, 'id'>) => {
     try {
       const newMaterial = await firebaseDataService.addMaterial(projectId, material);
       dispatch({ type: 'ADD_MATERIAL', payload: newMaterial as Material });
+      // Trigger budget recalculation after material add
+      setTimeout(() => recalculateBudget(), 100);
     } catch (error: any) {
       console.error('Error adding material:', error);
       throw error;
@@ -375,6 +469,8 @@ export function ProjectDataProvider({
     try {
       await firebaseDataService.updateMaterial(id, updates);
       dispatch({ type: 'UPDATE_MATERIAL', payload: { id, updates } });
+      // Trigger budget recalculation after material update
+      setTimeout(() => recalculateBudget(), 100);
     } catch (error: any) {
       console.error('Error updating material:', error);
       throw error;
@@ -425,6 +521,8 @@ export function ProjectDataProvider({
     try {
       const newEquipment = await firebaseDataService.addEquipment(projectId, equipment);
       dispatch({ type: 'ADD_EQUIPMENT', payload: newEquipment as Equipment });
+      // Trigger budget recalculation after equipment add
+      setTimeout(() => recalculateBudget(), 100);
     } catch (error: any) {
       console.error('Error adding equipment:', error);
       throw error;
@@ -435,6 +533,8 @@ export function ProjectDataProvider({
     try {
       await firebaseDataService.updateEquipment(id, updates);
       dispatch({ type: 'UPDATE_EQUIPMENT', payload: { id, updates } });
+      // Trigger budget recalculation after equipment update
+      setTimeout(() => recalculateBudget(), 100);
     } catch (error: any) {
       console.error('Error updating equipment:', error);
       throw error;

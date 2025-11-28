@@ -12,7 +12,8 @@ import {
   Modal,
   Badge,
   List,
-  Divider 
+  Divider,
+  Surface
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';

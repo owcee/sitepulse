@@ -207,7 +207,7 @@ export const BudgetChart: React.FC<BudgetChartProps> = ({ onPress, budgetData: p
       color: [
         '#FF9800', '#2196F3', '#4CAF50', '#F44336', '#9C27B0'
       ][index % 5],
-      legendFontColor: '#7F7F7F',
+      legendFontColor: '#FFFFFF',
       legendFontSize: 12,
     }));
 
@@ -246,11 +246,14 @@ export const BudgetChart: React.FC<BudgetChartProps> = ({ onPress, budgetData: p
             height={180}
             chartConfig={{
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+              labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+              strokeWidth: 2,
             }}
             accessor="population"
             backgroundColor={theme.colors.surface}
             paddingLeft="15"
             absolute
+            hasLegend={true}
           />
         </Card.Content>
       </Card>

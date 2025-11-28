@@ -75,6 +75,26 @@ service cloud.firestore {
       allow delete: if false;
     }
     
+    // Equipment Borrow Requests - workers create, engineers approve/reject, workers can update for usage reporting and return
+    match /equipment_borrow_requests/{requestId} {
+      // Create: any authenticated user can create (application validates workerId)
+      allow create: if isAuthenticated();
+      // Read: workers can read their own, engineers can read all
+      allow read: if isAuthenticated() && (
+        resource.data.workerId == request.auth.uid || 
+        isEngineer()
+      );
+      // List: authenticated users can list (queries will filter by projectId/workerId)
+      allow list: if isAuthenticated();
+      // Update: engineers can approve/reject, workers can update their own
+      allow update: if isAuthenticated() && (
+        isEngineer() || 
+        resource.data.workerId == request.auth.uid
+      );
+      // Delete: not allowed
+      allow delete: if false;
+    }
+    
     // Worker Assignments - engineers create, workers accept/reject
     match /worker_assignments/{workerId} {
       allow create: if isEngineer();
