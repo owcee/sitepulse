@@ -215,21 +215,21 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'task_approval':
-        return 'checkmark-circle';
+        return 'check-circle';
       case 'task_rejection':
         return 'close-circle';
       case 'delay_warning':
-        return 'alert-circle';
+        return 'alert';
       case 'resource_alert':
-        return 'warning';
+        return 'alert';
       case 'chat_message':
-        return 'chatbubble';
+        return 'message';
       case 'worker_request':
-        return 'person-add';
+        return 'account-plus';
       case 'system':
-        return 'settings';
+        return 'cog';
       default:
-        return 'notifications';
+        return 'bell';
     }
   };
 

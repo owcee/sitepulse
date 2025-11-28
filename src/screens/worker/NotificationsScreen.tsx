@@ -321,19 +321,19 @@ export default function NotificationsScreen() {
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'task':
-        return 'checkmark-circle';
+        return 'check-circle';
       case 'safety':
-        return 'warning';
+        return 'alert';
       case 'weather':
-        return 'rainy';
+        return 'weather-pouring';
       case 'system':
-        return 'settings';
+        return 'cog';
       case 'message':
-        return 'chatbubble';
+        return 'message';
       case 'project_assignment':
-        return 'briefcase';
+        return 'briefcase-outline';
       default:
-        return 'notifications';
+        return 'bell';
     }
   };
 

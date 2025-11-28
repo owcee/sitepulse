@@ -248,10 +248,11 @@ export default function WorkerTasksScreen() {
   const renderTaskCard = (task: FirebaseTask) => {
     const verificationStatus = getVerificationStatus(task);
     const daysUntilDue = getDaysUntilDue(task.planned_end_date);
-    const isOverdue = daysUntilDue < 0;
-    const isDueSoon = daysUntilDue <= 2 && daysUntilDue >= 0;
     const isCompleted = task.status === 'completed';
     const isInProgress = task.status === 'in_progress';
+    // Only show border indicators for tasks that are not completed
+    const isOverdue = !isCompleted && daysUntilDue < 0;
+    const isDueSoon = !isCompleted && daysUntilDue <= 2 && daysUntilDue >= 0;
     
     // For completed tasks, use View instead of TouchableOpacity
     const CardWrapper = isCompleted ? View : TouchableOpacity;
