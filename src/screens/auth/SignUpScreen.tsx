@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, Image, ScrollView } from 'react-native';
 import { 
   TextInput, 
   Button, 
@@ -113,11 +113,19 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Logo and Title */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logo}>🏗️</Text>
+            <Image 
+              source={require('../../../assets/sitepulse-logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Title style={styles.title}>Join SitePulse</Title>
           <Paragraph style={styles.subtitle}>
@@ -221,7 +229,7 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
             </Button>
           </Card.Content>
         </Card>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -231,35 +239,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  content: {
+  scrollView: {
     flex: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
+  },
+  scrollContent: {
+    padding: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: spacing.md,
   },
-  logo: {
-    fontSize: 40,
+  logoContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
   },
   title: {
-    fontSize: fontSizes.xxxl,
+    fontSize: fontSizes.xxl,
     fontWeight: 'bold',
     color: theme.colors.primary,
     marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
   },
@@ -270,35 +283,36 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     color: theme.colors.text,
+    fontSize: fontSizes.xl,
   },
   roleSection: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   roleLabel: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.sm,
     fontWeight: '500',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     color: theme.colors.text,
   },
   roleButtons: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   input: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     backgroundColor: theme.colors.surface,
   },
   signUpButton: {
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
   signUpButtonContent: {
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   backButton: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   gmailNotice: {
     backgroundColor: 'rgba(76, 175, 80, 0.2)',
