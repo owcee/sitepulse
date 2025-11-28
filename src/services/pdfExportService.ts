@@ -97,10 +97,11 @@ function generateBudgetHTML(
 
   // Group logs by category for summary
   const categorySummary = budgetLogs.reduce((acc, log) => {
-    if (!acc[log.category]) {
-      acc[log.category] = 0;
+    const category = log.category || 'Other';
+    if (!acc[category]) {
+      acc[category] = 0;
     }
-    acc[log.category] += log.amount;
+    acc[category] += log.amount || 0;
     return acc;
   }, {} as Record<string, number>);
 
@@ -116,26 +117,45 @@ function generateBudgetHTML(
       </tr>
     `)
     .join('');
+  
+  // If no category rows, show a message
+  const categoryTableContent = categoryRows || '<tr><td colspan="2" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
 
-  // Generate detailed logs HTML
+  // Generate detailed logs HTML - sort by date descending
   const logRows = budgetLogs
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .map((log) => `
+    .filter(log => log && log.date && log.amount) // Filter out invalid logs
+    .sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA; // Descending order (newest first)
+    })
+    .map((log) => {
+      const logDate = log.date ? new Date(log.date).toLocaleDateString('en-US') : 'N/A';
+      const category = log.category || 'Other';
+      const description = log.description || 'No description';
+      const amount = log.amount || 0;
+      const addedBy = log.addedBy || 'Engineer';
+      
+      return `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">
-          ${new Date(log.date).toLocaleDateString('en-US')}
+          ${logDate}
         </td>
-        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${log.category}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${log.description}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${category}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${description}</td>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; font-weight: 600;">
-          ₱${log.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          ₱${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </td>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
-          ${log.addedBy}
+          ${addedBy}
         </td>
       </tr>
-    `)
+    `;
+    })
     .join('');
+  
+  // If no log rows, show a message
+  const logTableContent = logRows || '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
 
   // HTML Template
   return `
@@ -343,7 +363,7 @@ function generateBudgetHTML(
             </tr>
           </thead>
           <tbody>
-            ${categoryRows || '<tr><td colspan="2" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>'}
+            ${categoryTableContent}
           </tbody>
         </table>
       </div>
@@ -362,7 +382,7 @@ function generateBudgetHTML(
             </tr>
           </thead>
           <tbody>
-            ${logRows || '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>'}
+            ${logTableContent}
           </tbody>
         </table>
       </div>

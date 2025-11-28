@@ -66,8 +66,8 @@ export default function BudgetLogsManagementPage() {
   // Calculate equipment and materials spent amounts from actual data
   const calculateEquipmentSpent = () => {
     return state.equipment.reduce((total, equip) => {
-      if (equip.type === 'rental' && equip.dailyRate) {
-        return total + equip.dailyRate;
+      if (equip.type === 'rental' && equip.rentalCost) {
+        return total + equip.rentalCost;
       }
       return total;
     }, 0);
@@ -81,13 +81,13 @@ export default function BudgetLogsManagementPage() {
 
   // Project info state
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
-    title: 'Construction Project',
-    description: 'Residential building construction with modern amenities',
+    title: '',
+    description: '',
   });
 
   const [projectInfoForm, setProjectInfoForm] = useState({
-    title: projectInfo.title,
-    description: projectInfo.description,
+    title: '',
+    description: '',
   });
 
   // Load project info from Firestore
@@ -413,26 +413,28 @@ export default function BudgetLogsManagementPage() {
     try {
       setIsExporting(true);
       
-      // Convert budget categories to budget logs format
-      const budgetLogs = state.budgetLogs.map(log => ({
-        id: log.id,
-        category: log.category,
-        amount: log.amount,
-        description: log.description,
-        date: log.date,
-        addedBy: log.addedBy || 'Engineer'
-      }));
+      // Use actual budget logs from state - filter only expenses
+      const budgetLogs = state.budgetLogs
+        .filter(log => log.type === 'expense') // Only include expenses
+        .map(log => ({
+          id: log.id,
+          category: log.category.charAt(0).toUpperCase() + log.category.slice(1), // Capitalize category name
+          amount: log.amount,
+          description: log.description,
+          date: log.date,
+          addedBy: 'Engineer' // Default value since BudgetLog doesn't have addedBy field
+        }));
 
-      // Project info
-      const projectInfo = {
-        name: 'Construction Project', // Replace with actual project name if available
-        description: 'Budget report for all project expenses',
+      // Project info from loaded project data
+      const pdfProjectInfo = {
+        name: projectInfo.title || 'Construction Project',
+        description: projectInfo.description || 'Budget report for all project expenses',
         totalBudget: budget.totalBudget,
         contingencyPercentage: budget.contingencyPercentage
       };
 
       // Export to PDF
-      await exportBudgetToPDF(budgetLogs, projectInfo, budget.totalSpent);
+      await exportBudgetToPDF(budgetLogs, pdfProjectInfo, budget.totalSpent);
       
     } catch (error) {
       console.error('Export error:', error);
@@ -477,22 +479,35 @@ export default function BudgetLogsManagementPage() {
       </View>
 
       {/* Project Information Card */}
-      <Card style={styles.projectInfoCard}>
-        <Card.Content>
-          <View style={styles.projectInfoHeader}>
-            <View style={styles.projectInfoText}>
-              <Text style={styles.projectTitle}>{projectInfo.title}</Text>
-              <Text style={styles.projectDescription}>{projectInfo.description}</Text>
+      {loadingProjectInfo ? (
+        <Card style={styles.projectInfoCard}>
+          <Card.Content>
+            <View style={styles.projectInfoHeader}>
+              <View style={styles.projectInfoText}>
+                <Text style={styles.projectTitle}>Loading...</Text>
+                <Text style={styles.projectDescription}>Loading project information...</Text>
+              </View>
             </View>
-            <IconButton
-              icon="pencil"
-              size={20}
-              onPress={openProjectInfoModal}
-              iconColor={theme.colors.primary}
-            />
-          </View>
-        </Card.Content>
-      </Card>
+          </Card.Content>
+        </Card>
+      ) : (
+        <Card style={styles.projectInfoCard}>
+          <Card.Content>
+            <View style={styles.projectInfoHeader}>
+              <View style={styles.projectInfoText}>
+                <Text style={styles.projectTitle}>{projectInfo.title || 'No Project Name'}</Text>
+                <Text style={styles.projectDescription}>{projectInfo.description || 'No description'}</Text>
+              </View>
+              <IconButton
+                icon="pencil"
+                size={20}
+                onPress={openProjectInfoModal}
+                iconColor={theme.colors.primary}
+              />
+            </View>
+          </Card.Content>
+        </Card>
+      )}
 
       {/* Total Budget Overview */}
       <Card style={styles.totalBudgetCard}>
@@ -552,6 +567,8 @@ export default function BudgetLogsManagementPage() {
             onPress={() => setCategoriesModalVisible(true)}
             style={styles.viewCategoriesButton}
             contentStyle={styles.viewCategoriesButtonContent}
+            labelStyle={styles.viewCategoriesButtonLabel}
+            compact
           >
             View Categories ({budget.categories.length})
           </Button>
@@ -561,17 +578,11 @@ export default function BudgetLogsManagementPage() {
             onPress={openAddModal}
             style={styles.addCategoryButton}
             contentStyle={styles.addCategoryButtonContent}
-            labelStyle={{ color: 'white' }}
+            labelStyle={styles.addCategoryButtonLabel}
+            compact
           >
-            Add Category
+            Add New Budget Category
           </Button>
-        </View>
-
-        <View style={styles.infoSection}>
-          <Text style={styles.infoTitle}>Budget Summary</Text>
-          <Text style={styles.infoText}>
-            View and manage your budget categories including equipment and materials which are automatically synced with your inventory.
-          </Text>
         </View>
       </ScrollView>
 
@@ -982,41 +993,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   viewCategoriesButton: {
-    flex: 2,
+    flex: 1,
     backgroundColor: theme.colors.primary,
   },
   viewCategoriesButtonContent: {
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  viewCategoriesButtonLabel: {
+    fontSize: 10,
+    color: 'white',
   },
   addCategoryButton: {
     flex: 1,
     backgroundColor: theme.colors.primary,
   },
   addCategoryButtonContent: {
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  addCategoryButtonLabel: {
+    fontSize: 10,
+    color: 'white',
   },
 
   // Info Section
   scrollView: {
     flex: 1,
-  },
-  infoSection: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
-  },
-  infoTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: spacing.sm,
-  },
-  infoText: {
-    fontSize: fontSizes.md,
-    color: theme.colors.onSurfaceVariant,
-    lineHeight: 22,
   },
   categoryCard: {
     marginBottom: spacing.md,

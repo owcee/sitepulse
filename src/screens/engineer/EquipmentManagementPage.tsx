@@ -39,16 +39,14 @@ export default function EquipmentManagementPage() {
     name: '',
     category: '',
     type: 'owned' as 'owned' | 'rental',
-    condition: 'good' as 'excellent' | 'good' | 'fair' | 'needs_repair',
+    condition: 'good' as 'good' | 'fair' | 'needs_repair',
     status: 'available' as 'available' | 'in_use' | 'maintenance',
-    dailyRate: '',
-    weeklyRate: '',
-    monthlyRate: '',
+    rentalCost: '',
   });
 
   const equipmentTypes = [
-    'Excavator', 'Bulldozer', 'Crane', 'Loader', 'Dump Truck', 'Concrete Mixer',
-    'Scaffolding', 'Generator', 'Compressor', 'Welding Equipment', 'Power Tools', 'Other'
+    'Other', 'Excavator', 'Bulldozer', 'Crane', 'Loader', 'Dump Truck', 'Concrete Mixer',
+    'Scaffolding', 'Generator', 'Compressor', 'Welding Equipment', 'Power Tools'
   ];
 
   const resetForm = () => {
@@ -56,11 +54,9 @@ export default function EquipmentManagementPage() {
       name: '',
       category: '',
       type: 'owned',
-      condition: 'good',
+      condition: 'good' as 'good' | 'fair' | 'needs_repair',
       status: 'available',
-      dailyRate: '',
-      weeklyRate: '',
-      monthlyRate: '',
+      rentalCost: '',
     });
     setEditingEquipment(null);
   };
@@ -77,9 +73,7 @@ export default function EquipmentManagementPage() {
       type: equip.type,
       condition: equip.condition,
       status: equip.status,
-      dailyRate: equip.dailyRate?.toString() || '',
-      weeklyRate: equip.weeklyRate?.toString() || '',
-      monthlyRate: equip.monthlyRate?.toString() || '',
+      rentalCost: equip.rentalCost?.toString() || '',
     });
     setEditingEquipment(equip);
     setModalVisible(true);
@@ -91,10 +85,9 @@ export default function EquipmentManagementPage() {
       return;
     }
 
-    // If rental, at least one rate must be provided
-    if (formData.type === 'rental' && 
-        !formData.dailyRate && !formData.weeklyRate && !formData.monthlyRate) {
-      Alert.alert('Error', 'For rental equipment, please provide at least one rate (daily, weekly, or monthly)');
+    // If rental, rental cost must be provided
+    if (formData.type === 'rental' && !formData.rentalCost) {
+      Alert.alert('Error', 'For rental equipment, please provide the rental cost');
       return;
     }
 
@@ -107,14 +100,8 @@ export default function EquipmentManagementPage() {
       dateAcquired: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
     };
 
-    if (formData.dailyRate) {
-      equipmentData.dailyRate = parseFloat(formData.dailyRate);
-    }
-    if (formData.weeklyRate) {
-      equipmentData.weeklyRate = parseFloat(formData.weeklyRate);
-    }
-    if (formData.monthlyRate) {
-      equipmentData.monthlyRate = parseFloat(formData.monthlyRate);
+    if (formData.type === 'rental' && formData.rentalCost) {
+      equipmentData.rentalCost = parseFloat(formData.rentalCost);
     }
 
     if (editingEquipment) {
@@ -162,8 +149,6 @@ export default function EquipmentManagementPage() {
 
   const getConditionColor = (condition: any) => {
     switch (condition) {
-      case 'excellent':
-        return constructionColors.complete;
       case 'good':
         return constructionColors.inProgress;
       case 'fair':
@@ -175,18 +160,6 @@ export default function EquipmentManagementPage() {
     }
   };
 
-  const getPreferredRentalRate = (equip: any) => {
-    if (equip.dailyRate) {
-      return { label: 'Daily', value: equip.dailyRate };
-    }
-    if (equip.weeklyRate) {
-      return { label: 'Weekly', value: equip.weeklyRate };
-    }
-    if (equip.monthlyRate) {
-      return { label: 'Monthly', value: equip.monthlyRate };
-    }
-    return null;
-  };
 
   const ownedEquipment = equipment.filter(e => e.type === 'owned');
   const rentalEquipment = equipment.filter(e => e.type === 'rental');
@@ -290,20 +263,13 @@ export default function EquipmentManagementPage() {
                     </Chip>
                   </View>
 
-                  {/* Rental Rates */}
+                  {/* Rental Cost */}
                   {equip.type === 'rental' && (
                     <View style={styles.ratesContainer}>
-                      <Text style={styles.ratesTitle}>Rental Rate:</Text>
-                      {(() => {
-                        const preferredRate = getPreferredRentalRate(equip);
-                        return preferredRate ? (
-                          <Text style={styles.rateText}>
-                            {preferredRate.label}: ₱{preferredRate.value.toLocaleString()}
-                          </Text>
-                        ) : (
-                          <Text style={styles.rateText}>N/A</Text>
-                        );
-                      })()}
+                      <Text style={styles.ratesTitle}>Rental Cost:</Text>
+                      <Text style={styles.rateText}>
+                        ₱{equip.rentalCost ? equip.rentalCost.toLocaleString() : 'N/A'}
+                      </Text>
                     </View>
                   )}
 
@@ -358,7 +324,10 @@ export default function EquipmentManagementPage() {
                         key={cat}
                         selected={formData.category === cat}
                         onPress={() => setFormData(prev => ({ ...prev, category: cat }))}
-                        style={styles.typeChip}
+                        style={[
+                          styles.typeChip,
+                          formData.category === cat ? styles.selectedTypeChip : styles.unselectedTypeChip
+                        ]}
                         textStyle={formData.category === cat ? styles.selectedChipText : styles.chipText}
                       >
                         {cat}
@@ -388,39 +357,19 @@ export default function EquipmentManagementPage() {
                 />
               </View>
 
-              {/* Rental Rates (only show if rental) */}
+              {/* Rental Cost (only show if rental) */}
               {formData.type === 'rental' && (
                 <View style={styles.ratesSection}>
-                  <Text style={styles.ratesLabel}>Rental Rates (at least one required)</Text>
-                  <View style={styles.ratesInputs}>
-                    <TextInput
-                      mode="outlined"
-                      label="Daily Rate (₱)"
-                      value={formData.dailyRate}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, dailyRate: text }))}
-                      keyboardType="numeric"
-                      style={[styles.input, styles.rateInput]}
-                      left={<TextInput.Icon icon="currency-usd" />}
-                    />
-                    <TextInput
-                      mode="outlined"
-                      label="Weekly Rate (₱)"
-                      value={formData.weeklyRate}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, weeklyRate: text }))}
-                      keyboardType="numeric"
-                      style={[styles.input, styles.rateInput]}
-                      left={<TextInput.Icon icon="currency-usd" />}
-                    />
-                    <TextInput
-                      mode="outlined"
-                      label="Monthly Rate (₱)"
-                      value={formData.monthlyRate}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, monthlyRate: text }))}
-                      keyboardType="numeric"
-                      style={[styles.input, styles.rateInput]}
-                      left={<TextInput.Icon icon="currency-usd" />}
-                    />
-                  </View>
+                  <TextInput
+                    mode="outlined"
+                    label="Rental Cost (₱) *"
+                    value={formData.rentalCost}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, rentalCost: text }))}
+                    keyboardType="numeric"
+                    style={styles.input}
+                    left={<TextInput.Icon icon="cash" />}
+                    textColor={theme.colors.text}
+                  />
                 </View>
               )}
 
@@ -430,9 +379,9 @@ export default function EquipmentManagementPage() {
                   value={formData.status}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, status: value as any }))}
                   buttons={[
-                    { value: 'available', label: 'Available' },
-                    { value: 'in_use', label: 'In Use' },
-                    { value: 'maintenance', label: 'Maintenance' },
+                    { value: 'available', label: 'Available', labelStyle: styles.segmentedButtonLabel },
+                    { value: 'in_use', label: 'In Use', labelStyle: styles.segmentedButtonLabel },
+                    { value: 'maintenance', label: 'Maintenance', labelStyle: styles.segmentedButtonLabel },
                   ]}
                   style={styles.statusButtons}
                 />
@@ -440,17 +389,18 @@ export default function EquipmentManagementPage() {
 
               <View style={styles.conditionSection}>
                 <Text style={styles.conditionLabel}>Condition</Text>
-                <SegmentedButtons
-                  value={formData.condition}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, condition: value as any }))}
-                  buttons={[
-                    { value: 'excellent', label: 'Excellent' },
-                    { value: 'good', label: 'Good' },
-                    { value: 'fair', label: 'Fair' },
-                    { value: 'needs_repair', label: 'Needs Repair' },
-                  ]}
-                  style={styles.conditionButtons}
-                />
+                <View style={styles.conditionButtonsContainer}>
+                  <SegmentedButtons
+                    value={formData.condition}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, condition: value as any }))}
+                    buttons={[
+                      { value: 'good', label: 'Good', labelStyle: styles.segmentedButtonLabel },
+                      { value: 'fair', label: 'Fair', labelStyle: styles.segmentedButtonLabel },
+                      { value: 'needs_repair', label: 'Needs Repair', labelStyle: styles.segmentedButtonLabel },
+                    ]}
+                    style={styles.conditionButtons}
+                  />
+                </View>
               </View>
 
               <View style={styles.modalActions}>
@@ -586,8 +536,8 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
   },
   chipText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: theme.colors.text,
+    fontWeight: 'normal',
     fontSize: fontSizes.xs,
   },
   detailRow: {
@@ -706,6 +656,15 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.xs,
     marginVertical: spacing.xs,
   },
+  unselectedTypeChip: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  selectedTypeChip: {
+    backgroundColor: theme.colors.primaryContainer,
+    borderWidth: 0,
+  },
   customTypeInput: {
     marginTop: spacing.sm,
   },
@@ -759,8 +718,16 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.sm,
   },
+  conditionButtonsContainer: {
+    width: '100%',
+    overflow: 'hidden',
+  },
   conditionButtons: {
     marginBottom: spacing.md,
+  },
+  segmentedButtonLabel: {
+    fontSize: 10,
+    paddingHorizontal: spacing.xs,
   },
   modalActions: {
     flexDirection: 'row',

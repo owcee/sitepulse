@@ -31,8 +31,8 @@ export default function ResourcesScreen() {
 
   // Calculate budget data matching Budget Management page
   const equipmentSpent = state.equipment.reduce((total, equip) => {
-    if (equip.type === 'rental' && equip.dailyRate) {
-      return total + equip.dailyRate;
+    if (equip.type === 'rental' && equip.rentalCost) {
+      return total + equip.rentalCost;
     }
     return total;
   }, 0);
@@ -105,7 +105,7 @@ export default function ResourcesScreen() {
                 styles.usageChip, 
                 { backgroundColor: budgetUsagePercent > 0.8 ? constructionColors.urgent : constructionColors.complete }
               ]}
-              textStyle={{ color: 'white' }}
+              textStyle={styles.usageChipText}
             >
               {Math.round(budgetUsagePercent * 100)}% Used
             </Chip>
@@ -358,16 +358,16 @@ export default function ResourcesScreen() {
                       
                       <Chip 
                         style={[styles.lowStockChip, { backgroundColor: statusColor }]}
-                        textStyle={{ color: 'white', fontSize: 12 }}
+                        textStyle={styles.statusChipText}
                       >
                         {item.status.replace('_', ' ').toUpperCase()}
                       </Chip>
                     </View>
 
                     <View style={styles.itemFooter}>
-                      {item.type === 'rental' && item.dailyRate && (
+                      {item.type === 'rental' && item.rentalCost && (
                         <Paragraph style={styles.itemValue}>
-                          Daily Rate: ₱{item.dailyRate.toLocaleString()}
+                          Rental Cost: ₱{item.rentalCost.toLocaleString()}
                         </Paragraph>
                       )}
                       <Paragraph style={styles.itemUnit}>
@@ -517,6 +517,14 @@ const styles = StyleSheet.create({
   },
   usageChip: {
     height: 32,
+    minWidth: 100,
+    paddingHorizontal: spacing.sm,
+  },
+  usageChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: spacing.xs,
   },
   budgetSummary: {
     flexDirection: 'row',
@@ -681,9 +689,16 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
   },
   lowStockChip: {
-    minWidth: 50,
-    height: 24,
+    minWidth: 90,
+    height: 30,
     alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+  },
+  statusChipText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: spacing.xs,
   },
   stockInfo: {
     marginBottom: spacing.sm,

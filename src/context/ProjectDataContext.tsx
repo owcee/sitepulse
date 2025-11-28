@@ -32,9 +32,7 @@ export interface Equipment {
   type: 'owned' | 'rental';
   category: string;
   condition: 'excellent' | 'good' | 'fair' | 'needs_repair';
-  dailyRate?: number;
-  weeklyRate?: number;
-  monthlyRate?: number;
+  rentalCost?: number;
   status: 'available' | 'in_use' | 'maintenance';
   dateAcquired: string;
 }

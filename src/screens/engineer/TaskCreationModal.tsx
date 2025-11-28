@@ -501,14 +501,14 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
                 <Chip 
                   icon="format-list-bulleted" 
                   style={styles.subtaskCountChip}
-                  textStyle={{ fontSize: 12 }}
+                  textStyle={styles.badgeText}
                 >
                   {categoryData.subtasks.length} tasks
                 </Chip>
                 <Chip 
                   icon="brain" 
                   style={[styles.cnnCountChip, { backgroundColor: '#9C27B0' }]}
-                  textStyle={{ color: 'white', fontSize: 12 }}
+                  textStyle={styles.badgeTextWhite}
                 >
                   {categoryData.subtasks.filter(s => s.cnnEligible).length} CNN
                 </Chip>
@@ -890,10 +890,23 @@ const styles = StyleSheet.create({
   },
   subtaskCountChip: {
     backgroundColor: theme.colors.primaryContainer,
-    height: 28,
+    height: 32,
+    paddingHorizontal: spacing.xs,
   },
   cnnCountChip: {
-    height: 28,
+    height: 32,
+    paddingHorizontal: spacing.xs,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: spacing.xs,
+  },
+  badgeTextWhite: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: spacing.xs,
   },
   subtaskCard: {
     marginBottom: spacing.sm,

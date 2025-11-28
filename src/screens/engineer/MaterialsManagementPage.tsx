@@ -270,80 +270,94 @@ export default function MaterialsManagementPage() {
               {editingMaterial ? 'Edit Material' : 'Add New Material'}
             </Text>
 
-            <TextInput
-              mode="outlined"
-              label="Material Name *"
-              value={formData.name}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
-              style={styles.input}
-            />
-
-            <View style={styles.inputRow}>
+            <ScrollView 
+              style={styles.modalScrollView}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
               <TextInput
                 mode="outlined"
-                label="Quantity *"
-                value={formData.quantity}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, quantity: text }))}
-                keyboardType="numeric"
-                style={[styles.input, styles.inputHalf]}
+                label="Material Name *"
+                value={formData.name}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
+                style={styles.input}
+                textColor={theme.colors.text}
               />
-              
-              <View style={styles.unitSelector}>
-                <Text style={styles.unitLabel}>Unit</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.unitChips}>
-                    {units.map((unit) => (
-                      <Chip
-                        key={unit}
-                        selected={formData.unit === unit}
-                        onPress={() => setFormData(prev => ({ ...prev, unit }))}
-                        style={styles.unitChip}
-                        textStyle={formData.unit === unit ? styles.selectedChipText : styles.chipText}
-                      >
-                        {unit}
-                      </Chip>
-                    ))}
-                  </View>
-                </ScrollView>
+
+              <View style={styles.inputRow}>
+                <TextInput
+                  mode="outlined"
+                  label="Quantity *"
+                  value={formData.quantity}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, quantity: text }))}
+                  keyboardType="numeric"
+                  style={[styles.input, styles.inputHalf]}
+                  textColor={theme.colors.text}
+                />
+                
+                <View style={styles.unitSelector}>
+                  <Text style={styles.unitLabel}>Unit</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.unitChips}>
+                      {units.map((unit) => (
+                        <Chip
+                          key={unit}
+                          selected={formData.unit === unit}
+                          onPress={() => setFormData(prev => ({ ...prev, unit }))}
+                          style={styles.unitChip}
+                          textStyle={formData.unit === unit ? styles.selectedChipText : styles.chipText}
+                        >
+                          {unit}
+                        </Chip>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
               </View>
-            </View>
 
-            <TextInput
-              mode="outlined"
-              label="Price per Unit (₱) *"
-              value={formData.pricePerUnit}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, pricePerUnit: text }))}
-              keyboardType="numeric"
-              style={styles.input}
-              left={<TextInput.Icon icon="currency-usd" />}
-            />
+              <TextInput
+                mode="outlined"
+                label="Price per Unit (₱) *"
+                value={formData.pricePerUnit}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, pricePerUnit: text }))}
+                keyboardType="numeric"
+                style={styles.input}
+                left={<TextInput.Icon icon="currency-usd" />}
+                textColor={theme.colors.text}
+              />
 
-            <TextInput
-              mode="outlined"
-              label="Supplier (Optional)"
-              value={formData.supplier}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, supplier: text }))}
-              style={styles.input}
-            />
+              <TextInput
+                mode="outlined"
+                label="Supplier (Optional)"
+                value={formData.supplier}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, supplier: text }))}
+                style={styles.input}
+                textColor={theme.colors.text}
+              />
 
-
-
-            {formData.quantity && formData.pricePerUnit && (
-              <View style={styles.costPreview}>
-                <Text style={styles.costPreviewText}>
-                  Total Cost: ₱{(parseFloat(formData.quantity) * parseFloat(formData.pricePerUnit)).toFixed(2)}
-                </Text>
-              </View>
-            )}
+              {formData.quantity && formData.pricePerUnit && (
+                <View style={styles.costPreview}>
+                  <Text style={styles.costPreviewText}>
+                    Total Cost: ₱{(parseFloat(formData.quantity) * parseFloat(formData.pricePerUnit)).toFixed(2)}
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
 
             <View style={styles.modalActions}>
-              <Button onPress={() => setModalVisible(false)}>Cancel</Button>
+              <Button 
+                onPress={() => setModalVisible(false)}
+                style={styles.modalActionButton}
+              >
+                Cancel
+              </Button>
               <Button 
                 mode="contained" 
                 onPress={saveMaterial}
                 buttonColor={constructionColors.complete}
+                style={styles.modalActionButton}
               >
-                {editingMaterial ? 'Update' : 'Add'} Material
+                {editingMaterial ? 'Update' : 'Add'}
               </Button>
             </View>
           </Surface>
@@ -512,7 +526,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '90%',
+    maxHeight: '95%',
+  },
+  modalScrollView: {
+    maxHeight: 450,
+    marginBottom: spacing.sm,
+  },
+  modalScrollContent: {
+    paddingBottom: spacing.sm,
   },
   modalTitle: {
     fontSize: fontSizes.lg,
@@ -574,10 +595,15 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#2A2A2A',
   },
   modalActionButton: {
     flex: 1,
     marginHorizontal: spacing.xs,
+    minWidth: 120,
   },
 });
 

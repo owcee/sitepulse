@@ -453,11 +453,14 @@ export default function WorkersManagementPage() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Available Workers</Text>
               <Button
-                mode="contained"
+                mode="outlined"
                 onPress={() => setAssignModalVisible(true)}
                 disabled={availableWorkers.length === 0}
                 style={styles.assignButton}
+                labelStyle={styles.assignButtonLabel}
+                contentStyle={styles.assignButtonContent}
                 icon="account-plus"
+                compact
               >
                 Assign Workers
               </Button>
@@ -637,11 +640,10 @@ export default function WorkersManagementPage() {
                           onPress={() => toggleTaskSelection(task.id)}
                         />
                       )}
-                      onPress={() => toggleTaskSelection(task.id)}
-                      style={[
-                        styles.taskItem,
-                        selectedTasks.has(task.id) && styles.selectedTaskItem
-                      ]}
+                      style={styles.taskItem}
+                      titleStyle={styles.taskItemTitle}
+                      descriptionStyle={styles.taskItemDescription}
+                      rippleColor="transparent"
                     />
                     {index < availableTasks.length - 1 && <Divider />}
                   </View>
@@ -663,7 +665,7 @@ export default function WorkersManagementPage() {
                 disabled={assigningToTasks}
                 style={styles.assignActionButton}
               >
-                {assigningToTasks ? 'Updating...' : 'Update Assignment'}
+                {assigningToTasks ? 'Updating...' : 'Update'}
               </Button>
             </View>
           </Surface>
@@ -753,28 +755,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
     overflow: 'visible',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   sectionTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: theme.colors.text,
+    flexShrink: 1,
+    marginRight: spacing.sm,
   },
   countChip: {
     backgroundColor: theme.colors.primaryContainer,
   },
   assignButton: {
-    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    height: 32,
+    paddingHorizontal: spacing.xs,
+    minWidth: 140,
+  },
+  assignButtonContent: {
+    height: 32,
+    paddingHorizontal: spacing.xs,
+  },
+  assignButtonLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: theme.colors.text,
+    paddingHorizontal: spacing.xs,
   },
   workerAvatar: {
     marginRight: spacing.md,
   },
   statusChip: {
-    height: 28,
+    height: 32,
+    paddingHorizontal: spacing.xs,
   },
   statusText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: fontSizes.xs,
+    fontSize: 11,
+    paddingHorizontal: spacing.xs,
   },
   workerCardSurface: {
     padding: spacing.sm,
@@ -812,13 +833,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
+    marginTop: spacing.xl,
   },
   modalSurface: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
     width: '90%',
     maxWidth: 500,
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -834,7 +856,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   modalContent: {
-    maxHeight: 400,
+    maxHeight: 500,
   },
   modalScrollContent: {
     padding: spacing.md,
@@ -896,8 +918,12 @@ const styles = StyleSheet.create({
   },
   taskItem: {
     paddingVertical: spacing.sm,
+    backgroundColor: theme.colors.background,
   },
-  selectedTaskItem: {
-    backgroundColor: theme.colors.primaryContainer + '20',
+  taskItemTitle: {
+    color: theme.colors.text,
+  },
+  taskItemDescription: {
+    color: theme.colors.onSurfaceVariant,
   },
 });
