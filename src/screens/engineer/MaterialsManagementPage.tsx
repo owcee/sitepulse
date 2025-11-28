@@ -18,6 +18,8 @@ import {
   Portal,
   Modal,
   Surface,
+  Dialog,
+  Paragraph,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +34,10 @@ export default function MaterialsManagementPage() {
   const materials = state.materials;
   const [modalVisible, setModalVisible] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<any>(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogMessage, setDialogMessage] = useState('');
+  const [isError, setIsError] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -74,12 +80,27 @@ export default function MaterialsManagementPage() {
 
   const saveMaterial = () => {
     if (!formData.name.trim() || !formData.quantity || !formData.pricePerUnit) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      setDialogTitle('Error');
+      setDialogMessage('Please fill in all required fields');
+      setIsError(true);
+      setShowDialog(true);
       return;
     }
 
     const quantity = parseFloat(formData.quantity);
     const pricePerUnit = parseFloat(formData.pricePerUnit);
+
+    // Prevent decreasing quantity when editing
+    if (editingMaterial) {
+      const currentQuantity = editingMaterial.quantity || 0;
+      if (quantity < currentQuantity) {
+        setDialogTitle('Error');
+        setDialogMessage('Quantity cannot be decreased. You can only increase the quantity.');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+    }
 
     const materialData: Record<string, any> = {
       name: formData.name.trim(),
@@ -91,9 +112,11 @@ export default function MaterialsManagementPage() {
     };
 
     if (!editingMaterial) {
-      // Initial purchase quantity
+      // Initial purchase quantity - set totalBought to the initial quantity
       materialData.totalBought = quantity;
     }
+    // When editing, do NOT include totalBought in materialData
+    // This ensures totalBought is preserved and not updated when editing
 
     const supplierValue = formData.supplier.trim();
     if (supplierValue) {
@@ -104,32 +127,43 @@ export default function MaterialsManagementPage() {
 
     if (editingMaterial) {
       updateMaterial(editingMaterial.id, materialData);
-      Alert.alert('Success', 'Material updated successfully');
+      setDialogTitle('Success');
+      setDialogMessage('Material updated successfully');
+      setIsError(false);
+      setShowDialog(true);
     } else {
       addMaterial(materialData);
-      Alert.alert('Success', 'Material added successfully');
+      setDialogTitle('Success');
+      setDialogMessage('Material added successfully');
+      setIsError(false);
+      setShowDialog(true);
     }
     
     setModalVisible(false);
     resetForm();
   };
 
+  const [deleteMaterialId, setDeleteMaterialId] = useState<string | null>(null);
+  const [isDeleteConfirm, setIsDeleteConfirm] = useState(false);
+
   const handleDeleteMaterial = (materialId: string) => {
-    Alert.alert(
-      'Delete Material',
-      'Are you sure you want to delete this material?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteMaterialFromContext(materialId);
-            Alert.alert('Success', 'Material deleted successfully');
-          },
-        },
-      ]
-    );
+    setDeleteMaterialId(materialId);
+    setIsDeleteConfirm(true);
+    setDialogTitle('Delete Material');
+    setDialogMessage('Are you sure you want to delete this material?');
+    setIsError(false);
+    setShowDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (deleteMaterialId) {
+      deleteMaterialFromContext(deleteMaterialId);
+      setDeleteMaterialId(null);
+      setIsDeleteConfirm(false);
+      setDialogTitle('Success');
+      setDialogMessage('Material deleted successfully');
+      setIsError(false);
+    }
   };
 
   const totalCost = materials.reduce((sum, material) => sum + (material.quantity * material.price), 0);
@@ -211,11 +245,7 @@ export default function MaterialsManagementPage() {
                     <Text style={styles.detailLabel}>Status:</Text>
                     <Text style={styles.detailValue}>
                       <Text style={{ fontWeight: 'bold', color: constructionColors.complete }}>
-                        {material.quantity} available
-                      </Text>
-                      <Text style={{ color: theme.colors.onSurfaceVariant }}>
-                        {' / '}
-                        {material.totalBought || material.quantity} bought
+                        {material.quantity} available out of {material.totalBought || material.quantity}
                       </Text>
                     </Text>
                   </View>
@@ -228,7 +258,7 @@ export default function MaterialsManagementPage() {
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Total Cost:</Text>
                     <Text style={[styles.detailValue, styles.totalCost]}>
-                      ₱{(material.quantity * material.price).toFixed(2)}
+                      ₱{((material.totalBought || material.quantity) * material.price).toFixed(2)}
                     </Text>
                   </View>
                   {material.supplier && (
@@ -362,6 +392,63 @@ export default function MaterialsManagementPage() {
             </View>
           </Surface>
         </Modal>
+      </Portal>
+
+      {/* Dark Mode Dialog */}
+      <Portal>
+        <Dialog 
+          visible={showDialog} 
+          onDismiss={() => {
+            setShowDialog(false);
+            if (deleteMaterialId && dialogTitle !== 'Delete Material') {
+              setDeleteMaterialId(null);
+            }
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>{dialogTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            {isDeleteConfirm ? (
+              <>
+                <Button 
+                  onPress={() => {
+                    setShowDialog(false);
+                    setDeleteMaterialId(null);
+                    setIsDeleteConfirm(false);
+                  }}
+                  textColor={theme.colors.text}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onPress={() => {
+                    confirmDelete();
+                    // Keep dialog open to show success
+                  }}
+                  textColor={constructionColors.urgent}
+                >
+                  Delete
+                </Button>
+              </>
+            ) : (
+              <Button 
+                onPress={() => {
+                  setShowDialog(false);
+                  if (deleteMaterialId) {
+                    setDeleteMaterialId(null);
+                    setIsDeleteConfirm(false);
+                  }
+                }}
+                textColor={theme.colors.primary}
+              >
+                OK
+              </Button>
+            )}
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </SafeAreaView>
   );
@@ -591,6 +678,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: constructionColors.complete,
     textAlign: 'center',
+  },
+  dialog: {
+    backgroundColor: '#000000',
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+  },
+  dialogMessage: {
+    color: theme.colors.text,
   },
   modalActions: {
     flexDirection: 'row',

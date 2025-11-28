@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, ActivityIndicato
 import { 
   Modal,
   Portal,
+  Dialog,
   Card,
   Title,
   Paragraph,
@@ -171,6 +172,8 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
   const [startCalendarYear, setStartCalendarYear] = useState(new Date().getFullYear());
   const [endCalendarMonth, setEndCalendarMonth] = useState(new Date().getMonth());
   const [endCalendarYear, setEndCalendarYear] = useState(new Date().getFullYear());
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [successTaskName, setSuccessTaskName] = useState('');
 
   // UI state
   const [currentStep, setCurrentStep] = useState<'category' | 'subtask' | 'details'>('category');
@@ -292,11 +295,8 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
       onTaskCreated(createdTask);
       resetForm();
       onDismiss();
-      Alert.alert(
-        'Task Created',
-        `Task "${subtask?.label}" has been created and saved to Firestore.`,
-        [{ text: 'OK' }]
-      );
+      setSuccessTaskName(subtask?.label || 'Task');
+      setShowSuccessDialog(true);
     } catch (error: any) {
       setIsCreating(false);
       Alert.alert(
@@ -822,6 +822,25 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
             </View>
           </Surface>
         </Modal>
+
+        {/* Success Dialog */}
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => setShowSuccessDialog(false)}
+          style={styles.successDialog}
+        >
+          <Dialog.Title style={styles.successDialogTitle}>Task Created</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.successDialogMessage}>
+              Task "{successTaskName}" has been created.
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowSuccessDialog(false)} textColor={theme.colors.primary}>
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </Portal>
   );
@@ -1182,5 +1201,17 @@ const styles = StyleSheet.create({
   calendarDayTextToday: {
     color: theme.colors.primary,
     fontWeight: 'bold',
+  },
+  successDialog: {
+    backgroundColor: '#000000',
+  },
+  successDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  successDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
   },
 });

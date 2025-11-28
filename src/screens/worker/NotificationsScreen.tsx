@@ -194,7 +194,18 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleNotificationPress = (notification: Notification) => {
+  const handleNotificationPress = async (notification: Notification) => {
+    // Mark notification as read
+    try {
+      if (!notification.isRead) {
+        await markNotificationAsRead(notification.id);
+        // Remove from list immediately
+        setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+
     // Navigate to source based on notification type
     if (notification.type === 'task') {
       // @ts-ignore

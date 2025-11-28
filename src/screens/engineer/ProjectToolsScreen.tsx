@@ -22,6 +22,7 @@ import { useNavigation, NavigationProp } from '@react-navigation/native';
 
 import { TaskManagementChart, DelayPredictionChart, BudgetChart } from '../../components/ChartCards';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
+import { useProjectData } from '../../context/ProjectDataContext';
 import { getEngineerProjects } from '../../services/projectService';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -58,6 +59,7 @@ interface ProjectToolsScreenProps {
 
 export default function ProjectToolsScreen({ user, project, onLogout }: ProjectToolsScreenProps) {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { state } = useProjectData();
   const chartScrollRef = useRef<FlatList>(null);
   const [projectMenuVisible, setProjectMenuVisible] = useState(false);
   const [engineerProjects, setEngineerProjects] = useState<any[]>([]);
@@ -121,6 +123,52 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
     }
   };
 
+  // Get budget data from shared state (same as ResourcesScreen)
+  const budget = state.budget;
+  const calculateEquipmentSpent = () => {
+    return state.equipment.reduce((total, equip) => {
+      if (equip.type === 'rental' && equip.rentalCost) {
+        return total + equip.rentalCost;
+      }
+      return total;
+    }, 0);
+  };
+
+  const calculateMaterialsSpent = () => {
+    return state.materials.reduce((total, material) => {
+      // Use totalBought if available, otherwise use quantity
+      const quantity = material.totalBought || material.quantity;
+      return total + (quantity * material.price);
+    }, 0);
+  };
+
+  // Prepare budget data for BudgetChart
+  let budgetDataForChart;
+  if (budget) {
+    // Use budget from BudgetLogsManagementPage
+    budgetDataForChart = {
+      totalBudget: budget.totalBudget,
+      totalSpent: budget.totalSpent,
+      categories: budget.categories.map(cat => ({
+        name: cat.name,
+        allocatedAmount: cat.allocatedAmount,
+        spentAmount: cat.spentAmount,
+      })),
+    };
+  } else {
+    // Fallback: calculate from inventory
+    const equipmentSpent = calculateEquipmentSpent();
+    const materialsSpent = calculateMaterialsSpent();
+    budgetDataForChart = {
+      totalBudget: 250000,
+      totalSpent: equipmentSpent + materialsSpent,
+      categories: [
+        { name: 'Equipment', allocatedAmount: 50000, spentAmount: equipmentSpent },
+        { name: 'Materials', allocatedAmount: 150000, spentAmount: materialsSpent },
+      ],
+    };
+  }
+
   // Chart data for carousel
   const chartCards = [
     {
@@ -136,6 +184,7 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
       component: (
         <BudgetChart 
           onPress={() => navigation.navigate('BudgetLogsManagement')}
+          budgetData={budgetDataForChart}
         />
       ),
     },

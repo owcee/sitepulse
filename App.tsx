@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, ActivityIndicator, Animated } from 'react-native';
 import { Text } from 'react-native-paper';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -24,6 +24,10 @@ export default function App() {
   const [isSigningUp, setIsSigningUp] = useState(false);
 
   const [currentProject, setCurrentProject] = useState<any>(null);
+
+  // Animation for smooth transition between login and signup
+  // Must be declared before any conditional returns
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Handle logout
   const handleLogout = async () => {
@@ -135,6 +139,17 @@ export default function App() {
     return () => unsubscribe();
   }, [isSigningUp]);
 
+  // Animation effect for smooth transition between login and signup
+  useEffect(() => {
+    // Start fade animation when showSignUp changes
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [showSignUp]);
+
   // Show loading screen while checking auth state
   if (isLoading) {
     return (
@@ -154,28 +169,38 @@ export default function App() {
       <PaperProvider theme={theme}>
         <SafeAreaProvider>
           <NavigationContainer>
-            {showSignUp ? (
-              <SignUpScreen 
-                onSignUp={(user) => {
-                  // Don't set user here - let auth state change handle it
-                  // The sign-out will happen in SignUpScreen, which will trigger auth state change
+            <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+              <Animated.View
+                style={{
+                  flex: 1,
+                  opacity: fadeAnim,
+                  backgroundColor: theme.colors.background,
                 }}
-                onBackToLogin={() => {
-                  setShowSignUp(false);
-                  setIsSigningUp(false);
-                }}
-                onSignUpStart={() => setIsSigningUp(true)}
-                onSignUpComplete={() => {
-                  // Reset flag after sign-out completes (handled by auth state change)
-                  setTimeout(() => setIsSigningUp(false), 1000);
-                }}
-              />
-            ) : (
-              <LoginScreen 
-                onLogin={setUser}
-                onNavigateToSignUp={() => setShowSignUp(true)}
-              />
-            )}
+              >
+              {showSignUp ? (
+                <SignUpScreen 
+                  onSignUp={(user) => {
+                    // Don't set user here - let auth state change handle it
+                    // The sign-out will happen in SignUpScreen, which will trigger auth state change
+                  }}
+                  onBackToLogin={() => {
+                    setShowSignUp(false);
+                    setIsSigningUp(false);
+                  }}
+                  onSignUpStart={() => setIsSigningUp(true)}
+                  onSignUpComplete={() => {
+                    // Reset flag after sign-out completes (handled by auth state change)
+                    setTimeout(() => setIsSigningUp(false), 1000);
+                  }}
+                />
+              ) : (
+                <LoginScreen 
+                  onLogin={setUser}
+                  onNavigateToSignUp={() => setShowSignUp(true)}
+                />
+              )}
+              </Animated.View>
+            </View>
             <StatusBar style="auto" />
           </NavigationContainer>
         </SafeAreaProvider>

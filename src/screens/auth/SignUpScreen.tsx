@@ -115,7 +115,7 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.content}>
         {/* Logo and Title */}
         <View style={styles.header}>
@@ -132,18 +132,16 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
             <View style={styles.titleAccent} />
           </View>
           <Paragraph style={styles.subtitle}>
-            Create your construction management account
+            Create your construction account
           </Paragraph>
         </View>
 
         {/* Sign Up Form */}
         <Card style={styles.card}>
-          <Card.Content>
-            <Title style={styles.cardTitle}>Create Account</Title>
-            
+          <Card.Content style={styles.cardContent}>
             {/* Role Selection */}
             <View style={styles.roleSection}>
-              <Text style={styles.roleLabel}>I am a:</Text>
+              <Text style={styles.roleLabel} numberOfLines={2}>I am a:</Text>
               <SegmentedButtons
                 value={role}
                 onValueChange={(value) => setRole(value as 'engineer' | 'worker')}
@@ -160,6 +158,7 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
                   },
                 ]}
                 style={styles.roleButtons}
+                density="medium"
               />
             </View>
 
@@ -326,17 +325,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: spacing.md,
     justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
   },
   header: {
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -345,13 +345,13 @@ const styles = StyleSheet.create({
   logoImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 60,
+    borderRadius: 70,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: spacing.xs,
+    marginVertical: spacing.md,
     width: '100%',
   },
   titleAccent: {
@@ -364,13 +364,13 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xxl,
     fontWeight: '900',
     color: theme.colors.primary,
-    letterSpacing: 2,
+    letterSpacing: 3,
     textShadowColor: 'rgba(255, 107, 53, 0.3)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   subtitle: {
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.md,
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
   },
@@ -378,41 +378,44 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  cardContent: {
+    paddingVertical: spacing.sm,
   },
   cardTitle: {
     textAlign: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     color: theme.colors.text,
-    fontSize: fontSizes.lg,
+    fontSize: fontSizes.sm,
   },
   roleSection: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
   },
   roleLabel: {
     fontSize: fontSizes.sm,
-    fontWeight: '500',
+    fontWeight: '400',
     marginBottom: spacing.xs,
-    color: theme.colors.text,
+    color: theme.colors.onSurfaceVariant,
+    textAlign: 'center',
   },
   roleButtons: {
-    marginBottom: spacing.xs,
+    marginBottom: 0,
   },
   input: {
     marginBottom: spacing.xs,
     backgroundColor: theme.colors.surface,
   },
   signUpButton: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
   signUpButtonContent: {
     paddingVertical: spacing.xs,
   },
   backButton: {
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   gmailNotice: {
     backgroundColor: 'rgba(76, 175, 80, 0.2)',

@@ -110,6 +110,16 @@ service cloud.firestore {
       allow create: if isAuthenticated();
     }
     
+    // Budgets - document ID is projectId, users can access budgets for their project
+    match /budgets/{projectId} {
+      // Read: allow if user is authenticated and their projectId matches the document ID
+      allow read: if isAuthenticated() && getUserProjectId() == projectId;
+      // Create/Update: allow engineers for their current project, workers for their assigned project
+      allow create, update: if isAuthenticated() && getUserProjectId() == projectId;
+      // Prevent deletion of budgets
+      allow delete: if false;
+    }
+    
     // Tasks - engineers can manage, workers can read their assigned tasks
     match /tasks/{taskId} {
       allow read: if isAuthenticated() && (

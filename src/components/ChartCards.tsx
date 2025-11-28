@@ -11,6 +11,12 @@ interface ChartCardProps {
   onPress?: () => void;
 }
 
+interface BudgetData {
+  totalBudget: number;
+  totalSpent: number;
+  categories: Array<{ name: string; allocatedAmount: number; spentAmount: number }>;
+}
+
 // Task Management Chart Card
 export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
   // This would come from actual data in real implementation
@@ -175,31 +181,35 @@ export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
 };
 
 // Budget Chart Card
-export const BudgetChart: React.FC<ChartCardProps> = ({ onPress }) => {
-  // This would come from actual data in real implementation
-  const budgetData = {
-    totalBudget: 850000,
-    spentAmount: 425000,
+interface BudgetChartProps extends ChartCardProps {
+  budgetData?: BudgetData;
+}
+
+export const BudgetChart: React.FC<BudgetChartProps> = ({ onPress, budgetData: propBudgetData }) => {
+  // Use provided budget data or fallback to defaults
+  const defaultBudgetData: BudgetData = {
+    totalBudget: 250000,
+    totalSpent: 0,
     categories: [
-      { name: 'Materials', allocated: 400000, spent: 220000 },
-      { name: 'Labor', allocated: 300000, spent: 150000 },
-      { name: 'Equipment', allocated: 100000, spent: 45000 },
-      { name: 'Permits', allocated: 30000, spent: 8000 },
-      { name: 'Other', allocated: 20000, spent: 2000 },
+      { name: 'Equipment', allocatedAmount: 50000, spentAmount: 0 },
+      { name: 'Materials', allocatedAmount: 150000, spentAmount: 0 },
     ],
   };
 
-  const budgetUsagePercent = budgetData.spentAmount / budgetData.totalBudget;
+  const budgetData = propBudgetData || defaultBudgetData;
+  const budgetUsagePercent = budgetData.totalBudget > 0 ? budgetData.totalSpent / budgetData.totalBudget : 0;
 
-  const budgetChartData = budgetData.categories.map((category, index) => ({
-    name: category.name,
-    population: category.spent,
-    color: [
-      '#2196F3', '#4CAF50', '#FF9800', '#F44336', '#9C27B0'
-    ][index % 5],
-    legendFontColor: '#7F7F7F',
-    legendFontSize: 12,
-  }));
+  const budgetChartData = budgetData.categories
+    .filter(cat => cat.spentAmount > 0)
+    .map((category, index) => ({
+      name: category.name,
+      population: category.spentAmount,
+      color: [
+        '#FF9800', '#2196F3', '#4CAF50', '#F44336', '#9C27B0'
+      ][index % 5],
+      legendFontColor: '#7F7F7F',
+      legendFontSize: 12,
+    }));
 
   return (
     <TouchableOpacity onPress={onPress} style={styles.chartCard}>
@@ -221,7 +231,7 @@ export const BudgetChart: React.FC<ChartCardProps> = ({ onPress }) => {
 
           <View style={styles.budgetSummary}>
             <Paragraph style={styles.budgetText}>
-              Spent: ₱{budgetData.spentAmount.toLocaleString()} / ₱{budgetData.totalBudget.toLocaleString()}
+              Spent: ₱{budgetData.totalSpent.toLocaleString()} / ₱{budgetData.totalBudget.toLocaleString()}
             </Paragraph>
             <ProgressBar 
               progress={budgetUsagePercent} 

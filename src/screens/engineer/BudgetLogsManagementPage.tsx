@@ -19,6 +19,8 @@ import {
   Modal,
   Surface,
   ProgressBar,
+  Dialog,
+  Paragraph,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +30,7 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { exportBudgetToPDF } from '../../services/pdfExportService';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { updateProject, getProject } from '../../services/projectService';
-import { getBudgetLogs } from '../../services/firebaseDataService';
+import { getBudgetLogs, getBudget, saveBudget } from '../../services/firebaseDataService';
 
 interface BudgetCategory {
   id: string;
@@ -62,6 +64,9 @@ export default function BudgetLogsManagementPage() {
   const [projectInfoModalVisible, setProjectInfoModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
   const [loadingProjectInfo, setLoadingProjectInfo] = useState(true);
+  const [loadingBudget, setLoadingBudget] = useState(true);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const isSyncingRef = React.useRef(false);
   
   // Calculate equipment and materials spent amounts from actual data
@@ -76,7 +81,9 @@ export default function BudgetLogsManagementPage() {
 
   const calculateMaterialsSpent = () => {
     return state.materials.reduce((total, material) => {
-      return total + (material.quantity * material.price);
+      // Use totalBought if available, otherwise use quantity
+      const quantity = material.totalBought || material.quantity;
+      return total + (quantity * material.price);
     }, 0);
   };
 
@@ -117,17 +124,89 @@ export default function BudgetLogsManagementPage() {
     loadProjectInfo();
   }, [projectId]);
   
-  // Budget state with smaller default values in Peso
+  // Load budget from Firebase on mount (only once)
+  const hasLoadedBudgetRef = React.useRef(false);
+  
+  useEffect(() => {
+    // Only load once
+    if (hasLoadedBudgetRef.current || !projectId) {
+      if (!projectId) {
+        setLoadingBudget(false);
+      }
+      return;
+    }
+    
+    const loadBudgetFromFirebase = async () => {
+      try {
+        hasLoadedBudgetRef.current = true;
+        setLoadingBudget(true);
+        console.log('📥 Loading budget from Firebase for project:', projectId);
+        const savedBudget = await getBudget(projectId);
+        
+        if (savedBudget) {
+          console.log('✅ Budget loaded from Firebase:', savedBudget);
+          // Convert to ProjectBudget format
+          const budgetData = savedBudget as any;
+          const loadedBudget: ProjectBudget = {
+            totalBudget: budgetData.totalBudget || 250000,
+            totalSpent: budgetData.totalSpent || 0,
+            contingencyPercentage: budgetData.contingencyPercentage || 10,
+            lastUpdated: budgetData.lastUpdated || new Date(),
+            categories: (budgetData.categories || []).map((cat: any) => ({
+              ...cat,
+              lastUpdated: cat.lastUpdated || new Date(),
+            })),
+          };
+          
+          // Update primary categories with current spent amounts
+          const updatedCategories = loadedBudget.categories.map(cat => {
+            if (cat.id === 'equipment') {
+              return { ...cat, spentAmount: calculateEquipmentSpent(), lastUpdated: new Date() };
+            }
+            if (cat.id === 'materials') {
+              return { ...cat, spentAmount: calculateMaterialsSpent(), lastUpdated: new Date() };
+            }
+            return cat;
+          });
+          
+          const updatedTotalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+          
+          const finalBudget: ProjectBudget = {
+            ...loadedBudget,
+            categories: updatedCategories,
+            totalSpent: updatedTotalSpent,
+          };
+          
+          console.log('✅ Final budget after updates:', finalBudget);
+          setBudget(finalBudget);
+          setSharedBudget(finalBudget);
+        } else {
+          console.log('ℹ️ No saved budget found, using defaults');
+          // If no saved budget, initialize with defaults
+          const defaultBudget = getDefaultBudget();
+          setBudget(defaultBudget);
+          setSharedBudget(defaultBudget);
+        }
+      } catch (error) {
+        console.error('❌ Error loading budget from Firebase:', error);
+        // On error, use defaults
+        const defaultBudget = getDefaultBudget();
+        setBudget(defaultBudget);
+        setSharedBudget(defaultBudget);
+      } finally {
+        setLoadingBudget(false);
+        console.log('✅ Budget loading complete');
+      }
+    };
+
+    loadBudgetFromFirebase();
+  }, [projectId]); // Only depend on projectId, not setSharedBudget
+  
+  // Budget state - will be initialized from Firebase or defaults
   const initialEquipmentSpent = calculateEquipmentSpent();
   const initialMaterialsSpent = calculateMaterialsSpent();
   
-  const [budget, setBudget] = useState<ProjectBudget>(() => {
-    // Try to use shared budget from context if available
-    if (state.budget) {
-      return state.budget;
-    }
-    
-    // Otherwise use defaults
+  const getDefaultBudget = (): ProjectBudget => {
     const categories = [
       {
         id: 'equipment',
@@ -152,34 +231,53 @@ export default function BudgetLogsManagementPage() {
     const totalSpent = categories.reduce((sum, cat) => sum + cat.spentAmount, 0);
     
     return {
-      totalBudget: 250000, // ₱250,000 - much smaller budget
+      totalBudget: 250000, // ₱250,000 - default budget
       totalSpent,
       contingencyPercentage: 10,
       lastUpdated: new Date(),
       categories,
     };
-  });
+  };
   
-  // Sync budget to shared state when budget changes (but not when shared budget changes)
-  React.useEffect(() => {
-    // Prevent infinite loops by checking if we're already syncing
-    if (isSyncingRef.current) {
-      return;
-    }
+  const [budget, setBudget] = useState<ProjectBudget | null>(null);
+  
+  // Helper function to save budget to Firebase and sync to shared state
+  const saveBudgetToFirebase = async (budgetToSave: ProjectBudget) => {
+    if (!projectId || isSyncingRef.current) return;
     
-    // Only sync if the budget is different from the shared budget to avoid loops
-    if (budget && (!state.budget || 
-        budget.totalBudget !== state.budget.totalBudget ||
-        budget.totalSpent !== state.budget.totalSpent ||
-        budget.categories.length !== state.budget.categories.length)) {
+    try {
       isSyncingRef.current = true;
-      setSharedBudget(budget);
-      // Reset the flag after a short delay
+      
+      // Update shared state
+      setSharedBudget(budgetToSave);
+      
+      // Save to Firebase
+      await saveBudget(projectId, budgetToSave);
+      console.log('✅ Budget saved to Firebase successfully');
+    } catch (error) {
+      console.error('❌ Error saving budget to Firebase:', error);
+    } finally {
       setTimeout(() => {
         isSyncingRef.current = false;
       }, 100);
     }
-  }, [budget, state.budget, setSharedBudget]); // Sync when local budget changes
+  };
+  
+  // Sync budget to shared state when budget changes (but don't save to Firebase here to avoid loops)
+  React.useEffect(() => {
+    if (loadingBudget || !budget || isSyncingRef.current) {
+      return;
+    }
+    
+    // Only sync if the budget is different from the shared budget
+    if (!state.budget || 
+        budget.totalBudget !== state.budget.totalBudget ||
+        budget.totalSpent !== state.budget.totalSpent ||
+        budget.categories.length !== state.budget.categories.length ||
+        JSON.stringify(budget.categories.map(c => c.id).sort()) !== JSON.stringify(state.budget.categories.map(c => c.id).sort())) {
+      setSharedBudget(budget);
+    }
+  }, [budget, state.budget, setSharedBudget, loadingBudget]);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -190,65 +288,95 @@ export default function BudgetLogsManagementPage() {
   });
 
   const [totalBudgetForm, setTotalBudgetForm] = useState({
-    totalBudget: budget.totalBudget.toString(),
-    contingencyPercentage: budget.contingencyPercentage.toString(),
+    totalBudget: '250000',
+    contingencyPercentage: '10',
   });
+  
+  // Update totalBudgetForm when budget loads
+  React.useEffect(() => {
+    if (budget) {
+      setTotalBudgetForm({
+        totalBudget: budget.totalBudget.toString(),
+        contingencyPercentage: budget.contingencyPercentage.toString(),
+      });
+    }
+  }, [budget]);
 
   // Update primary categories when equipment or materials change
   // Also update categories based on budget logs
   React.useEffect(() => {
-    setBudget(prev => {
-      const updatedCategories = prev.categories.map(cat => {
-        if (cat.id === 'equipment') {
-          return { ...cat, spentAmount: calculateEquipmentSpent(), lastUpdated: new Date() };
-        }
-        if (cat.id === 'materials') {
-          return { ...cat, spentAmount: calculateMaterialsSpent(), lastUpdated: new Date() };
-        }
-        return cat;
-      });
-      
-      // Calculate spent amounts from budget logs for each category
-      const logsByCategory = state.budgetLogs.reduce((acc, log) => {
-        if (log.type === 'expense' && log.amount > 0) {
-          const categoryName = log.category.toLowerCase();
-          if (!acc[categoryName]) {
-            acc[categoryName] = 0;
+    if (!budget || loadingBudget || isSyncingRef.current) return;
+    
+    const equipmentSpent = calculateEquipmentSpent();
+    const materialsSpent = calculateMaterialsSpent();
+    
+    // Check if primary categories need updating
+    const equipmentCategory = budget.categories.find(cat => cat.id === 'equipment');
+    const materialsCategory = budget.categories.find(cat => cat.id === 'materials');
+    
+    const equipmentChanged = equipmentCategory && Math.abs(equipmentCategory.spentAmount - equipmentSpent) > 0.01;
+    const materialsChanged = materialsCategory && Math.abs(materialsCategory.spentAmount - materialsSpent) > 0.01;
+    
+    if (equipmentChanged || materialsChanged) {
+      setBudget(prev => {
+        if (!prev) return getDefaultBudget();
+        const updatedCategories = prev.categories.map(cat => {
+          if (cat.id === 'equipment') {
+            return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
           }
-          acc[categoryName] += log.amount;
-        }
-        return acc;
-      }, {} as Record<string, number>);
-      
-      // Update categories with budget log amounts (for non-primary categories)
-      const finalCategories = updatedCategories.map(cat => {
-        const categoryName = cat.name.toLowerCase();
-        const logAmount = logsByCategory[categoryName] || 0;
-        
-        // For primary categories, keep auto-calculated amount
-        if (cat.isPrimary) {
+          if (cat.id === 'materials') {
+            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+          }
           return cat;
-        }
+        });
         
-        // For non-primary categories, use budget log amounts
-        return {
-          ...cat,
-          spentAmount: logAmount,
+        // Calculate spent amounts from budget logs for each category
+        const logsByCategory = state.budgetLogs.reduce((acc, log) => {
+          if (log.type === 'expense' && log.amount > 0) {
+            const categoryName = log.category.toLowerCase();
+            if (!acc[categoryName]) {
+              acc[categoryName] = 0;
+            }
+            acc[categoryName] += log.amount;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+        
+        // Update categories with budget log amounts (for non-primary categories)
+        const finalCategories = updatedCategories.map(cat => {
+          const categoryName = cat.name.toLowerCase();
+          const logAmount = logsByCategory[categoryName] || 0;
+          
+          // For primary categories, keep auto-calculated amount
+          if (cat.isPrimary) {
+            return cat;
+          }
+          
+          // For non-primary categories, use budget log amounts
+          return {
+            ...cat,
+            spentAmount: logAmount,
+            lastUpdated: new Date(),
+          };
+        });
+        
+        // Calculate new total spent from all categories
+        const newTotalSpent = finalCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+        
+        const updatedBudget: ProjectBudget = {
+          ...prev,
+          categories: finalCategories,
+          totalSpent: newTotalSpent,
           lastUpdated: new Date(),
         };
+        
+        // Save to Firebase and update shared state
+        saveBudgetToFirebase(updatedBudget);
+        
+        return updatedBudget;
       });
-      
-      // Calculate new total spent from all categories
-      const newTotalSpent = finalCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
-      
-      return {
-        ...prev,
-        categories: finalCategories,
-        totalSpent: newTotalSpent,
-        lastUpdated: new Date(),
-      };
-    });
-  }, [state.equipment, state.materials, state.budgetLogs]);
+    }
+  }, [state.equipment, state.materials, state.budgetLogs, budget, loadingBudget]);
 
   const resetForm = () => {
     setFormData({
@@ -277,6 +405,7 @@ export default function BudgetLogsManagementPage() {
   };
 
   const openTotalBudgetModal = () => {
+    if (!budget) return;
     setTotalBudgetForm({
       totalBudget: budget.totalBudget.toString(),
       contingencyPercentage: budget.contingencyPercentage.toString(),
@@ -318,7 +447,9 @@ export default function BudgetLogsManagementPage() {
 
     proceedWithSave();
 
-    function proceedWithSave() {
+    async function proceedWithSave() {
+      if (!budget || !projectId) return;
+      
       const categoryData: BudgetCategory = {
         id: editingCategory?.id || `category-${Date.now()}`,
         name: formData.name.trim(),
@@ -329,28 +460,34 @@ export default function BudgetLogsManagementPage() {
         isPrimary: isPrimary || false,
       };
 
-      setBudget(prev => {
-        const newCategories = editingCategory
-          ? prev.categories.map(c => c.id === editingCategory.id ? categoryData : c)
-          : [...prev.categories, categoryData];
+      const newCategories = editingCategory
+        ? budget.categories.map(c => c.id === editingCategory.id ? categoryData : c)
+        : [...budget.categories, categoryData];
 
-        const newTotalSpent = newCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+      const newTotalSpent = newCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
 
-        return {
-          ...prev,
-          categories: newCategories,
-          totalSpent: newTotalSpent,
-          lastUpdated: new Date(),
-        };
-      });
+      const updatedBudget: ProjectBudget = {
+        ...budget,
+        categories: newCategories,
+        totalSpent: newTotalSpent,
+        lastUpdated: new Date(),
+      };
 
-      Alert.alert('Success', editingCategory ? 'Category updated successfully' : 'Category added successfully');
+      setBudget(updatedBudget);
+      
+      // Immediately save to Firebase
+      await saveBudgetToFirebase(updatedBudget);
+
+      setSuccessMessage(editingCategory ? 'Category updated successfully' : 'Category added successfully');
+      setShowSuccessDialog(true);
       setModalVisible(false);
       resetForm();
     }
   };
 
-  const saveTotalBudget = () => {
+  const saveTotalBudget = async () => {
+    if (!budget) return;
+    
     const newTotalBudget = parseFloat(totalBudgetForm.totalBudget);
     const newContingency = parseFloat(totalBudgetForm.contingencyPercentage);
 
@@ -364,18 +501,26 @@ export default function BudgetLogsManagementPage() {
       return;
     }
 
-    setBudget(prev => ({
-      ...prev,
+    const updatedBudget: ProjectBudget = {
+      ...budget,
       totalBudget: newTotalBudget,
       contingencyPercentage: newContingency,
       lastUpdated: new Date(),
-    }));
+    };
 
-    Alert.alert('Success', 'Total budget updated successfully');
+    setBudget(updatedBudget);
+    
+    // Immediately save to Firebase
+    await saveBudgetToFirebase(updatedBudget);
+
+    setSuccessMessage('Total budget updated successfully');
+    setShowSuccessDialog(true);
     setTotalBudgetModalVisible(false);
   };
 
   const deleteCategory = (categoryId: string, isPrimary?: boolean) => {
+    if (!budget) return;
+    
     // Prevent deletion of primary categories
     if (isPrimary) {
       Alert.alert(
@@ -393,19 +538,24 @@ export default function BudgetLogsManagementPage() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setBudget(prev => {
-              const newCategories = prev.categories.filter(c => c.id !== categoryId);
-              const newTotalSpent = newCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
-              
-              return {
-                ...prev,
-                categories: newCategories,
-                totalSpent: newTotalSpent,
-                lastUpdated: new Date(),
-              };
-            });
-            Alert.alert('Success', 'Category deleted successfully');
+          onPress: async () => {
+            const newCategories = budget.categories.filter(c => c.id !== categoryId);
+            const newTotalSpent = newCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+            
+            const updatedBudget: ProjectBudget = {
+              ...budget,
+              categories: newCategories,
+              totalSpent: newTotalSpent,
+              lastUpdated: new Date(),
+            };
+            
+            setBudget(updatedBudget);
+            
+            // Immediately save to Firebase
+            await saveBudgetToFirebase(updatedBudget);
+            
+            setSuccessMessage('Category deleted successfully');
+            setShowSuccessDialog(true);
           },
         },
       ]
@@ -468,6 +618,28 @@ export default function BudgetLogsManagementPage() {
     }
   };
 
+  // Show loading state if budget hasn't loaded yet
+  if (loadingBudget || !budget) {
+    return (
+      <SafeAreaView style={styles.container} edges={[]}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              onPress={() => navigation.goBack()}
+              iconColor={theme.colors.onSurface}
+            />
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Budget Management</Text>
+              <Text style={styles.subtitle}>Loading budget data...</Text>
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  
   const budgetUsagePercent = budget.totalSpent / budget.totalBudget;
   const contingencyAmount = budget.totalBudget * (budget.contingencyPercentage / 100);
   const effectiveBudget = budget.totalBudget - contingencyAmount;
@@ -886,6 +1058,25 @@ export default function BudgetLogsManagementPage() {
             </ScrollView>
           </Surface>
         </Modal>
+
+        {/* Success Dialog */}
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => setShowSuccessDialog(false)}
+          style={styles.successDialog}
+        >
+          <Dialog.Title style={styles.successDialogTitle}>Success</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.successDialogMessage}>
+              {successMessage}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowSuccessDialog(false)} textColor={theme.colors.primary}>
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </SafeAreaView>
   );
@@ -1272,6 +1463,18 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: constructionColors.complete,
+  },
+  successDialog: {
+    backgroundColor: '#000000',
+  },
+  successDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  successDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
   },
 
   // Categories Modal

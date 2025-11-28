@@ -48,7 +48,9 @@ export default function ResourcesScreen() {
 
   const calculateMaterialsSpent = () => {
     return state.materials.reduce((total, material) => {
-      return total + (material.quantity * material.price);
+      // Use totalBought if available, otherwise use quantity
+      const quantity = material.totalBought || material.quantity;
+      return total + (quantity * material.price);
     }, 0);
   };
 

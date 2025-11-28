@@ -13,7 +13,9 @@ import {
   Portal,
   Modal,
   Surface,
-  Checkbox
+  Checkbox,
+  Dialog,
+  Paragraph
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +58,8 @@ export default function WorkersManagementPage() {
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [assigningToTasks, setAssigningToTasks] = useState(false);
   const [projectTasks, setProjectTasks] = useState<Task[]>([]);
+  const [showAssignmentSuccessDialog, setShowAssignmentSuccessDialog] = useState(false);
+  const [assignmentSuccessMessage, setAssignmentSuccessMessage] = useState('');
   
   // Use project ID from context
   const currentProjectId = projectId;
@@ -155,12 +159,13 @@ export default function WorkersManagementPage() {
         }
       }
 
-      let message = `${successCount} worker(s) have been sent assignment requests.`;
+      let message = 'Worker(s) have been sent assignment requests.';
       if (errorCount > 0) {
-        message += ` ${errorCount} assignment(s) failed.`;
+        message += ' Some assignment(s) failed.';
       }
 
-      Alert.alert('Assignment Complete', message);
+      setAssignmentSuccessMessage(message);
+      setShowAssignmentSuccessDialog(true);
       
       // Refresh data and close modal
       await loadWorkersData();
@@ -665,6 +670,29 @@ export default function WorkersManagementPage() {
           </Surface>
         </Modal>
       </Portal>
+
+      {/* Assignment Success Dialog */}
+      <Portal>
+        <Dialog
+          visible={showAssignmentSuccessDialog}
+          onDismiss={() => setShowAssignmentSuccessDialog(false)}
+          style={styles.successDialog}
+        >
+          <Dialog.Title style={styles.successDialogTitle}>Assignment Complete</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.successDialogMessage}>{assignmentSuccessMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowAssignmentSuccessDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.successDialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -935,6 +963,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 16,
+  },
+  successDialog: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+  },
+  successDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  successDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+  },
+  successDialogButtonText: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
   },
   taskIconContainer: {
     justifyContent: 'center',

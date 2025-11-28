@@ -7,6 +7,7 @@ import {
   getDocs, 
   getDoc,
   addDoc, 
+  setDoc,
   updateDoc, 
   deleteDoc, 
   query, 
@@ -16,6 +17,8 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { getProject } from './projectService';
+import { sendNotification } from './notificationService';
 
 // ============================================================================
 // MATERIALS
@@ -64,6 +67,37 @@ export async function addMaterial(projectId, material) {
     
     const docRef = await addDoc(materialsRef, materialData);
     
+    // Check for low stock after adding (if quantity is already low)
+    const quantity = material.quantity || 0;
+    const totalBought = material.totalBought || quantity;
+    const materialName = material.name || 'Material';
+    const unit = material.unit || 'units';
+    
+    // Check for low stock (threshold: 10 units OR 20% of totalBought, whichever is higher)
+    const percentageThreshold = Math.floor(totalBought * 0.2); // 20% of total
+    const LOW_STOCK_THRESHOLD = Math.max(10, percentageThreshold); // At least 10 units, or 20% if higher
+    
+    if (quantity <= LOW_STOCK_THRESHOLD) {
+      // Send low stock alert to engineer
+      try {
+        const project = await getProject(projectId);
+        if (project && project.engineerId) {
+          await sendNotification(project.engineerId, {
+            title: 'Low Stock Alert',
+            body: `Stock for ${materialName} is low (${quantity} out of ${totalBought} ${unit} remaining). Please restock soon.`,
+            type: 'low_stock',
+            relatedId: docRef.id,
+            projectId: projectId,
+            status: 'warning'
+          });
+          console.log('Low stock alert sent to engineer for new material');
+        }
+      } catch (notifError) {
+        console.error('Failed to send low stock notification:', notifError);
+        // Don't throw - material addition should still succeed
+      }
+    }
+    
     return {
       id: docRef.id,
       ...materialData
@@ -83,10 +117,50 @@ export async function addMaterial(projectId, material) {
 export async function updateMaterial(materialId, updates) {
   try {
     const materialRef = doc(db, 'materials', materialId);
+    const materialSnap = await getDoc(materialRef);
+    
+    if (!materialSnap.exists()) {
+      throw new Error('Material not found');
+    }
+    
+    const currentData = materialSnap.data();
+    const projectId = currentData.projectId;
+    
     await updateDoc(materialRef, {
       ...updates,
       updatedAt: serverTimestamp()
     });
+    
+    // Check for low stock after update
+    const updatedQuantity = updates.quantity !== undefined ? updates.quantity : currentData.quantity;
+    const totalBought = updates.totalBought !== undefined ? updates.totalBought : (currentData.totalBought || updatedQuantity);
+    const materialName = updates.name || currentData.name;
+    const unit = updates.unit || currentData.unit || 'units';
+    
+    // Check for low stock (threshold: 10 units OR 20% of totalBought, whichever is higher)
+    const percentageThreshold = Math.floor(totalBought * 0.2); // 20% of total
+    const LOW_STOCK_THRESHOLD = Math.max(10, percentageThreshold); // At least 10 units, or 20% if higher
+    
+    if (updatedQuantity <= LOW_STOCK_THRESHOLD) {
+      // Send low stock alert to engineer
+      try {
+        const project = await getProject(projectId);
+        if (project && project.engineerId) {
+          await sendNotification(project.engineerId, {
+            title: 'Low Stock Alert',
+            body: `Stock for ${materialName} is low (${updatedQuantity} out of ${totalBought} ${unit} remaining). Please restock soon.`,
+            type: 'low_stock',
+            relatedId: materialId,
+            projectId: projectId,
+            status: 'warning'
+          });
+          console.log('Low stock alert sent to engineer for material update');
+        }
+      } catch (notifError) {
+        console.error('Failed to send low stock notification:', notifError);
+        // Don't throw - material update should still succeed
+      }
+    }
   } catch (error) {
     console.error('Error updating material:', error);
     throw new Error('Failed to update material');
@@ -418,30 +492,7 @@ export async function deleteBudgetLog(logId) {
 // ============================================================================
 // PROJECTS
 // ============================================================================
-
-/**
- * Get a project by ID
- * @param {string} projectId - Project ID
- * @returns {Promise<Object|null>} Project object or null
- */
-export async function getProject(projectId) {
-  try {
-    const projectRef = doc(db, 'projects', projectId);
-    const projectDoc = await getDoc(projectRef);
-    
-    if (projectDoc.exists()) {
-      return {
-        id: projectDoc.id,
-        ...projectDoc.data()
-      };
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error getting project:', error);
-    throw new Error('Failed to fetch project');
-  }
-}
+// Note: getProject is imported from projectService, not defined here
 
 /**
  * Update project settings (totalBudget, contingencyPercentage)
@@ -459,6 +510,89 @@ export async function updateProject(projectId, updates) {
   } catch (error) {
     console.error('Error updating project:', error);
     throw new Error('Failed to update project');
+  }
+}
+
+// ============================================================================
+// BUDGET
+// ============================================================================
+
+/**
+ * Get budget data for a project
+ * @param {string} projectId - Project ID
+ * @returns {Promise<Object|null>} Budget object or null if not found
+ */
+export async function getBudget(projectId) {
+  try {
+    const budgetRef = doc(db, 'budgets', projectId);
+    const budgetDoc = await getDoc(budgetRef);
+    
+    if (budgetDoc.exists()) {
+      const data = budgetDoc.data();
+      // Convert Firestore Timestamps to Dates
+      return {
+        id: budgetDoc.id,
+        totalBudget: data.totalBudget || 0,
+        totalSpent: data.totalSpent || 0,
+        contingencyPercentage: data.contingencyPercentage || 10,
+        lastUpdated: data.lastUpdated?.toDate() || new Date(),
+        categories: (data.categories || []).map(cat => ({
+          ...cat,
+          lastUpdated: cat.lastUpdated?.toDate() || new Date(),
+        })),
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting budget:', error);
+    throw new Error('Failed to fetch budget');
+  }
+}
+
+/**
+ * Save or update budget data for a project
+ * @param {string} projectId - Project ID
+ * @param {Object} budgetData - Budget data
+ * @returns {Promise<void>}
+ */
+export async function saveBudget(projectId, budgetData) {
+  try {
+    const budgetRef = doc(db, 'budgets', projectId);
+    
+    // Convert Date objects to ISO strings for arrays (serverTimestamp can't be used in arrays)
+    const now = new Date();
+    const firestoreData = {
+      totalBudget: budgetData.totalBudget,
+      totalSpent: budgetData.totalSpent,
+      contingencyPercentage: budgetData.contingencyPercentage,
+      lastUpdated: serverTimestamp(),
+      categories: budgetData.categories.map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        allocatedAmount: cat.allocatedAmount,
+        spentAmount: cat.spentAmount,
+        description: cat.description || null,
+        isPrimary: cat.isPrimary || false,
+        lastUpdated: cat.lastUpdated ? Timestamp.fromDate(new Date(cat.lastUpdated)) : Timestamp.now(),
+      })),
+    };
+    
+    // Check if document exists first
+    const budgetDoc = await getDoc(budgetRef);
+    
+    if (budgetDoc.exists()) {
+      await updateDoc(budgetRef, firestoreData);
+    } else {
+      // Create new document
+      await setDoc(budgetRef, {
+        ...firestoreData,
+        createdAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    console.error('Error saving budget:', error);
+    throw new Error('Failed to save budget');
   }
 }
 

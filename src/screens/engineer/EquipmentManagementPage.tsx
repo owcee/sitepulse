@@ -19,6 +19,8 @@ import {
   Modal,
   Surface,
   SegmentedButtons,
+  Dialog,
+  Paragraph,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +35,12 @@ export default function EquipmentManagementPage() {
   const equipment = state.equipment;
   const [modalVisible, setModalVisible] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<any>(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogMessage, setDialogMessage] = useState('');
+  const [isError, setIsError] = useState(false);
+  const [deleteEquipmentId, setDeleteEquipmentId] = useState<string | null>(null);
+  const [isDeleteConfirm, setIsDeleteConfirm] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -81,14 +89,33 @@ export default function EquipmentManagementPage() {
 
   const saveEquipment = () => {
     if (!formData.name.trim() || !formData.category.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      setDialogTitle('Error');
+      setDialogMessage('Please fill in all required fields');
+      setIsError(true);
+      setShowDialog(true);
       return;
     }
 
     // If rental, rental cost must be provided
     if (formData.type === 'rental' && !formData.rentalCost) {
-      Alert.alert('Error', 'For rental equipment, please provide the rental cost');
+      setDialogTitle('Error');
+      setDialogMessage('For rental equipment, please provide the rental cost');
+      setIsError(true);
+      setShowDialog(true);
       return;
+    }
+
+    // Prevent decreasing rental cost when editing
+    if (editingEquipment && editingEquipment.type === 'rental' && formData.type === 'rental') {
+      const currentRentalCost = editingEquipment.rentalCost || 0;
+      const newRentalCost = parseFloat(formData.rentalCost);
+      if (newRentalCost < currentRentalCost) {
+        setDialogTitle('Error');
+        setDialogMessage('Rental cost cannot be decreased. You can only increase the rental cost.');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
     }
 
     const equipmentData: Record<string, any> = {
@@ -106,10 +133,16 @@ export default function EquipmentManagementPage() {
 
     if (editingEquipment) {
       updateEquipment(editingEquipment.id, equipmentData);
-      Alert.alert('Success', 'Equipment updated successfully');
+      setDialogTitle('Success');
+      setDialogMessage('Equipment updated successfully');
+      setIsError(false);
+      setShowDialog(true);
     } else {
       addEquipment(equipmentData);
-      Alert.alert('Success', 'Equipment added successfully');
+      setDialogTitle('Success');
+      setDialogMessage('Equipment added successfully');
+      setIsError(false);
+      setShowDialog(true);
     }
     
     setModalVisible(false);
@@ -117,21 +150,23 @@ export default function EquipmentManagementPage() {
   };
 
   const handleDeleteEquipment = (equipmentId: string) => {
-    Alert.alert(
-      'Delete Equipment',
-      'Are you sure you want to delete this equipment?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteEquipmentFromContext(equipmentId);
-            Alert.alert('Success', 'Equipment deleted successfully');
-          },
-        },
-      ]
-    );
+    setDeleteEquipmentId(equipmentId);
+    setIsDeleteConfirm(true);
+    setDialogTitle('Delete Equipment');
+    setDialogMessage('Are you sure you want to delete this equipment?');
+    setIsError(false);
+    setShowDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (deleteEquipmentId) {
+      deleteEquipmentFromContext(deleteEquipmentId);
+      setDeleteEquipmentId(null);
+      setIsDeleteConfirm(false);
+      setDialogTitle('Success');
+      setDialogMessage('Equipment deleted successfully');
+      setIsError(false);
+    }
   };
 
   const getUsageColor = (usage: any) => {
@@ -416,6 +451,63 @@ export default function EquipmentManagementPage() {
             </ScrollView>
           </Surface>
         </Modal>
+      </Portal>
+
+      {/* Dark Mode Dialog */}
+      <Portal>
+        <Dialog 
+          visible={showDialog} 
+          onDismiss={() => {
+            setShowDialog(false);
+            if (deleteEquipmentId && dialogTitle !== 'Delete Equipment') {
+              setDeleteEquipmentId(null);
+            }
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>{dialogTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            {isDeleteConfirm ? (
+              <>
+                <Button 
+                  onPress={() => {
+                    setShowDialog(false);
+                    setDeleteEquipmentId(null);
+                    setIsDeleteConfirm(false);
+                  }}
+                  textColor={theme.colors.text}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onPress={() => {
+                    confirmDelete();
+                    // Keep dialog open to show success
+                  }}
+                  textColor={constructionColors.urgent}
+                >
+                  Delete
+                </Button>
+              </>
+            ) : (
+              <Button 
+                onPress={() => {
+                  setShowDialog(false);
+                  if (deleteEquipmentId) {
+                    setDeleteEquipmentId(null);
+                    setIsDeleteConfirm(false);
+                  }
+                }}
+                textColor={theme.colors.primary}
+              >
+                OK
+              </Button>
+            )}
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </SafeAreaView>
   );
@@ -737,6 +829,15 @@ const styles = StyleSheet.create({
   modalActionButton: {
     flex: 1,
     marginHorizontal: spacing.xs,
+  },
+  dialog: {
+    backgroundColor: '#000000',
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+  },
+  dialogMessage: {
+    color: theme.colors.text,
   },
 });
 

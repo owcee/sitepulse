@@ -115,7 +115,7 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
 
         {/* Login Form */}
         <Card style={styles.card}>
-          <Card.Content>
+          <Card.Content style={styles.cardContent}>
             <Title style={styles.cardTitle} numberOfLines={1}>Welcome</Title>
             
             <Paragraph style={styles.roleInfo} numberOfLines={2}>
@@ -338,9 +338,9 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -349,10 +349,10 @@ const styles = StyleSheet.create({
   logoImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 60,
+    borderRadius: 70,
   },
   title: {
-    fontSize: fontSizes.xxxl,
+    fontSize: fontSizes.xxl,
     fontWeight: '900',
     color: theme.colors.primary,
     letterSpacing: 3,
@@ -370,6 +370,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
     marginBottom: spacing.xl,
+  },
+  cardContent: {
+    paddingVertical: spacing.sm,
   },
   cardTitle: {
     textAlign: 'center',

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, ReactNode } from 'react';
 import * as firebaseDataService from '../services/firebaseDataService';
+import { getProject } from '../services/projectService';
 
 // Types
 export interface Material {
@@ -273,7 +274,7 @@ export function ProjectDataProvider({
         }
       };
 
-      const [materials, workers, equipment, budgetLogs, project] = await Promise.all([
+      const [materials, workers, equipment, budgetLogs, project, savedBudget] = await Promise.all([
         loadWithFallback(
           () => firebaseDataService.getMaterials(projectId),
           [],
@@ -295,9 +296,14 @@ export function ProjectDataProvider({
           'budgetLogs'
         ),
         loadWithFallback(
-          () => firebaseDataService.getProject(projectId),
+          () => getProject(projectId),
           null,
           'project'
+        ),
+        loadWithFallback(
+          () => firebaseDataService.getBudget(projectId),
+          null,
+          'budget'
         ),
       ]);
 
@@ -311,6 +317,21 @@ export function ProjectDataProvider({
           totalBudget: project?.totalBudget || 100000,
         },
       });
+      
+      // Load budget if available
+      if (savedBudget) {
+        const loadedBudget: ProjectBudget = {
+          totalBudget: savedBudget.totalBudget,
+          totalSpent: savedBudget.totalSpent,
+          contingencyPercentage: savedBudget.contingencyPercentage,
+          lastUpdated: savedBudget.lastUpdated,
+          categories: savedBudget.categories.map((cat: any) => ({
+            ...cat,
+            lastUpdated: cat.lastUpdated || new Date(),
+          })),
+        };
+        dispatch({ type: 'SET_BUDGET', payload: loadedBudget });
+      }
     } catch (error: any) {
       console.error('Error loading project data:', error);
       // Even on error, set empty data so app doesn't freeze

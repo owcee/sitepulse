@@ -310,7 +310,7 @@ export async function approveUsageSubmission(submissionId: string): Promise<void
       });
       console.log(`Equipment ${submission.itemId} marked as in_use`);
     } else if (submission.type === 'material') {
-      // Update material quantity
+      // Update material quantity (only deduct from quantity, preserve totalBought)
       const materialRef = doc(db, 'materials', submission.itemId);
       const materialSnap = await getDoc(materialRef);
       
@@ -319,28 +319,34 @@ export async function approveUsageSubmission(submissionId: string): Promise<void
         const currentQuantity = materialData.quantity || 0;
         const usedQuantity = submission.quantity || 0;
         const newQuantity = Math.max(0, currentQuantity - usedQuantity);
+        const totalBought = materialData.totalBought || currentQuantity; // Preserve totalBought
         
+        // Only update quantity, NOT totalBought (totalBought stays the same)
         await updateDoc(materialRef, {
           quantity: newQuantity,
+          // totalBought is NOT updated - it remains the original purchase amount
           lastUpdated: serverTimestamp()
         });
-        console.log(`Material ${submission.itemId} quantity updated to ${newQuantity}`);
+        console.log(`Material ${submission.itemId} quantity updated: ${newQuantity} available out of ${totalBought} total`);
 
-        // Check for low stock (threshold: 10 units or 20% of previous if we tracked it, default 10)
-        const LOW_STOCK_THRESHOLD = 10;
+        // Check for low stock (threshold: 10 units OR 20% of totalBought, whichever is higher)
+        const totalBoughtAmount = totalBought || newQuantity;
+        const percentageThreshold = Math.floor(totalBoughtAmount * 0.2); // 20% of total
+        const LOW_STOCK_THRESHOLD = Math.max(10, percentageThreshold); // At least 10 units, or 20% if higher
+        
         if (newQuantity <= LOW_STOCK_THRESHOLD) {
           // Send low stock alert to engineer
           const project = await getProject(submission.projectId);
           if (project && project.engineerId) {
             await sendNotification(project.engineerId, {
               title: 'Low Stock Alert',
-              body: `Stock for ${materialData.name} is low (${newQuantity} ${materialData.unit || 'units'} remaining).`,
+              body: `Stock for ${materialData.name} is low (${newQuantity} out of ${totalBought} ${materialData.unit || 'units'} remaining). Please restock soon.`,
               type: 'low_stock',
               relatedId: submission.itemId,
               projectId: submission.projectId,
               status: 'warning'
             });
-            console.log('Low stock alert sent');
+            console.log('Low stock alert sent to engineer');
           }
         }
       }

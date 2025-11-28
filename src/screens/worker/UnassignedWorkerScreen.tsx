@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -13,6 +13,7 @@ import {
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { theme, constructionColors, spacing, fontSizes, softDarkOrange } from '../../utils/theme';
 import { 
   getWorkerInvites, 
@@ -32,6 +33,7 @@ interface UnassignedWorkerScreenProps {
 }
 
 export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWorkerScreenProps) {
+  const navigation = useNavigation();
   const [invitations, setInvitations] = useState<WorkerAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
@@ -238,7 +240,14 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
           <Card.Content>
             <Title style={styles.cardTitle}>What You Can Do Now</Title>
             <View style={styles.availableActions}>
-              <View style={styles.actionItem}>
+              <TouchableOpacity 
+                style={styles.actionItem}
+                onPress={() => {
+                  // @ts-ignore
+                  navigation.navigate('Notifications');
+                }}
+                activeOpacity={0.7}
+              >
                 <Ionicons name="notifications-outline" size={24} color={softDarkOrange} />
                 <View style={styles.actionText}>
                   <Paragraph style={styles.actionTitle}>Check Notifications</Paragraph>
@@ -246,7 +255,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
                     Project assignment requests will appear here
                   </Paragraph>
                 </View>
-              </View>
+              </TouchableOpacity>
               
               <View style={styles.actionItem}>
                 <Ionicons name="person-outline" size={24} color={softDarkOrange} />
@@ -598,7 +607,7 @@ const styles = StyleSheet.create({
   invitationCard: {
     marginBottom: spacing.lg,
     elevation: 4,
-    backgroundColor: theme.colors.primaryContainer,
+    backgroundColor: '#000000',
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
   },
