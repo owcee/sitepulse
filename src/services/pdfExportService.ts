@@ -95,35 +95,94 @@ function generateBudgetHTML(
   const contingency = projectInfo.contingencyPercentage || 0;
   const contingencyAmount = (projectInfo.totalBudget * contingency) / 100;
 
-  // Group logs by category for summary
+  // Debug: Log budget logs to see what we're working with
+  console.log('PDF Export - Budget Logs Count:', budgetLogs.length);
+  console.log('PDF Export - Budget Logs:', JSON.stringify(budgetLogs, null, 2));
+
+  // Group logs by category for summary - ensure we handle all categories
   const categorySummary = budgetLogs.reduce((acc, log) => {
-    const category = log.category || 'Other';
-    if (!acc[category]) {
-      acc[category] = 0;
+    // Skip invalid logs
+    if (!log) {
+      console.log('PDF Export - Skipping null/undefined log');
+      return acc;
     }
-    acc[category] += log.amount || 0;
+    if (!log.amount || log.amount <= 0) {
+      console.log('PDF Export - Skipping log with invalid amount:', log);
+      return acc;
+    }
+    
+    // Normalize category: handle both string and union types, trim whitespace, default to 'Other'
+    let category = log.category;
+    if (!category || typeof category !== 'string') {
+      console.log('PDF Export - Category is not a string, defaulting to "other":', category);
+      category = 'other';
+    }
+    category = String(category).trim();
+    if (!category || category === '') {
+      console.log('PDF Export - Category is empty, defaulting to "other"');
+      category = 'other';
+    }
+    // Normalize to lowercase for consistent grouping (handle already capitalized categories)
+    const normalizedCategory = category.toLowerCase();
+    console.log('PDF Export - Processing category:', category, '-> normalized:', normalizedCategory, 'amount:', log.amount);
+    
+    if (!acc[normalizedCategory]) {
+      acc[normalizedCategory] = 0;
+    }
+    acc[normalizedCategory] += log.amount;
     return acc;
   }, {} as Record<string, number>);
 
-  // Generate category summary HTML
-  const categoryRows = Object.entries(categorySummary)
+  console.log('PDF Export - Category Summary:', JSON.stringify(categorySummary, null, 2));
+
+  // Generate category summary HTML - capitalize first letter
+  const categoryEntries = Object.entries(categorySummary);
+  console.log('PDF Export - Category entries:', categoryEntries);
+  
+  const categoryRows = categoryEntries
+    .filter(([category, amount]) => {
+      const isValid = category && category !== '' && amount > 0;
+      if (!isValid) {
+        console.log('PDF Export - Filtering out category entry:', category, amount);
+      }
+      return isValid;
+    })
     .sort((a, b) => b[1] - a[1])
-    .map(([category, amount]) => `
+    .map(([category, amount]) => {
+      // Capitalize first letter, rest lowercase
+      const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+      console.log('PDF Export - Generating row for category:', capitalizedCategory, 'amount:', amount);
+      return `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${category}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${capitalizedCategory}</td>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-weight: 600;">
           ₱${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </td>
       </tr>
-    `)
+    `;
+    })
     .join('');
+  
+  console.log('PDF Export - Category rows generated:', categoryRows.length > 0 ? 'YES' : 'NO');
+  console.log('PDF Export - Category rows HTML length:', categoryRows.length);
   
   // If no category rows, show a message
   const categoryTableContent = categoryRows || '<tr><td colspan="2" style="text-align: center; padding: 20px; color: #999;">No budget logs recorded</td></tr>';
 
   // Generate detailed logs HTML - sort by date descending
   const logRows = budgetLogs
-    .filter(log => log && log.date && log.amount) // Filter out invalid logs
+    .filter(log => {
+      // Filter out invalid logs
+      if (!log || !log.amount || log.amount <= 0) return false;
+      if (!log.date) return false;
+      // Ensure category exists
+      let category = log.category;
+      if (typeof category !== 'string') {
+        category = 'Other';
+      }
+      category = category.trim();
+      return category !== '';
+    })
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
@@ -131,17 +190,26 @@ function generateBudgetHTML(
     })
     .map((log) => {
       const logDate = log.date ? new Date(log.date).toLocaleDateString('en-US') : 'N/A';
-      const category = log.category || 'Other';
-      const description = log.description || 'No description';
+      // Normalize category
+      let category = log.category;
+      if (typeof category !== 'string') {
+        category = 'Other';
+      }
+      category = category.trim();
+      if (!category || category === '') {
+        category = 'Other';
+      }
+      const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+      const description = (log.description || 'No description').trim();
       const amount = log.amount || 0;
-      const addedBy = log.addedBy || 'Engineer';
+      const addedBy = (log.addedBy || 'Engineer').trim();
       
       return `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">
           ${logDate}
         </td>
-        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${category}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${capitalizedCategory}</td>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${description}</td>
         <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; font-weight: 600;">
           ₱${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -409,16 +477,28 @@ interface MaterialItem {
   dateAdded: string;
 }
 
+interface EquipmentItem {
+  id: string;
+  name: string;
+  type: 'owned' | 'rental';
+  category: string;
+  condition: 'excellent' | 'good' | 'fair' | 'needs_repair';
+  rentalCost?: number;
+  status: 'available' | 'in_use' | 'maintenance';
+  dateAcquired: string;
+}
+
 /**
  * Generate Materials Inventory Report as PDF
  */
 export async function exportMaterialsToPDF(
   materials: MaterialItem[], 
   projectInfo: ProjectInfo,
-  lowStockThreshold: number = 10
+  lowStockThreshold: number = 10,
+  equipment?: EquipmentItem[]
 ): Promise<void> {
   try {
-    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold);
+    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold, equipment);
 
     const { uri } = await Print.printToFileAsync({
       html: htmlContent,
@@ -465,7 +545,8 @@ export async function exportMaterialsToPDF(
 function generateMaterialsHTML(
   materials: MaterialItem[],
   projectInfo: ProjectInfo,
-  lowStockThreshold: number
+  lowStockThreshold: number,
+  equipment?: EquipmentItem[]
 ): string {
   const currentDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
@@ -474,8 +555,10 @@ function generateMaterialsHTML(
   });
 
   const totalValue = materials.reduce((sum, m) => sum + (m.quantity * m.price), 0);
+  const equipmentValue = equipment ? equipment.reduce((sum, e) => sum + (e.rentalCost || 0), 0) : 0;
+  const totalInventoryValue = totalValue + equipmentValue;
   const lowStockItems = materials.filter(m => m.quantity <= lowStockThreshold);
-  const totalItems = materials.length;
+  const totalItems = materials.length + (equipment ? equipment.length : 0);
 
   // Group by category
   const categorySummary = materials.reduce((acc, m) => {
@@ -524,6 +607,29 @@ function generateMaterialsHTML(
       `;
     })
     .join('');
+
+  // Generate equipment rows
+  const equipmentRows = equipment && equipment.length > 0 ? equipment
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((e) => {
+      const statusColor = e.status === 'available' ? '#4CAF50' : e.status === 'in_use' ? '#FF9800' : '#F44336';
+      const conditionText = e.condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+      return `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${e.name}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${e.category}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px; text-transform: capitalize;">${e.type}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${conditionText}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px; color: ${statusColor}; font-weight: 600; text-transform: capitalize;">
+            ${e.status.replace('_', ' ')}
+          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; font-weight: 600;">
+            ${e.rentalCost ? `₱${e.rentalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+          </td>
+        </tr>
+      `;
+    })
+    .join('') : '';
 
   const lowStockRows = lowStockItems
     .map((m) => `
@@ -678,7 +784,7 @@ function generateMaterialsHTML(
         </div>
         <div class="summary-card">
           <h3>Total Value</h3>
-          <p class="value">₱${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          <p class="value">₱${totalInventoryValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
         </div>
         <div class="summary-card ${lowStockItems.length > 0 ? 'red' : 'orange'}">
           <h3>Low Stock Items</h3>
@@ -721,7 +827,7 @@ function generateMaterialsHTML(
       </div>
 
       <div class="section">
-        <h2>Detailed Inventory (${materials.length} items)</h2>
+        <h2>Detailed Inventory - Materials (${materials.length} items)</h2>
         <table>
           <thead>
             <tr>
@@ -738,6 +844,27 @@ function generateMaterialsHTML(
           </tbody>
         </table>
       </div>
+
+      ${equipment && equipment.length > 0 ? `
+      <div class="section">
+        <h2>Detailed Inventory - Equipment (${equipment.length} items)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Equipment</th>
+              <th>Category</th>
+              <th>Type</th>
+              <th>Condition</th>
+              <th>Status</th>
+              <th style="text-align: right;">Rental Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${equipmentRows}
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
 
       <div class="footer">
         <p><strong>SitePulse</strong> - Construction Management Platform</p>

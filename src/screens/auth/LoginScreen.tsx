@@ -90,7 +90,7 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.content}>
         {/* Logo and Title */}
         <View style={styles.header}>
@@ -101,7 +101,11 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
               resizeMode="contain"
             />
           </View>
-          <Title style={styles.title} numberOfLines={1}>SitePulse</Title>
+          <View style={styles.titleContainer}>
+            <View style={styles.titleAccent} />
+            <Title style={styles.title} numberOfLines={1} adjustsFontSizeToFit>SITEPULSE</Title>
+            <View style={styles.titleAccent} />
+          </View>
           <Paragraph style={styles.subtitle} numberOfLines={2}>
             Construction Task Monitoring
           </Paragraph>
@@ -110,7 +114,7 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
         {/* Login Form */}
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.cardTitle} numberOfLines={1}>Welcome Back</Title>
+            <Title style={styles.cardTitle} numberOfLines={1}>Welcome</Title>
             
             <Paragraph style={styles.roleInfo} numberOfLines={2}>
               Your role is detected automatically
@@ -240,11 +244,27 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    paddingTop: spacing.xxl * 1.5,
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xl * 2,
+    marginTop: spacing.xl,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.md,
+    width: '100%',
+  },
+  titleAccent: {
+    flex: 1,
+    height: 2,
+    backgroundColor: theme.colors.primary,
+    marginHorizontal: spacing.md,
   },
   logoContainer: {
     width: 120,
@@ -262,9 +282,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSizes.xxxl,
-    fontWeight: 'bold',
+    fontWeight: '900',
     color: theme.colors.primary,
-    marginBottom: spacing.xs,
+    letterSpacing: 3,
+    textShadowColor: 'rgba(255, 107, 53, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     fontSize: fontSizes.md,
@@ -275,6 +298,7 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
+    marginBottom: spacing.xl,
   },
   cardTitle: {
     textAlign: 'center',

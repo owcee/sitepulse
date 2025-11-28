@@ -16,6 +16,7 @@ import {
   Surface
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 
 import { User } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
@@ -29,6 +30,7 @@ interface SettingsScreenProps {
 }
 
 export default function SettingsScreen({ visible, onDismiss }: SettingsScreenProps = {}) {
+  const navigation = useNavigation();
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
@@ -257,7 +259,10 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
               description="Read our privacy policy"
               left={() => <List.Icon icon="shield-check" color={theme.colors.primary} />}
               right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => Alert.alert('Privacy Policy', 'Privacy policy would be opened here.')}
+              onPress={() => {
+                if (onDismiss) onDismiss();
+                navigation.navigate('Project Tools', { screen: 'PrivacyPolicy' });
+              }}
               style={styles.settingsItem}
             />
             
@@ -268,7 +273,10 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
               description="Read our terms of service"
               left={() => <List.Icon icon="file-document" color={theme.colors.primary} />}
               right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => Alert.alert('Terms of Service', 'Terms of service would be opened here.')}
+              onPress={() => {
+                if (onDismiss) onDismiss();
+                navigation.navigate('Project Tools', { screen: 'TermsOfService' });
+              }}
               style={styles.settingsItem}
             />
             

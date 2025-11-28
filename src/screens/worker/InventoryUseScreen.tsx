@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, Alert, ScrollView, Image, FlatList, Text, Dimensions } from 'react-native';
 import { 
   Card, 
@@ -24,6 +24,7 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import { UsageSubmission } from '../../types';
 import { submitUsageReport, checkDuplicateUsage } from '../../services/firebaseService';
+import { getWorkerSubmissions } from '../../services/usageService';
 // @ts-ignore - firebaseConfig exports auth which may have implicit any type
 import { auth } from '../../firebaseConfig';
 import type { Auth } from 'firebase/auth';
@@ -35,65 +36,13 @@ const { width: screenWidth } = Dimensions.get('window');
 
 // UsageSubmission interface moved to types/index.ts
 
-// Mock usage submissions
-const mockSubmissions: UsageSubmission[] = [
-  {
-    id: '1',
-    type: 'material',
-    itemId: '1',
-    itemName: 'Portland Cement',
-    quantity: 5,
-    unit: 'bags',
-    notes: 'Used for foundation work in section A',
-    photo: 'https://via.placeholder.com/300x200',
-    timestamp: '2024-01-25T10:30:00Z',
-    status: 'approved',
-    taskId: 'current-task-1',
-    workerId: 'worker-001',
-  },
-  {
-    id: '2',
-    type: 'equipment',
-    itemId: '2',
-    itemName: 'Concrete Mixer',
-    notes: 'Used for mixing concrete for foundation',
-    photo: 'https://via.placeholder.com/300x200',
-    timestamp: '2024-01-25T14:15:00Z',
-    status: 'pending',
-    taskId: 'current-task-1',
-    workerId: 'current-worker-id',
-  },
-  {
-    id: '3',
-    type: 'damage',
-    itemId: '1',
-    itemName: 'Excavator CAT 320',
-    notes: 'Hydraulic hose ruptured during operation. Oil leak detected. Equipment stopped immediately.',
-    photo: 'https://via.placeholder.com/300x200',
-    timestamp: '2024-01-26T11:30:00Z',
-    status: 'approved',
-    taskId: 'current-task-2',
-    workerId: 'current-worker-id',
-  },
-  {
-    id: '4',
-    type: 'material',
-    itemId: '1',
-    itemName: 'Portland Cement',
-    quantity: 6,
-    unit: 'bags',
-    notes: 'Used for foundation work in section A',
-    photo: 'https://via.placeholder.com/300x200',
-    timestamp: '2024-01-25T11:00:00Z',
-    status: 'approved',
-    taskId: 'current-task-1',
-    workerId: 'worker-002',
-  },
-];
-
 export default function InventoryUseScreen() {
   const { state } = useProjectData();
   const [activeTab, setActiveTab] = useState('materials');
+  const [usageHistory, setUsageHistory] = useState<UsageSubmission[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedSubmission, setSelectedSubmission] = useState<UsageSubmission | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<string>('');
@@ -106,6 +55,44 @@ export default function InventoryUseScreen() {
   const [currentTaskId, setCurrentTaskId] = useState<string>('');
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
+
+  // Load usage history when history tab is active
+  useEffect(() => {
+    if (activeTab === 'history' && typedAuth?.currentUser) {
+      loadUsageHistory();
+    }
+  }, [activeTab, typedAuth?.currentUser]);
+
+  const loadUsageHistory = async () => {
+    if (!typedAuth?.currentUser) return;
+    
+    try {
+      setLoadingHistory(true);
+      const submissions = await getWorkerSubmissions(typedAuth.currentUser.uid);
+      // Map service submissions to component type (photoUrl -> photo, Date -> string)
+      const mappedSubmissions: UsageSubmission[] = submissions.map(sub => ({
+        id: sub.id,
+        type: sub.type,
+        itemId: sub.itemId,
+        itemName: sub.itemName,
+        quantity: sub.quantity,
+        unit: sub.unit,
+        notes: sub.notes || '',
+        photo: sub.photoUrl || '',
+        timestamp: sub.timestamp instanceof Date ? sub.timestamp.toISOString() : (typeof sub.timestamp === 'string' ? sub.timestamp : new Date().toISOString()),
+        status: sub.status,
+        rejectionReason: sub.rejectionReason,
+        taskId: sub.taskId,
+        workerId: sub.workerId,
+      }));
+      setUsageHistory(mappedSubmissions);
+    } catch (error: any) {
+      console.error('Error loading usage history:', error);
+      Alert.alert('Error', 'Failed to load usage history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const openUsageModal = (type: 'material' | 'equipment' | 'damage', itemId: string, taskId: string = 'current-task-1') => {
     setSubmissionType(type);
@@ -238,6 +225,12 @@ export default function InventoryUseScreen() {
       const result = await submitUsageReport(reportData);
       
       setIsSubmitting(false);
+      
+      // Refresh history if on history tab
+      if (activeTab === 'history') {
+        await loadUsageHistory();
+      }
+      
       Alert.alert(
         submissionType === 'damage' ? 'Damage Report Submitted' : 'Usage Report Submitted',
         submissionType === 'damage' 
@@ -501,6 +494,7 @@ export default function InventoryUseScreen() {
                       icon="clipboard-check"
                       style={styles.reportUsageButton}
                       contentStyle={styles.reportButtonContent}
+                      labelStyle={styles.reportButtonLabel}
                     >
                       Report Usage
                     </Button>
@@ -513,6 +507,7 @@ export default function InventoryUseScreen() {
                       icon="alert-circle"
                       style={styles.reportDamageButton}
                       contentStyle={styles.reportButtonContent}
+                      labelStyle={styles.reportButtonLabel}
                     >
                       Report Damage
                     </Button>
@@ -529,57 +524,178 @@ export default function InventoryUseScreen() {
             <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.cardTitle}>Usage History</Title>
               
-              {mockSubmissions.map((submission) => (
-                <List.Item
-                  key={submission.id}
-                  title={submission.itemName}
-                  description={`${submission.type === 'damage' ? 'DAMAGE REPORT' : submission.type.toUpperCase()} • ${new Date(submission.timestamp).toLocaleDateString()}`}
-                  left={() => (
-                    <List.Icon 
-                      icon={
-                        submission.type === 'material' ? 'package-variant' : 
-                        submission.type === 'equipment' ? 'hammer' : 
-                        'alert-circle'
-                      }
-                      color={
-                        submission.type === 'damage' ? constructionColors.urgent : 
-                        getStatusColor(submission.status)
-                      }
-                    />
-                  )}
-                  right={() => (
-                    <Chip 
-                      style={{ 
-                        backgroundColor: submission.type === 'damage' && submission.status === 'approved' 
-                          ? constructionColors.urgent 
-                          : getStatusColor(submission.status) 
-                      }}
-                      textStyle={{ color: 'white', fontSize: 12 }}
-                    >
-                      {submission.status.toUpperCase()}
-                    </Chip>
-                  )}
-                  onPress={() => {
-                    if (submission.rejectionReason) {
-                      Alert.alert(
-                        'Rejection Reason',
-                        submission.rejectionReason,
-                        [{ text: 'OK' }]
-                      );
-                    } else {
-                      Alert.alert(
-                        submission.type === 'damage' ? 'Damage Report Details' : 'Usage Details',
-                        submission.notes,
-                        [{ text: 'OK' }]
-                      );
-                    }
-                  }}
-                  style={styles.historyItem}
-                />
-              ))}
+              {loadingHistory ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={theme.colors.primary} />
+                  <Paragraph style={styles.loadingText}>Loading history...</Paragraph>
+                </View>
+              ) : usageHistory.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Paragraph style={styles.emptyText}>No usage history found</Paragraph>
+                </View>
+              ) : (
+                usageHistory.map((submission) => (
+                  <List.Item
+                    key={submission.id}
+                    title={submission.itemName}
+                    description={`${submission.type === 'damage' ? 'DAMAGE REPORT' : submission.type.toUpperCase()} • ${submission.timestamp ? new Date(submission.timestamp).toLocaleDateString() : 'N/A'}`}
+                    left={() => (
+                      <List.Icon 
+                        icon={
+                          submission.type === 'material' ? 'package-variant' : 
+                          submission.type === 'equipment' ? 'hammer' : 
+                          'alert-circle'
+                        }
+                        color={
+                          submission.type === 'damage' ? constructionColors.urgent : 
+                          getStatusColor(submission.status)
+                        }
+                      />
+                    )}
+                    right={() => (
+                      <Chip 
+                        style={{
+                          ...styles.statusChip,
+                          backgroundColor: submission.type === 'damage' && submission.status === 'approved' 
+                            ? constructionColors.urgent 
+                            : getStatusColor(submission.status),
+                        }}
+                        textStyle={styles.statusChipText}
+                      >
+                        {submission.status.toUpperCase()}
+                      </Chip>
+                    )}
+                    onPress={() => {
+                      setSelectedSubmission(submission);
+                      setShowDetailModal(true);
+                    }}
+                    style={styles.historyItem}
+                    titleStyle={{ color: theme.colors.text }}
+                    descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+                  />
+                ))
+              )}
             </Card.Content>
           </Card>
         )}
+
+        {/* Submission Detail Modal */}
+        <Portal>
+          <Modal
+            visible={showDetailModal}
+            onDismiss={() => {
+              setShowDetailModal(false);
+              setSelectedSubmission(null);
+            }}
+            contentContainerStyle={styles.detailModalContainer}
+          >
+            <Surface style={styles.detailModalSurface}>
+              <View style={styles.detailModalHeader}>
+                <Title style={styles.detailModalTitle}>
+                  {selectedSubmission?.type === 'damage' ? 'Damage Report Details' : 'Usage Details'}
+                </Title>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  iconColor={theme.colors.text}
+                  onPress={() => {
+                    setShowDetailModal(false);
+                    setSelectedSubmission(null);
+                  }}
+                />
+              </View>
+              
+              <ScrollView style={styles.detailModalContent}>
+                {selectedSubmission && (
+                  <>
+                    <View style={styles.detailSection}>
+                      <Paragraph style={styles.detailLabel}>Item Name:</Paragraph>
+                      <Paragraph style={styles.detailValue}>{selectedSubmission.itemName}</Paragraph>
+                    </View>
+                    
+                    <View style={styles.detailSection}>
+                      <Paragraph style={styles.detailLabel}>Type:</Paragraph>
+                      <Paragraph style={styles.detailValue}>
+                        {selectedSubmission.type === 'damage' ? 'DAMAGE REPORT' : selectedSubmission.type.toUpperCase()}
+                      </Paragraph>
+                    </View>
+                    
+                    {selectedSubmission.type === 'material' && (
+                      <View style={styles.detailSection}>
+                        <Paragraph style={styles.detailLabel}>Quantity:</Paragraph>
+                        <Paragraph style={styles.detailValue}>
+                          {selectedSubmission.quantity || 'N/A'} {selectedSubmission.unit || ''}
+                        </Paragraph>
+                      </View>
+                    )}
+                    
+                    <View style={styles.detailSection}>
+                      <Paragraph style={styles.detailLabel}>Status:</Paragraph>
+                      <Chip 
+                        style={{
+                          ...styles.detailStatusChip,
+                          backgroundColor: selectedSubmission.type === 'damage' && selectedSubmission.status === 'approved' 
+                            ? constructionColors.urgent 
+                            : getStatusColor(selectedSubmission.status),
+                        }}
+                        textStyle={styles.detailStatusChipText}
+                      >
+                        {selectedSubmission.status.toUpperCase()}
+                      </Chip>
+                    </View>
+                    
+                    <View style={styles.detailSection}>
+                      <Paragraph style={styles.detailLabel}>Date:</Paragraph>
+                      <Paragraph style={styles.detailValue}>
+                        {selectedSubmission.timestamp ? new Date(selectedSubmission.timestamp).toLocaleDateString() : 'N/A'}
+                      </Paragraph>
+                    </View>
+                    
+                    {selectedSubmission.notes && (
+                      <View style={styles.detailSection}>
+                        <Paragraph style={styles.detailLabel}>Notes:</Paragraph>
+                        <Paragraph style={styles.detailValue}>{selectedSubmission.notes}</Paragraph>
+                      </View>
+                    )}
+                    
+                    {selectedSubmission.rejectionReason && (
+                      <View style={styles.detailSection}>
+                        <Paragraph style={styles.detailLabel}>Rejection Reason:</Paragraph>
+                        <Paragraph style={[styles.detailValue, { color: constructionColors.urgent }]}>
+                          {selectedSubmission.rejectionReason}
+                        </Paragraph>
+                      </View>
+                    )}
+                    
+                    {selectedSubmission.photo && (
+                      <View style={styles.detailSection}>
+                        <Paragraph style={styles.detailLabel}>Photo:</Paragraph>
+                        <Image 
+                          source={{ uri: selectedSubmission.photo }} 
+                          style={styles.detailPhoto}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    )}
+                  </>
+                )}
+              </ScrollView>
+              
+              <View style={styles.detailModalActions}>
+                <Button
+                  mode="contained"
+                  onPress={() => {
+                    setShowDetailModal(false);
+                    setSelectedSubmission(null);
+                  }}
+                  style={styles.detailModalButton}
+                >
+                  Close
+                </Button>
+              </View>
+            </Surface>
+          </Modal>
+        </Portal>
 
         {/* Old forms removed - now using modal */}
         {false && selectedItem && submissionType === 'material' && !showCamera && (
@@ -855,6 +971,7 @@ export default function InventoryUseScreen() {
                   onChangeText={setQuantity}
                   keyboardType="numeric"
                   style={styles.textInput}
+                  textColor={theme.colors.text}
                   right={<TextInput.Affix text={(getSelectedItemInfo() as any)?.unit || ''} />}
                 />
               )}
@@ -868,6 +985,7 @@ export default function InventoryUseScreen() {
                 multiline
                 numberOfLines={4}
                 style={styles.textInput}
+                textColor={theme.colors.text}
                 placeholder={
                   submissionType === 'damage' 
                     ? 'Describe the damage in detail...'
@@ -878,7 +996,7 @@ export default function InventoryUseScreen() {
               />
 
               {/* Photo Section */}
-              <Surface style={[styles.photoSection, { backgroundColor: theme.colors.background }]}>
+              <Surface style={styles.photoSection}>
                 <View style={styles.photoHeader}>
                   <Paragraph style={styles.photoTitle}>Photo Evidence * (Required)</Paragraph>
                   <Paragraph style={styles.photoSubtitle}>
@@ -894,22 +1012,26 @@ export default function InventoryUseScreen() {
                 {capturedImage ? (
                   <View style={styles.photoPreview}>
                     <Image source={{ uri: capturedImage }} style={styles.previewImage} />
-                    <IconButton
-                      icon="camera"
-                      mode="contained"
+                    <Button
+                      mode="outlined"
                       onPress={openCameraForSelectedItem}
-                      style={styles.photoActionButton}
-                    />
+                      icon="camera"
+                      style={styles.retakePhotoButton}
+                      contentStyle={styles.actionButtonContent}
+                    >
+                      Retake Photo
+                    </Button>
                   </View>
                 ) : (
                   <Button
-                    mode="outlined"
+                    mode="contained"
                     onPress={openCameraForSelectedItem}
                     icon="camera"
-                    style={styles.photoActionButton}
-                    contentStyle={styles.actionButtonContent}
+                    style={styles.uploadPhotoButton}
+                    contentStyle={styles.uploadPhotoButtonContent}
+                    labelStyle={styles.uploadPhotoButtonLabel}
                   >
-                    Take Photo
+                    Upload Photo Here
                   </Button>
                 )}
               </Surface>
@@ -935,6 +1057,8 @@ export default function InventoryUseScreen() {
                   }
                   loading={isSubmitting}
                   style={styles.submitButton}
+                  contentStyle={styles.submitButtonContent}
+                  labelStyle={styles.submitButtonLabel}
                 >
                   {submissionType === 'damage' ? 'Submit Damage Report' : 'Submit Usage'}
                 </Button>
@@ -1004,6 +1128,7 @@ const styles = StyleSheet.create({
   },
   reportButtonContent: {
     paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   instructions: {
     fontSize: fontSizes.sm,
@@ -1028,6 +1153,38 @@ const styles = StyleSheet.create({
   },
   historyItem: {
     paddingVertical: spacing.sm,
+    backgroundColor: 'transparent',
+  },
+  statusChip: {
+    height: 32,
+    paddingHorizontal: spacing.lg,
+    minWidth: 110,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusChipText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    letterSpacing: 0.5,
+  },
+  loadingContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    color: theme.colors.onSurfaceVariant,
+  },
+  emptyContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: theme.colors.onSurfaceVariant,
+    fontSize: fontSizes.sm,
   },
   selectedItemInfo: {
     padding: spacing.md,
@@ -1039,6 +1196,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.xs,
+    fontWeight: '600',
   },
   selectedItemName: {
     fontSize: fontSizes.lg,
@@ -1048,7 +1206,8 @@ const styles = StyleSheet.create({
   },
   selectedItemDetails: {
     fontSize: fontSizes.sm,
-    color: theme.colors.onSurfaceVariant,
+    color: theme.colors.onSurface,
+    fontWeight: '500',
   },
   photoPreview: {
     position: 'relative',
@@ -1166,19 +1325,23 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   equipmentActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     paddingTop: spacing.sm,
+    gap: spacing.sm,
   },
   reportUsageButton: {
     backgroundColor: theme.colors.primary,
-    flex: 1,
-    marginRight: spacing.xs,
+    width: '100%',
+    marginBottom: spacing.sm,
   },
   reportDamageButton: {
     backgroundColor: constructionColors.urgent,
-    flex: 1,
-    marginLeft: spacing.xs,
+    width: '100%',
+  },
+  reportButtonLabel: {
+    color: theme.colors.onPrimary,
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
   },
   quantitySection: {
     marginVertical: spacing.md,
@@ -1220,6 +1383,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     padding: spacing.md,
     borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
   },
   photoLabel: {
     fontSize: fontSizes.md,
@@ -1258,6 +1423,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
+    padding: spacing.md,
   },
   modalScroll: {
     maxHeight: '100%',
@@ -1279,7 +1445,7 @@ const styles = StyleSheet.create({
   },
   photoSubtitle: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     marginTop: spacing.xs,
   },
   photoActionButton: {
@@ -1287,5 +1453,99 @@ const styles = StyleSheet.create({
   },
   actionButtonContent: {
     height: 40,
+  },
+  submitButtonContent: {
+    paddingVertical: spacing.sm,
+  },
+  submitButtonLabel: {
+    color: theme.colors.onPrimary,
+    fontWeight: '600',
+  },
+  uploadPhotoButton: {
+    backgroundColor: theme.colors.primary,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  uploadPhotoButtonContent: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  uploadPhotoButtonLabel: {
+    color: theme.colors.onPrimary,
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+  },
+  retakePhotoButton: {
+    borderColor: theme.colors.primary,
+    marginTop: spacing.sm,
+  },
+  detailModalContainer: {
+    padding: spacing.md,
+    justifyContent: 'center',
+  },
+  detailModalSurface: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+    padding: spacing.lg,
+    maxHeight: '90%',
+  },
+  detailModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  detailModalTitle: {
+    color: theme.colors.text,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  detailModalContent: {
+    maxHeight: 400,
+  },
+  detailSection: {
+    marginBottom: spacing.md,
+  },
+  detailLabel: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.xs,
+    fontWeight: '600',
+  },
+  detailValue: {
+    fontSize: fontSizes.md,
+    color: theme.colors.text,
+    lineHeight: 22,
+  },
+  detailStatusChip: {
+    height: 32,
+    paddingHorizontal: spacing.lg,
+    minWidth: 110,
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailStatusChipText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    letterSpacing: 0.5,
+  },
+  detailPhoto: {
+    width: '100%',
+    height: 200,
+    borderRadius: theme.roundness,
+    marginTop: spacing.sm,
+  },
+  detailModalActions: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  detailModalButton: {
+    backgroundColor: theme.colors.primary,
   },
 });

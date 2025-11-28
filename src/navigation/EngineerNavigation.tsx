@@ -26,6 +26,8 @@ import ResourcesScreen from '../screens/engineer/ResourcesScreen';
 import ChatScreen from '../screens/shared/ChatScreen';
 import NotificationsScreen from '../screens/engineer/NotificationsScreen';
 import SettingsScreen from '../screens/engineer/SettingsScreen';
+import PrivacyPolicyScreen from '../screens/shared/PrivacyPolicyScreen';
+import TermsOfServiceScreen from '../screens/shared/TermsOfServiceScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -68,8 +70,15 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
   return (
     <Appbar.Header style={{ backgroundColor: softDarkOrange }}>
       <Appbar.Content 
-        title="SitePulse" 
-        titleStyle={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}
+        title="SITEPULSE" 
+        titleStyle={{ 
+          color: 'white', 
+          fontWeight: '900', 
+          fontSize: 20,
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          fontFamily: 'Roboto'
+        }}
         subtitle={project?.name || 'Project'}
         subtitleStyle={{ color: 'rgba(255,255,255,0.9)' }}
       />
@@ -130,7 +139,13 @@ const TasksStack = () => (
 
 // Stack navigator for Project Tools and related screens
 const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+  <Stack.Navigator 
+    screenOptions={{ 
+      headerShown: false,
+      animation: 'fade',
+      contentStyle: { backgroundColor: theme.colors.background }
+    }}
+  >
     <Stack.Screen name="ProjectToolsMain">
       {(props) => <ProjectToolsScreen {...props} user={user} project={project} onLogout={onLogout} />}
     </Stack.Screen>
@@ -141,6 +156,22 @@ const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
     <Stack.Screen name="WorkersManagement" component={WorkersManagementPage} />
     <Stack.Screen name="EquipmentManagement" component={EquipmentManagementPage} />
     <Stack.Screen name="BudgetLogsManagement" component={BudgetLogsManagementPage} />
+    <Stack.Screen 
+      name="PrivacyPolicy" 
+      component={PrivacyPolicyScreen}
+      options={{
+        animation: 'fade',
+        contentStyle: { backgroundColor: theme.colors.background }
+      }}
+    />
+    <Stack.Screen 
+      name="TermsOfService" 
+      component={TermsOfServiceScreen}
+      options={{
+        animation: 'fade',
+        contentStyle: { backgroundColor: theme.colors.background }
+      }}
+    />
   </Stack.Navigator>
 );
 

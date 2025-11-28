@@ -19,6 +19,8 @@ import ChatScreen from '../screens/shared/ChatScreen';
 import NotificationsScreen from '../screens/worker/NotificationsScreen';
 import SettingsScreen from '../screens/worker/SettingsScreen';
 import UnassignedWorkerScreen from '../screens/worker/UnassignedWorkerScreen';
+import PrivacyPolicyScreen from '../screens/shared/PrivacyPolicyScreen';
+import TermsOfServiceScreen from '../screens/shared/TermsOfServiceScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -82,8 +84,15 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
   return (
     <Appbar.Header style={{ backgroundColor: softDarkOrange }}>
       <Appbar.Content 
-        title="SitePulse" 
-        titleStyle={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}
+        title="SITEPULSE" 
+        titleStyle={{ 
+          color: 'white', 
+          fontWeight: '900', 
+          fontSize: 20,
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          fontFamily: 'Roboto'
+        }}
         subtitle={`Worker • ${user.name}`}
         subtitleStyle={{ color: 'rgba(255,255,255,0.8)' }}
       />
@@ -141,6 +150,35 @@ const TasksStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="WorkerTasksList" component={WorkerTasksScreen} />
     <Stack.Screen name="WorkerTaskDetail" component={WorkerTaskDetailScreen} />
+  </Stack.Navigator>
+);
+
+// Stack navigator for Settings to handle legal documents
+const SettingsStack = () => (
+  <Stack.Navigator 
+    screenOptions={{ 
+      headerShown: false,
+      animation: 'fade',
+      contentStyle: { backgroundColor: theme.colors.background }
+    }}
+  >
+    <Stack.Screen name="SettingsMain" component={SettingsScreen} />
+    <Stack.Screen 
+      name="PrivacyPolicy" 
+      component={PrivacyPolicyScreen}
+      options={{
+        animation: 'fade',
+        contentStyle: { backgroundColor: theme.colors.background }
+      }}
+    />
+    <Stack.Screen 
+      name="TermsOfService" 
+      component={TermsOfServiceScreen}
+      options={{
+        animation: 'fade',
+        contentStyle: { backgroundColor: theme.colors.background }
+      }}
+    />
   </Stack.Navigator>
 );
 
@@ -216,7 +254,6 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
           />
           <Tab.Screen 
             name="Settings" 
-            component={SettingsScreen}
             options={{ 
               tabBarLabel: 'Settings',
               tabBarIcon: ({ focused, color, size }) => (
@@ -227,7 +264,9 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
                 />
               ),
             }}
-          />
+          >
+            {() => <SettingsStack />}
+          </Tab.Screen>
         </Tab.Navigator>
       </View>
     );
@@ -310,9 +349,10 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
         />
         <Tab.Screen 
           name="Settings" 
-          component={SettingsScreen}
           options={{ tabBarLabel: 'Settings' }}
-        />
+        >
+          {() => <SettingsStack />}
+        </Tab.Screen>
       </Tab.Navigator>
     </View>
   );

@@ -41,6 +41,8 @@ export default function WorkerTaskDetailScreen() {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Load task from Firestore
   useEffect(() => {
@@ -121,17 +123,17 @@ export default function WorkerTaskDetailScreen() {
         }
       }
 
-      // Show notes modal (Android compatible)
-      setShowNotesModal(true);
+      // Open camera directly (photo first, then notes)
+      setShowCamera(true);
     } catch (error: any) {
       console.error('Error in photo upload flow:', error);
       Alert.alert('Error', error.message || 'Failed to start photo upload');
     }
   };
 
-  const continueToCamera = () => {
-    setShowNotesModal(false);
-    setShowCamera(true);
+  const showNotesAfterPhoto = () => {
+    setShowCamera(false);
+    setShowNotesModal(true);
   };
 
   const takePicture = async () => {
@@ -143,43 +145,10 @@ export default function WorkerTaskDetailScreen() {
         });
         
         setShowCamera(false);
-        setUploadingPhoto(true);
-
-        try {
-          // Get user profile for metadata
-          const { getUserProfile } = await import('../../utils/user');
-          if (!auth.currentUser) {
-            throw new Error('User not authenticated');
-          }
-          
-          const userProfile = await getUserProfile(auth.currentUser.uid);
-          if (!userProfile || !userProfile.projectId) {
-            throw new Error('No project assigned. Please contact your engineer.');
-          }
-
-          // Upload photo with proper metadata
-          await uploadTaskPhoto(
-            taskId,
-            photo.uri,
-            {
-              projectId: userProfile.projectId,
-              uploaderName: userProfile.name,
-              cnnClassification: null,
-              notes: photoNotes || undefined
-            }
-          );
-
-          Alert.alert('Success', 'Photo uploaded successfully. Awaiting engineer review.');
-          setPhotoNotes('');
-          
-          // Reload task to show new photo
-          await loadTaskDetails();
-        } catch (error: any) {
-          console.error('Error uploading photo:', error);
-          Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
-        } finally {
-          setUploadingPhoto(false);
-        }
+        setSelectedPhotoUri(photo.uri);
+        
+        // Show notes modal after photo is taken (optional)
+        setShowNotesModal(true);
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture. Please try again.');
         setShowCamera(false);
@@ -480,10 +449,11 @@ export default function WorkerTaskDetailScreen() {
         >
           <Card style={styles.notesModalCard}>
             <Card.Content style={{ backgroundColor: theme.colors.background }}>
-              <Title style={styles.notesModalTitle}>Add Notes (Optional)</Title>
+              <Title style={styles.notesModalTitle}>Upload Photo</Title>
               <Paragraph style={styles.notesModalSubtitle}>
-                Describe the work completed, any issues encountered, or questions for the engineer:
+                Photo captured successfully. Add notes (optional) before uploading:
               </Paragraph>
+              <Title style={[styles.notesModalTitle, { fontSize: fontSizes.md, marginTop: spacing.md, marginBottom: spacing.xs }]}>Add Notes (Optional)</Title>
               
               <TextInput
                 mode="outlined"
@@ -508,15 +478,75 @@ export default function WorkerTaskDetailScreen() {
                 </Button>
                 <Button
                   mode="contained"
-                  onPress={continueToCamera}
-                  icon="camera"
+                  onPress={async () => {
+                    setShowNotesModal(false);
+                    setUploadingPhoto(true);
+
+                    try {
+                      // Get user profile for metadata
+                      const userProfile = auth.currentUser ? {
+                        projectId: task?.projectId || '',
+                        name: auth.currentUser.displayName || 'Worker',
+                        uid: auth.currentUser.uid
+                      } : null;
+
+                      // Upload photo with proper metadata
+                      await uploadTaskPhoto(
+                        taskId,
+                        selectedPhotoUri,
+                        {
+                          projectId: userProfile?.projectId || '',
+                          uploaderName: userProfile?.name || 'Worker',
+                          uploaderId: userProfile?.uid || '',
+                          notes: photoNotes || undefined
+                        }
+                      );
+
+                      setSuccessMessage('Photo uploaded successfully. Awaiting engineer review.');
+                      setShowSuccessModal(true);
+                      setPhotoNotes('');
+                      setSelectedPhotoUri('');
+                      
+                      // Reload task to show new photo
+                      await loadTaskDetails();
+                    } catch (error: any) {
+                      console.error('Error uploading photo:', error);
+                      Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
+                    } finally {
+                      setUploadingPhoto(false);
+                    }
+                  }}
+                  icon="upload"
+                  loading={uploadingPhoto}
+                  disabled={uploadingPhoto}
                   style={styles.notesModalContinueButton}
                 >
-                  Continue
+                  {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
                 </Button>
               </View>
             </Card.Content>
           </Card>
+        </Modal>
+      </Portal>
+
+      {/* Success Modal */}
+      <Portal>
+        <Modal
+          visible={showSuccessModal}
+          onDismiss={() => setShowSuccessModal(false)}
+          contentContainerStyle={styles.successModalContainer}
+        >
+          <Surface style={styles.successModalSurface}>
+            <Title style={styles.successModalTitle}>Success</Title>
+            <Paragraph style={styles.successModalMessage}>{successMessage}</Paragraph>
+            <Button
+              mode="contained"
+              onPress={() => setShowSuccessModal(false)}
+              style={styles.successModalButton}
+            >
+              OK
+            </Button>
+          </Surface>
         </Modal>
       </Portal>
     </SafeAreaView>
@@ -973,6 +1003,35 @@ const styles = StyleSheet.create({
   },
   notesModalContinueButton: {
     minWidth: 120,
+  },
+  successModalContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  successModalSurface: {
+    backgroundColor: theme.colors.background,
+    padding: spacing.xl,
+    borderRadius: theme.roundness,
+    width: '90%',
+    maxWidth: 400,
+    elevation: 4,
+  },
+  successModalTitle: {
+    fontSize: fontSizes.xl,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  successModalMessage: {
+    fontSize: fontSizes.md,
+    color: theme.colors.text,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  successModalButton: {
+    marginTop: spacing.md,
   },
 });
 

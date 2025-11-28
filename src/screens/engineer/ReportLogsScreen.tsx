@@ -70,7 +70,7 @@ export default function ReportLogsScreen() {
     switch (type) {
       case 'equipment': return 'construct';
       case 'material': return 'cube';
-      case 'task': return 'check-circle';
+      case 'task': return 'checkmark-circle';
       case 'damage': return 'warning';
       default: return 'document';
     }
@@ -308,7 +308,7 @@ export default function ReportLogsScreen() {
             </View>
             <View style={styles.historyStatusIcon}>
               <Ionicons 
-                name={log.status === 'approved' ? 'check-circle' : 'close-circle'} 
+                name={log.status === 'approved' ? 'checkmark-circle' : 'close-circle'} 
                 size={24} 
                 color={log.status === 'approved' ? constructionColors.complete : constructionColors.urgent}
               />

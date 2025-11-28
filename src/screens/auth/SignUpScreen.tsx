@@ -127,7 +127,11 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
               resizeMode="contain"
             />
           </View>
-          <Title style={styles.title}>Join SitePulse</Title>
+          <View style={styles.titleContainer}>
+            <View style={styles.titleAccent} />
+            <Title style={styles.title} numberOfLines={1} adjustsFontSizeToFit>SITEPULSE</Title>
+            <View style={styles.titleAccent} />
+          </View>
           <Paragraph style={styles.subtitle}>
             Create your construction management account
           </Paragraph>
@@ -265,11 +269,27 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 50,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.md,
+    width: '100%',
+  },
+  titleAccent: {
+    flex: 1,
+    height: 2,
+    backgroundColor: theme.colors.primary,
+    marginHorizontal: spacing.md,
+  },
   title: {
-    fontSize: fontSizes.xxl,
-    fontWeight: 'bold',
+    fontSize: fontSizes.xxxl,
+    fontWeight: '900',
     color: theme.colors.primary,
-    marginBottom: spacing.xs,
+    letterSpacing: 3,
+    textShadowColor: 'rgba(255, 107, 53, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     fontSize: fontSizes.sm,

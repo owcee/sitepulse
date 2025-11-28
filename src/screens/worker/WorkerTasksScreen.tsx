@@ -11,11 +11,17 @@ import {
   FAB,
   Button,
   ActivityIndicator,
-  Text
+  Text,
+  Modal,
+  Portal,
+  Surface,
+  List
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { auth } from '../../firebaseConfig';
+import { collection, query, where, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 
 import { Task } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
@@ -29,6 +35,9 @@ export default function WorkerTasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [tasks, setTasks] = useState<FirebaseTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [taskPhotos, setTaskPhotos] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Load worker's tasks from Firestore
   useEffect(() => {
@@ -71,7 +80,107 @@ export default function WorkerTasksScreen() {
     setRefreshing(false);
   };
 
-  const getStatusColor = (status: Task['status']) => {
+  const loadTaskPhotoHistory = async () => {
+    if (!auth.currentUser) return;
+    
+    try {
+      setLoadingHistory(true);
+      const photosRef = collection(db, 'task_photos');
+      
+      // Query without orderBy first to avoid index requirement
+      let q = query(
+        photosRef,
+        where('uploaderId', '==', auth.currentUser.uid)
+      );
+
+      let snapshot;
+      try {
+        snapshot = await getDocs(q);
+      } catch (indexError: any) {
+        // If index error, try without orderBy
+        console.log('Index error, fetching without orderBy:', indexError);
+        q = query(
+          photosRef,
+          where('uploaderId', '==', auth.currentUser.uid)
+        );
+        snapshot = await getDocs(q);
+      }
+
+      const photos: any[] = [];
+      const taskCache = new Map<string, string>();
+
+      // Fetch all photos first
+      const photoPromises = snapshot.docs.map(async (photoDoc) => {
+        const data = photoDoc.data();
+        let taskTitle = 'Unknown Task';
+        
+        // Try to get task title from cache or fetch it
+        if (data.taskId) {
+          if (taskCache.has(data.taskId)) {
+            taskTitle = taskCache.get(data.taskId)!;
+          } else {
+            try {
+              const taskDocRef = doc(db, 'tasks', data.taskId);
+              const taskSnap = await getDoc(taskDocRef);
+              if (taskSnap.exists()) {
+                const taskData = taskSnap.data();
+                taskTitle = taskData.title || 'Unknown Task';
+                taskCache.set(data.taskId, taskTitle);
+              }
+            } catch (err) {
+              console.error('Error fetching task title:', err);
+            }
+          }
+        }
+        
+        const uploadedAt = data.uploadedAt?.toDate() || new Date();
+        
+        return {
+          id: photoDoc.id,
+          taskId: data.taskId,
+          taskTitle: taskTitle,
+          imageUrl: data.imageUrl,
+          verificationStatus: data.verificationStatus || 'pending',
+          notes: data.notes || '',
+          rejectionReason: data.rejectionReason || '',
+          uploadedAt: uploadedAt,
+          verifiedAt: data.verifiedAt?.toDate(),
+          verifiedBy: data.verifiedBy,
+        };
+      });
+
+      const resolvedPhotos = await Promise.all(photoPromises);
+      
+      // Sort by uploadedAt descending in memory
+      resolvedPhotos.sort((a, b) => {
+        const dateA = a.uploadedAt instanceof Date ? a.uploadedAt.getTime() : new Date(a.uploadedAt).getTime();
+        const dateB = b.uploadedAt instanceof Date ? b.uploadedAt.getTime() : new Date(b.uploadedAt).getTime();
+        return dateB - dateA;
+      });
+      
+      setTaskPhotos(resolvedPhotos);
+    } catch (error: any) {
+      console.error('Error loading task photo history:', error);
+      Alert.alert('Error', `Failed to load upload history: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return constructionColors.complete;
+      case 'rejected':
+        return constructionColors.urgent;
+      case 'pending':
+        return constructionColors.warning;
+      default:
+        return theme.colors.outline;
+    }
+  };
+
+  const getTaskStatusColor = (status: Task['status']) => {
     switch (status) {
       case 'completed':
         return constructionColors.complete;
@@ -141,11 +250,17 @@ export default function WorkerTasksScreen() {
     const daysUntilDue = getDaysUntilDue(task.planned_end_date);
     const isOverdue = daysUntilDue < 0;
     const isDueSoon = daysUntilDue <= 2 && daysUntilDue >= 0;
+    const isCompleted = task.status === 'completed';
+    const isInProgress = task.status === 'in_progress';
+    
+    // For completed tasks, use View instead of TouchableOpacity
+    const CardWrapper = isCompleted ? View : TouchableOpacity;
+    const cardProps = isCompleted ? {} : { onPress: () => handleTaskPress(task) };
     
     return (
-      <TouchableOpacity 
+      <CardWrapper 
         key={task.id} 
-        onPress={() => handleTaskPress(task)}
+        {...cardProps}
         style={styles.taskCardTouchable}
       >
         <Card style={[
@@ -158,19 +273,19 @@ export default function WorkerTasksScreen() {
             {/* Header Row */}
             <View style={[styles.taskHeader, { overflow: 'visible' }]}>
               <View style={[styles.taskTitleRow, { overflow: 'visible' }]}>
-                <IconButton
-                  icon={getStatusIcon(task.status)}
-                  size={24}
-                  iconColor={getStatusColor(task.status)}
-                  style={styles.statusIcon}
-                />
+      <IconButton
+        icon={getStatusIcon(task.status)}
+        size={24}
+        iconColor={getTaskStatusColor(task.status)}
+        style={styles.statusIcon}
+      />
                 <View style={[styles.titleContainer, { overflow: 'visible' }]}>
                   <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
                     {task.title}
                   </Title>
                   <View style={[styles.taskMeta, { overflow: 'visible' }]}>
                     <Chip 
-                      style={[styles.statusChip, styles.taskMetaChip, { backgroundColor: getStatusColor(task.status) }]}
+                      style={[styles.statusChip, styles.taskMetaChip, { backgroundColor: getTaskStatusColor(task.status) }]}
                       textStyle={styles.statusChipText}
                     >
                       {task.status.replace('_', ' ').toUpperCase()}
@@ -188,14 +303,14 @@ export default function WorkerTasksScreen() {
               {task.tagalogLabel}
             </Paragraph>
 
-            {/* Due Date Warning */}
-            {(isOverdue || isDueSoon) && (
+            {/* Due Date Warning - Only show for in_progress or overdue tasks, not for completed */}
+            {!isCompleted && (isOverdue || (isInProgress && daysUntilDue >= 0)) && (
               <View style={[
                 styles.dueDateAlert,
                 { backgroundColor: isOverdue ? constructionColors.urgent + '20' : constructionColors.warning + '20', overflow: 'visible' }
               ]}>
                 <IconButton 
-                  icon={isOverdue ? 'alert-circle' : 'clock-alert'} 
+                  icon={isOverdue ? 'alert-circle' : 'clock'} 
                   size={16} 
                   iconColor={isOverdue ? constructionColors.urgent : constructionColors.warning}
                 />
@@ -208,7 +323,11 @@ export default function WorkerTasksScreen() {
                 >
                   {isOverdue 
                     ? `Overdue ${Math.abs(daysUntilDue)}d`
-                    : `Due ${daysUntilDue}d`
+                    : daysUntilDue === 0
+                    ? 'Due today'
+                    : daysUntilDue === 1
+                    ? 'Due in 1 day'
+                    : `Due in ${daysUntilDue} days`
                   }
                 </Paragraph>
               </View>
@@ -257,7 +376,7 @@ export default function WorkerTasksScreen() {
             </View>
           </Card.Content>
         </Card>
-      </TouchableOpacity>
+      </CardWrapper>
     );
   };
 
@@ -286,16 +405,31 @@ export default function WorkerTasksScreen() {
         />
       </View>
 
-      {/* Search Bar */}
-      <Searchbar
-        placeholder="Search my tasks..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchBar}
-        iconColor={theme.colors.onSurfaceVariant}
-        inputStyle={{ color: theme.colors.text }}
-        placeholderTextColor={theme.colors.onSurfaceVariant}
-      />
+      {/* Search Bar and History Button */}
+      <View style={styles.searchContainer}>
+        <Searchbar
+          placeholder="Search my tasks..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.searchBar}
+          iconColor={theme.colors.onSurfaceVariant}
+          inputStyle={{ color: theme.colors.text }}
+          placeholderTextColor={theme.colors.onSurfaceVariant}
+        />
+        <Button
+          mode="contained"
+          icon="history"
+          onPress={() => {
+            setShowHistoryModal(true);
+            loadTaskPhotoHistory();
+          }}
+          style={styles.historyButton}
+          contentStyle={styles.historyButtonContent}
+          labelStyle={styles.historyButtonLabel}
+        >
+          History
+        </Button>
+      </View>
 
       {/* Task Statistics */}
       <Card style={styles.statsCard}>
@@ -368,6 +502,72 @@ export default function WorkerTasksScreen() {
       </ScrollView>
       )}
 
+      {/* Task Upload History Modal */}
+      <Portal>
+        <Modal
+          visible={showHistoryModal}
+          onDismiss={() => {
+            setShowHistoryModal(false);
+          }}
+          contentContainerStyle={styles.historyModalContainer}
+        >
+          <Surface style={styles.historyModalSurface}>
+            <View style={styles.historyModalHeader}>
+              <Title style={styles.historyModalTitle}>Task Upload History</Title>
+              <IconButton
+                icon="close"
+                size={24}
+                iconColor={theme.colors.text}
+                onPress={() => {
+                  setShowHistoryModal(false);
+                }}
+              />
+            </View>
+            
+            {loadingHistory ? (
+              <View style={styles.historyLoadingContainer}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <Paragraph style={styles.historyLoadingText}>Loading history...</Paragraph>
+              </View>
+            ) : taskPhotos.length === 0 ? (
+              <View style={styles.historyEmptyContainer}>
+                <Paragraph style={styles.historyEmptyText}>No uploads found</Paragraph>
+              </View>
+            ) : (
+              <ScrollView style={styles.historyContent}>
+                {taskPhotos.map((photo) => (
+                  <List.Item
+                    key={photo.id}
+                    title={photo.taskTitle || 'Unknown Task'}
+                    description={`Uploaded: ${photo.uploadedAt ? new Date(photo.uploadedAt).toLocaleDateString() : 'N/A'}`}
+                    left={() => (
+                      <List.Icon 
+                        icon="camera"
+                        color={getStatusColor(photo.verificationStatus)}
+                      />
+                    )}
+                    right={() => (
+                      <Chip 
+                        style={{
+                          ...styles.historyStatusChip,
+                          backgroundColor: getStatusColor(photo.verificationStatus),
+                        }}
+                        textStyle={styles.historyStatusChipText}
+                      >
+                        {photo.verificationStatus.toUpperCase()}
+                      </Chip>
+                    )}
+                    style={styles.historyItem}
+                    titleStyle={{ color: theme.colors.text }}
+                    descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+                  />
+                ))}
+              </ScrollView>
+            )}
+          </Surface>
+        </Modal>
+      </Portal>
+
     </SafeAreaView>
   );
 }
@@ -398,10 +598,27 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     marginLeft: spacing.sm,
   },
-  searchBar: {
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  searchBar: {
+    flex: 1,
     backgroundColor: theme.colors.surface,
+  },
+  historyButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  historyButtonContent: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  historyButtonLabel: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
   },
   statsCard: {
     marginHorizontal: spacing.md,
@@ -612,5 +829,65 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: theme.colors.primary,
+  },
+  historyModalContainer: {
+    padding: spacing.md,
+    justifyContent: 'center',
+  },
+  historyModalSurface: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+    padding: spacing.lg,
+    maxHeight: '90%',
+  },
+  historyModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  historyModalTitle: {
+    color: theme.colors.text,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  historyContent: {
+    maxHeight: 500,
+  },
+  historyItem: {
+    paddingVertical: spacing.sm,
+    backgroundColor: 'transparent',
+  },
+  historyStatusChip: {
+    height: 32,
+    paddingHorizontal: spacing.lg,
+    minWidth: 110,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  historyStatusChipText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    letterSpacing: 0.5,
+  },
+  historyLoadingContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  historyLoadingText: {
+    marginTop: spacing.md,
+    color: theme.colors.onSurfaceVariant,
+  },
+  historyEmptyContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  historyEmptyText: {
+    color: theme.colors.onSurfaceVariant,
+    fontSize: fontSizes.sm,
   },
 });

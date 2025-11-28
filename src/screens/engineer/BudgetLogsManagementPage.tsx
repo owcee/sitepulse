@@ -414,16 +414,49 @@ export default function BudgetLogsManagementPage() {
       setIsExporting(true);
       
       // Use actual budget logs from state - filter only expenses
+      console.log('Budget Management - Total budget logs in state:', state.budgetLogs.length);
+      console.log('Budget Management - Budget logs:', JSON.stringify(state.budgetLogs, null, 2));
+      
       const budgetLogs = state.budgetLogs
-        .filter(log => log.type === 'expense') // Only include expenses
-        .map(log => ({
-          id: log.id,
-          category: log.category.charAt(0).toUpperCase() + log.category.slice(1), // Capitalize category name
-          amount: log.amount,
-          description: log.description,
-          date: log.date,
-          addedBy: 'Engineer' // Default value since BudgetLog doesn't have addedBy field
-        }));
+        .filter(log => {
+          const isValid = log && log.type === 'expense' && log.amount > 0;
+          if (!isValid) {
+            console.log('Budget Management - Filtering out log:', log);
+          }
+          return isValid;
+        })
+        .map(log => {
+          // Normalize category - ensure it's a valid string
+          let category = log.category || 'other';
+          if (typeof category !== 'string') {
+            category = 'other';
+          }
+          category = String(category).trim().toLowerCase();
+          if (!category || category === '') {
+            category = 'other';
+          }
+          // Capitalize first letter
+          const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1);
+          
+          console.log('Budget Management - Processing log:', {
+            originalCategory: log.category,
+            normalizedCategory: category,
+            capitalizedCategory: capitalizedCategory,
+            amount: log.amount
+          });
+          
+          return {
+            id: log.id,
+            category: capitalizedCategory, // Pass capitalized to PDF service
+            amount: log.amount || 0,
+            description: (log.description || 'No description').trim(),
+            date: log.date || new Date().toISOString(),
+            addedBy: 'Engineer' // Default value since BudgetLog doesn't have addedBy field
+          };
+        });
+      
+      console.log('Budget Management - Filtered budget logs for PDF:', budgetLogs.length);
+      console.log('Budget Management - Budget logs for PDF:', JSON.stringify(budgetLogs, null, 2));
 
       // Project info from loaded project data
       const pdfProjectInfo = {

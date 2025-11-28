@@ -19,6 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
+import { exportBudgetToPDF, exportMaterialsToPDF } from '../../services/pdfExportService';
+import { getProject } from '../../services/projectService';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -27,7 +29,7 @@ type TabType = 'budget' | 'inventory';
 export default function ResourcesScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('budget');
   const [isExporting, setIsExporting] = useState(false);
-  const { state } = useProjectData();
+  const { state, projectId } = useProjectData();
 
   // Calculate budget data matching Budget Management page
   const equipmentSpent = state.equipment.reduce((total, equip) => {
@@ -399,15 +401,110 @@ export default function ResourcesScreen() {
   const handleExportPDF = async () => {
     setIsExporting(true);
     try {
+      // Get project info
+      let projectName = 'Construction Project';
+      let projectDescription = 'Budget and inventory report';
+      
+      if (projectId) {
+        try {
+          const project = await getProject(projectId);
+          if (project) {
+            projectName = project.name || projectName;
+            projectDescription = project.description || projectDescription;
+          }
+        } catch (error) {
+          console.error('Error loading project info:', error);
+        }
+      }
+
       if (activeTab === 'budget') {
         // Export budget data
-        Alert.alert('Export Budget', 'Budget PDF export feature coming soon');
+        console.log('Resources Screen - Total budget logs in state:', state.budgetLogs.length);
+        console.log('Resources Screen - Budget logs:', JSON.stringify(state.budgetLogs, null, 2));
+        
+        const budgetLogs = state.budgetLogs
+          .filter(log => {
+            const isValid = log && log.type === 'expense' && log.amount > 0;
+            if (!isValid) {
+              console.log('Resources Screen - Filtering out log:', log);
+            }
+            return isValid;
+          })
+          .map(log => {
+            // Normalize category - ensure it's a valid string
+            let category = log.category || 'other';
+            if (typeof category !== 'string') {
+              category = 'other';
+            }
+            category = String(category).trim().toLowerCase();
+            if (!category || category === '') {
+              category = 'other';
+            }
+            // Capitalize first letter
+            const capitalizedCategory = category.charAt(0).toUpperCase() + category.slice(1);
+            
+            console.log('Resources Screen - Processing log:', {
+              originalCategory: log.category,
+              normalizedCategory: category,
+              capitalizedCategory: capitalizedCategory,
+              amount: log.amount
+            });
+            
+            return {
+              id: log.id,
+              category: capitalizedCategory, // Pass capitalized to PDF service
+              amount: log.amount || 0,
+              description: (log.description || 'No description').trim(),
+              date: log.date || new Date().toISOString(),
+              addedBy: 'Engineer'
+            };
+          });
+        
+        console.log('Resources Screen - Filtered budget logs for PDF:', budgetLogs.length);
+        console.log('Resources Screen - Budget logs for PDF:', JSON.stringify(budgetLogs, null, 2));
+
+        const projectInfo = {
+          name: projectName,
+          description: projectDescription,
+          totalBudget: totalBudget,
+          contingencyPercentage: 10
+        };
+
+        await exportBudgetToPDF(budgetLogs, projectInfo, totalSpent);
       } else {
-        // Export inventory data
-        Alert.alert('Export Inventory', 'Inventory PDF export feature coming soon');
+        // Export inventory data (materials and equipment)
+        const materials = state.materials.map(material => ({
+          id: material.id,
+          name: material.name,
+          quantity: material.quantity,
+          unit: material.unit,
+          price: material.price,
+          category: material.category || 'General',
+          supplier: material.supplier,
+          dateAdded: material.dateAdded || new Date().toISOString()
+        }));
+
+        const equipment = state.equipment.map(equip => ({
+          id: equip.id,
+          name: equip.name,
+          type: equip.type,
+          category: equip.category || 'General',
+          condition: equip.condition,
+          rentalCost: equip.rentalCost,
+          status: equip.status,
+          dateAcquired: equip.dateAcquired || new Date().toISOString()
+        }));
+
+        const projectInfo = {
+          name: projectName,
+          description: projectDescription
+        };
+
+        await exportMaterialsToPDF(materials, projectInfo, 10, equipment);
       }
-    } catch (error) {
-      Alert.alert('Export Failed', 'Unable to generate PDF. Please try again.');
+    } catch (error: any) {
+      console.error('Export error:', error);
+      Alert.alert('Export Failed', error?.message || 'Unable to generate PDF. Please try again.');
     } finally {
       setIsExporting(false);
     }
@@ -689,16 +786,17 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
   },
   lowStockChip: {
-    minWidth: 90,
-    height: 30,
+    minWidth: 120,
+    height: 34,
     alignSelf: 'flex-start',
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   statusChipText: {
     color: 'white',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    letterSpacing: 0.3,
   },
   stockInfo: {
     marginBottom: spacing.sm,
