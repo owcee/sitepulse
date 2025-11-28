@@ -168,9 +168,9 @@ export default function SettingsScreen() {
             <Title style={styles.cardTitle}>Worker Profile</Title>
             
             <View style={styles.profileHeader}>
-              <Avatar.Image 
+              <Avatar.Text 
                 size={80} 
-                source={{ uri: userProfile?.profileImage || 'https://via.placeholder.com/150' }} 
+                label={userProfile?.name?.charAt(0)?.toUpperCase() || 'W'} 
                 style={styles.avatar}
               />
               <View style={styles.profileInfo}>

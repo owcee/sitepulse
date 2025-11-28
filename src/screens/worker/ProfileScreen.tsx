@@ -131,9 +131,9 @@ export default function ProfileScreen() {
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.profileHeader}>
-              <Avatar.Image 
+              <Avatar.Text 
                 size={80} 
-                source={{ uri: mockWorkerProfile.profileImage }}
+                label={mockWorkerProfile.name?.charAt(0)?.toUpperCase() || 'W'} 
                 style={styles.avatar}
               />
               <View style={styles.profileInfo}>
