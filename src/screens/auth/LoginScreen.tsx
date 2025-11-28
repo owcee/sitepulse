@@ -6,13 +6,16 @@ import {
   Text, 
   Card, 
   Title, 
-  Paragraph
+  Paragraph,
+  Modal,
+  Portal,
+  Surface
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { User } from '../../types';
 import { theme, spacing, fontSizes } from '../../utils/theme';
-import { signIn } from '../../services/authService';
+import { signIn, resetPassword } from '../../services/authService';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -23,6 +26,9 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim()) {
@@ -46,6 +52,40 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordEmail.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email address');
+      return;
+    }
+    if (!forgotPasswordEmail.includes('@gmail.com')) {
+      Alert.alert('Validation Error', 'Please use a Gmail address (@gmail.com)');
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+    
+    try {
+      await resetPassword(forgotPasswordEmail);
+      Alert.alert(
+        'Password Reset Email Sent',
+        'Please check your email for instructions to reset your password.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowForgotPassword(false);
+              setForgotPasswordEmail('');
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -96,6 +136,17 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
               placeholder="Enter your password"
             />
 
+            {/* Forgot Password Link */}
+            <Button
+              mode="text"
+              onPress={() => setShowForgotPassword(true)}
+              disabled={loading}
+              style={styles.forgotPasswordButton}
+              textColor={theme.colors.primary}
+            >
+              Forgot Password?
+            </Button>
+
             {/* Login Button */}
             <Button
               mode="contained"
@@ -127,6 +178,59 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
           </Card.Content>
         </Card>
       </View>
+
+      {/* Forgot Password Modal */}
+      <Portal>
+        <Modal
+          visible={showForgotPassword}
+          onDismiss={() => {
+            setShowForgotPassword(false);
+            setForgotPasswordEmail('');
+          }}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Surface style={styles.modalSurface}>
+            <Title style={styles.modalTitle}>Reset Password</Title>
+            <Paragraph style={styles.modalSubtitle}>
+              Enter your email address and we'll send you instructions to reset your password.
+            </Paragraph>
+
+            <TextInput
+              label="Gmail Address"
+              value={forgotPasswordEmail}
+              onChangeText={setForgotPasswordEmail}
+              mode="outlined"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.modalInput}
+              placeholder="your.name@gmail.com"
+              right={<TextInput.Icon icon="gmail" />}
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setShowForgotPassword(false);
+                  setForgotPasswordEmail('');
+                }}
+                disabled={forgotPasswordLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleForgotPassword}
+                loading={forgotPasswordLoading}
+                disabled={forgotPasswordLoading}
+                style={styles.sendButton}
+              >
+                Send Reset Link
+              </Button>
+            </View>
+          </Surface>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -212,6 +316,49 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  modalContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  modalSurface: {
+    width: '90%',
+    maxWidth: 400,
+    padding: spacing.lg,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
+    elevation: 4,
+  },
+  modalTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalInput: {
+    marginBottom: spacing.lg,
+    backgroundColor: theme.colors.surface,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  sendButton: {
+    backgroundColor: theme.colors.primary,
   },
 });
 

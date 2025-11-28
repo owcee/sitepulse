@@ -127,28 +127,23 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
     }, 1000);
   };
 
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOutUser();
-              // The auth state change will automatically redirect to login screen
-              if (onDismiss) onDismiss();
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          }
-        }
-      ]
-    );
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      await signOutUser();
+      setShowLogoutModal(false);
+      // The auth state change will automatically redirect to login screen
+      if (onDismiss) onDismiss();
+    } catch (error) {
+      console.error('Logout error:', error);
+      setShowLogoutModal(false);
+      Alert.alert('Error', 'Failed to logout. Please try again.');
+    }
   };
 
   if (isLoading) {
@@ -391,6 +386,38 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
           </Surface>
         </Modal>
       </Portal>
+
+      {/* Logout Confirmation Modal */}
+      <Portal>
+        <Modal
+          visible={showLogoutModal}
+          onDismiss={() => setShowLogoutModal(false)}
+          contentContainerStyle={styles.logoutModalContainer}
+        >
+          <Surface style={styles.logoutModalSurface}>
+            <Title style={styles.logoutModalTitle}>Logout</Title>
+            <Paragraph style={styles.logoutModalMessage}>
+              Are you sure you want to logout?
+            </Paragraph>
+            <View style={styles.logoutModalActions}>
+              <Button
+                mode="outlined"
+                onPress={() => setShowLogoutModal(false)}
+                style={styles.logoutCancelButton}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={confirmLogout}
+                style={styles.logoutConfirmButton}
+              >
+                Logout
+              </Button>
+            </View>
+          </Surface>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 
@@ -542,5 +569,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginTop: spacing.lg,
+  },
+  logoutModalContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  logoutModalSurface: {
+    width: '85%',
+    maxWidth: 350,
+    padding: spacing.lg,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+    elevation: 4,
+  },
+  logoutModalTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  logoutModalMessage: {
+    fontSize: fontSizes.md,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  logoutModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  logoutCancelButton: {
+    borderColor: theme.colors.outline,
+  },
+  logoutConfirmButton: {
+    backgroundColor: constructionColors.urgent,
   },
 });

@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { 
   doc, 
@@ -193,6 +194,38 @@ export async function getCurrentUser() {
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;
+  }
+}
+
+/**
+ * Send password reset email to user
+ * @param {string} email - User's email address
+ * @returns {Promise<void>}
+ */
+export async function resetPassword(email) {
+  try {
+    if (!email || !email.trim()) {
+      throw new Error('Please enter your email address.');
+    }
+    
+    if (!email.includes('@gmail.com')) {
+      throw new Error('Please use a Gmail address (@gmail.com)');
+    }
+
+    await sendPasswordResetEmail(auth, email);
+  } catch (error) {
+    console.error('Password reset error:', error);
+    
+    // Provide user-friendly error messages
+    if (error.code === 'auth/user-not-found') {
+      throw new Error('No account found with this email address.');
+    } else if (error.code === 'auth/invalid-email') {
+      throw new Error('Invalid email address format.');
+    } else if (error.code === 'auth/too-many-requests') {
+      throw new Error('Too many requests. Please try again later.');
+    } else {
+      throw new Error(error.message || 'Failed to send password reset email. Please try again.');
+    }
   }
 }
 
