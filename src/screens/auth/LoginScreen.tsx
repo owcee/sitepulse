@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, Image } from 'react-native';
 import { 
   TextInput, 
   Button, 
@@ -95,7 +95,11 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
         {/* Logo and Title */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logo}>🏗️</Text>
+            <Image 
+              source={require('../../../assets/sitepulse-logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Title style={styles.title} numberOfLines={1}>SitePulse</Title>
           <Paragraph style={styles.subtitle} numberOfLines={2}>
@@ -168,13 +172,6 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
             >
               Don't have an account? Sign Up
             </Button>
-
-            {/* Gmail Notice */}
-            <View style={styles.gmailNotice}>
-              <Text style={styles.gmailText} numberOfLines={2}>
-                📧 Gmail only - secure auth
-              </Text>
-            </View>
           </Card.Content>
         </Card>
       </View>
@@ -250,16 +247,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  logo: {
-    fontSize: 40,
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
   },
   title: {
     fontSize: fontSizes.xxxl,
@@ -302,20 +301,6 @@ const styles = StyleSheet.create({
   },
   signUpButton: {
     marginBottom: spacing.lg,
-  },
-  gmailNotice: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-    padding: spacing.md,
-    borderRadius: theme.roundness,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.success,
-  },
-  gmailText: {
-    fontSize: fontSizes.sm,
-    color: theme.colors.success,
-    fontWeight: '500',
-    textAlign: 'center',
   },
   forgotPasswordButton: {
     alignSelf: 'flex-end',

@@ -4,7 +4,7 @@
     "slug": "sitepulse",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/sitepulse-splashscreen.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon-light.png",
@@ -29,7 +29,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/sitepulse-splashscreen.png",
         "backgroundColor": "#FF6B35"
       },
       "permissions": [
