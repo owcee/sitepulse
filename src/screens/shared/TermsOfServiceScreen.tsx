@@ -149,7 +149,7 @@ export default function TermsOfServiceScreen() {
             <Title style={styles.sectionTitle}>11. Termination</Title>
             <Paragraph style={styles.subsectionTitle}>11.1 Termination by You</Paragraph>
             <Paragraph style={styles.text}>
-              You may terminate your account at any time by deleting it through the app settings or contacting us. Upon termination, your access to the service will cease immediately.
+              You may terminate your account at any time by contacting us. Account termination cannot be performed through the app settings. Upon termination, your access to the service will cease immediately.
             </Paragraph>
 
             <Paragraph style={styles.subsectionTitle}>11.2 Termination by Us</Paragraph>
@@ -169,7 +169,7 @@ export default function TermsOfServiceScreen() {
 
             <Title style={styles.sectionTitle}>13. Changes to Terms</Title>
             <Paragraph style={styles.text}>
-              We reserve the right to modify these Terms at any time. We will notify users of material changes by posting the updated Terms in the app and updating the "Last Updated" date. Your continued use of the service after such changes constitutes acceptance of the modified Terms.
+              We reserve the right to modify these Terms at any time. We will notify users of material changes by posting the updated Terms in the app. Your continued use of the service after such changes constitutes acceptance of the modified Terms.
             </Paragraph>
 
             <Title style={styles.sectionTitle}>14. Governing Law</Title>

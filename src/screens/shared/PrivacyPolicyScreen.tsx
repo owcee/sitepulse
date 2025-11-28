@@ -45,7 +45,7 @@ export default function PrivacyPolicyScreen() {
               We collect personal information that you provide directly to us, including:
             </Paragraph>
             <View style={styles.bulletList}>
-              <Text style={styles.bulletPoint}>• Name, email address, and phone number</Text>
+              <Text style={styles.bulletPoint}>• Name and email address</Text>
               <Text style={styles.bulletPoint}>• Professional role (Engineer or Worker)</Text>
               <Text style={styles.bulletPoint}>• Profile information and preferences</Text>
               <Text style={styles.bulletPoint}>• Authentication credentials</Text>
@@ -70,7 +70,6 @@ export default function PrivacyPolicyScreen() {
             <View style={styles.bulletList}>
               <Text style={styles.bulletPoint}>• Device information (model, operating system, unique identifiers)</Text>
               <Text style={styles.bulletPoint}>• Log data (IP address, access times, app features used)</Text>
-              <Text style={styles.bulletPoint}>• Location data (if you grant location permissions)</Text>
             </View>
 
             <Title style={styles.sectionTitle}>2. How We Use Your Information</Title>
@@ -146,7 +145,7 @@ export default function PrivacyPolicyScreen() {
 
             <Title style={styles.sectionTitle}>9. Changes to This Privacy Policy</Title>
             <Paragraph style={styles.text}>
-              We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last Updated" date. You are advised to review this Privacy Policy periodically for any changes.
+              We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page. You are advised to review this Privacy Policy periodically for any changes.
             </Paragraph>
 
             <Title style={styles.sectionTitle}>10. Contact Us</Title>

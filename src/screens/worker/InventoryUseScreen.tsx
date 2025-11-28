@@ -52,6 +52,8 @@ export default function InventoryUseScreen() {
   const [submissionType, setSubmissionType] = useState<'material' | 'equipment' | 'damage'>('material');
   const [showItemSelector, setShowItemSelector] = useState(false);
   const [showUsageModal, setShowUsageModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [currentTaskId, setCurrentTaskId] = useState<string>('');
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
@@ -231,21 +233,15 @@ export default function InventoryUseScreen() {
         await loadUsageHistory();
       }
       
-      Alert.alert(
-        submissionType === 'damage' ? 'Damage Report Submitted' : 'Usage Report Submitted',
+      // Show custom success modal
+      setSuccessMessage(
         submissionType === 'damage' 
           ? 'Your damage report has been submitted for engineer verification.'
-          : `Your ${submissionType} usage report has been submitted for engineer verification.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setShowUsageModal(false);
-              resetForm();
-            }
-          }
-        ]
+          : `Your ${submissionType} usage report has been submitted for engineer verification.`
       );
+      setShowUsageModal(false);
+      setShowSuccessModal(true);
+      resetForm();
     } catch (error) {
       setIsSubmitting(false);
       console.error('Error submitting usage report:', error);
@@ -1068,6 +1064,33 @@ export default function InventoryUseScreen() {
         </Modal>
       </Portal>
 
+      {/* Success Modal */}
+      <Portal>
+        <Modal 
+          visible={showSuccessModal} 
+          onDismiss={() => setShowSuccessModal(false)}
+          contentContainerStyle={styles.successModalContainer}
+        >
+          <Surface style={styles.successModalContent}>
+            <Title style={styles.successModalTitle}>
+              {submissionType === 'damage' ? 'Damage Report Submitted' : 'Usage Report Submitted'}
+            </Title>
+            <Paragraph style={styles.successModalMessage}>
+              {successMessage}
+            </Paragraph>
+            <Button 
+              onPress={() => setShowSuccessModal(false)}
+              mode="contained"
+              style={styles.successModalButton}
+              textColor={theme.colors.text}
+              buttonColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Surface>
+        </Modal>
+      </Portal>
+
       {/* Item Selector Modal */}
       {renderItemSelector()}
     </SafeAreaView>
@@ -1548,5 +1571,33 @@ const styles = StyleSheet.create({
   },
   detailModalButton: {
     backgroundColor: theme.colors.primary,
+  },
+  successModalContainer: {
+    padding: spacing.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModalContent: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+    padding: spacing.lg,
+    width: '90%',
+    maxWidth: 400,
+  },
+  successModalTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  successModalMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  successModalButton: {
+    marginTop: spacing.sm,
   },
 });

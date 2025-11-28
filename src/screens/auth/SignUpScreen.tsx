@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, Image, ScrollView } from 'react-native';
+import { View, StyleSheet, Alert, Image } from 'react-native';
 import { 
   TextInput, 
   Button, 
@@ -113,11 +113,7 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.content}>
         {/* Logo and Title */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
@@ -233,7 +229,7 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
             </Button>
           </Card.Content>
         </Card>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -243,37 +239,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
     padding: spacing.md,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   logoImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 50,
+    borderRadius: 60,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: spacing.md,
+    marginVertical: spacing.xs,
     width: '100%',
   },
   titleAccent: {
@@ -283,10 +276,10 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
   },
   title: {
-    fontSize: fontSizes.xxxl,
+    fontSize: fontSizes.xxl,
     fontWeight: '900',
     color: theme.colors.primary,
-    letterSpacing: 3,
+    letterSpacing: 2,
     textShadowColor: 'rgba(255, 107, 53, 0.3)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -300,15 +293,17 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
   },
   cardTitle: {
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     color: theme.colors.text,
-    fontSize: fontSizes.xl,
+    fontSize: fontSizes.lg,
   },
   roleSection: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   roleLabel: {
     fontSize: fontSizes.sm,
@@ -317,22 +312,22 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   roleButtons: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   input: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     backgroundColor: theme.colors.surface,
   },
   signUpButton: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
     backgroundColor: theme.colors.primary,
   },
   signUpButtonContent: {
     paddingVertical: spacing.xs,
   },
   backButton: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   gmailNotice: {
     backgroundColor: 'rgba(76, 175, 80, 0.2)',
