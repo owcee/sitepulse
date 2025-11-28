@@ -139,10 +139,11 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
       >
         {/* Header Section */}
         <View style={styles.header}>
-          <Avatar.Image
+          <Avatar.Text
             size={80}
-            source={{ uri: user.profileImage || 'https://via.placeholder.com/80' }}
+            label={user.name?.charAt(0).toUpperCase() || 'U'}
             style={styles.avatar}
+            labelStyle={{ color: '#000000' }}
           />
           <Title style={styles.welcomeTitle}>Welcome, {user.name}!</Title>
           <Paragraph style={styles.welcomeSubtitle}>

@@ -363,11 +363,12 @@ export default function WorkersManagementPage() {
                         title={worker.name}
                         description={`Email: ${worker.email}`}
                         left={(props) => (
-                          <Avatar.Image
+                          <Avatar.Text
                             {...props}
-                            source={{ uri: worker.profileImage || 'https://via.placeholder.com/40' }}
+                            label={worker.name?.charAt(0).toUpperCase() || 'W'}
                             size={48}
                             style={styles.workerAvatar}
+                            labelStyle={{ color: '#000000' }}
                           />
                         )}
                         style={styles.listItemContent}
@@ -423,11 +424,12 @@ export default function WorkersManagementPage() {
                     title={worker.name}
                     description={`Email: ${worker.email} • Waiting for response`}
                     left={(props) => (
-                      <Avatar.Image
+                      <Avatar.Text
                         {...props}
-                        source={{ uri: worker.profileImage || 'https://via.placeholder.com/40' }}
+                        label={worker.name?.charAt(0).toUpperCase() || 'W'}
                         size={40}
                         style={styles.workerAvatar}
+                        labelStyle={{ color: '#000000' }}
                       />
                     )}
                     right={(props) => (
@@ -460,9 +462,8 @@ export default function WorkersManagementPage() {
                 labelStyle={styles.assignButtonLabel}
                 contentStyle={styles.assignButtonContent}
                 icon="account-plus"
-                compact
               >
-                Assign Workers
+                Assign
               </Button>
             </View>
 
@@ -477,23 +478,17 @@ export default function WorkersManagementPage() {
                 <View key={worker.id}>
                   <List.Item
                     title={worker.name}
-                    description={`Email: ${worker.email} • Available for assignment`}
+                    description={`Email: ${worker.email}`}
+                    descriptionNumberOfLines={2}
+                    descriptionStyle={styles.workerEmailDescription}
                     left={(props) => (
-                      <Avatar.Image
+                      <Avatar.Text
                         {...props}
-                        source={{ uri: worker.profileImage || 'https://via.placeholder.com/40' }}
+                        label={worker.name?.charAt(0).toUpperCase() || 'W'}
                         size={40}
                         style={styles.workerAvatar}
+                        labelStyle={{ color: '#000000' }}
                       />
-                    )}
-                    right={(props) => (
-                      <Chip 
-                        {...props}
-                        style={[styles.statusChip, { backgroundColor: constructionColors.inProgress }]}
-                        textStyle={styles.statusText}
-                      >
-                        Available
-                      </Chip>
                     )}
                   />
                   {index < availableWorkers.length - 1 && <Divider />}
@@ -536,10 +531,11 @@ export default function WorkersManagementPage() {
                     title={worker.name}
                     description={worker.email}
                     left={(props) => (
-                      <Avatar.Image
+                      <Avatar.Text
                         {...props}
-                        source={{ uri: worker.profileImage || 'https://via.placeholder.com/40' }}
+                        label={worker.name?.charAt(0).toUpperCase() || 'W'}
                         size={40}
+                        labelStyle={{ color: '#000000' }}
                       />
                     )}
                     right={(props) => (
@@ -549,11 +545,8 @@ export default function WorkersManagementPage() {
                         onPress={() => toggleWorkerSelection(worker.id)}
                       />
                     )}
-                    onPress={() => toggleWorkerSelection(worker.id)}
-                    style={[
-                      styles.workerItem,
-                      selectedWorkers.has(worker.id) && styles.selectedWorkerItem
-                    ]}
+                    style={styles.workerItem}
+                    rippleColor="transparent"
                   />
                   {index < availableWorkers.length - 1 && <Divider />}
                 </View>
@@ -573,8 +566,9 @@ export default function WorkersManagementPage() {
                 loading={assigningWorkers}
                 disabled={selectedWorkers.size === 0 || assigningWorkers}
                 style={styles.assignActionButton}
+                labelStyle={styles.assignActionButtonLabel}
               >
-                {assigningWorkers ? 'Assigning...' : `Assign ${selectedWorkers.size} Worker(s)`}
+                {assigningWorkers ? 'Assigning...' : 'Assign'}
               </Button>
             </View>
           </Surface>
@@ -771,25 +765,26 @@ const styles = StyleSheet.create({
   },
   assignButton: {
     borderColor: theme.colors.primary,
-    height: 36,
+    backgroundColor: theme.colors.primary,
+    minHeight: 28,
     paddingHorizontal: spacing.xs,
-    minWidth: 150,
     justifyContent: 'center',
     alignItems: 'center',
   },
   assignButtonContent: {
-    height: 36,
     paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
+    minHeight: 28,
   },
   assignButtonLabel: {
     fontSize: 9,
     fontWeight: '600',
-    color: theme.colors.text,
-    paddingHorizontal: spacing.xs,
+    color: '#FFFFFF',
     textAlign: 'center',
     includeFontPadding: false,
+    lineHeight: 11,
   },
   workerAvatar: {
     marginRight: spacing.md,
@@ -798,11 +793,25 @@ const styles = StyleSheet.create({
     height: 32,
     paddingHorizontal: spacing.xs,
   },
+  availableChip: {
+    width: '50%',
+    maxWidth: 60,
+    height: 24,
+    paddingHorizontal: spacing.xs / 2,
+  },
   statusText: {
     color: 'white',
     fontWeight: 'bold',
     fontSize: 11,
     paddingHorizontal: spacing.xs,
+  },
+  availableChipText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 7,
+    paddingHorizontal: spacing.xs / 2,
+    lineHeight: 9,
+    includeFontPadding: false,
   },
   workerCardSurface: {
     padding: spacing.sm,
@@ -813,6 +822,11 @@ const styles = StyleSheet.create({
   },
   listItemContent: {
     flex: 1,
+  },
+  workerEmailDescription: {
+    flex: 1,
+    flexWrap: 'wrap',
+    marginRight: spacing.md,
   },
   assignedCountText: {
     fontSize: fontSizes.xs,
@@ -845,9 +859,10 @@ const styles = StyleSheet.create({
   modalSurface: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
-    width: '90%',
-    maxWidth: 500,
-    maxHeight: '85%',
+    width: '98%',
+    maxWidth: 700,
+    maxHeight: '98%',
+    minHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -863,7 +878,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   modalContent: {
-    maxHeight: 500,
+    maxHeight: 600,
+    flex: 1,
   },
   modalScrollContent: {
     padding: spacing.md,
@@ -897,6 +913,10 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     flex: 2,
     backgroundColor: theme.colors.primary,
+  },
+  assignActionButtonLabel: {
+    color: '#000000',
+    fontWeight: 'bold',
   },
   workerActions: {
     flexDirection: 'row',
