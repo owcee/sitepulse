@@ -234,8 +234,8 @@ export default function InventoryUseScreen() {
       Alert.alert(
         submissionType === 'damage' ? 'Damage Report Submitted' : 'Usage Report Submitted',
         submissionType === 'damage' 
-          ? 'Your damage report has been uploaded to Firebase and submitted for engineer verification.'
-          : `Your ${submissionType} usage report has been uploaded to Firebase and submitted for engineer verification.`,
+          ? 'Your damage report has been submitted for engineer verification.'
+          : `Your ${submissionType} usage report has been submitted for engineer verification.`,
         [
           {
             text: 'OK',
@@ -1190,7 +1190,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: theme.roundness,
     marginVertical: spacing.sm,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#1E1E1E',
   },
   selectedItemLabel: {
     fontSize: fontSizes.sm,
@@ -1380,7 +1380,7 @@ const styles = StyleSheet.create({
   },
   photoSection: {
     marginVertical: spacing.md,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#1E1E1E',
     padding: spacing.md,
     borderRadius: theme.roundness,
     borderWidth: 1,
@@ -1414,7 +1414,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   modalContent: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#000000',
     borderRadius: 16,
     width: screenWidth - (spacing.md * 2),
     maxHeight: '85%',
@@ -1427,10 +1427,11 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     maxHeight: '100%',
+    backgroundColor: 'transparent',
   },
   textInput: {
     marginBottom: spacing.md,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   photoHeader: {
     marginBottom: spacing.sm,
