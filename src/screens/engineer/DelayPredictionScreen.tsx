@@ -430,7 +430,7 @@ export default function DelayPredictionScreen() {
                         color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                       }}
                       accessor="population"
-                      backgroundColor="transparent"
+                      backgroundColor={theme.colors.surface}
                       paddingLeft="15"
                       absolute
                     />
@@ -504,8 +504,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
-    elevation: 1,
+    backgroundColor: theme.colors.background,
+    elevation: 0,
   },
   screenTitle: {
     fontSize: fontSizes.xxl,
@@ -520,6 +520,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -547,7 +548,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   segmentedButtons: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   content: {
     flex: 1,
@@ -558,6 +559,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderRadius: theme.roundness,
     overflow: 'visible',
+    backgroundColor: theme.colors.surface,
   },
   taskHeader: {
     flexDirection: 'row',
@@ -617,11 +619,13 @@ const styles = StyleSheet.create({
   delayAlert: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff3cd',
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
     padding: spacing.sm,
     borderRadius: theme.roundness,
     marginTop: spacing.sm,
     marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: constructionColors.warning,
   },
   delayText: {
     fontSize: fontSizes.sm,
@@ -637,7 +641,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#2A2A2A',
   },
   factorsTitle: {
     fontSize: fontSizes.md,
@@ -688,7 +692,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     elevation: 1,
     borderRadius: theme.roundness,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.surface,
   },
   completedTaskHeader: {
     marginBottom: spacing.md,
@@ -720,6 +724,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     elevation: 1,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',
@@ -727,7 +732,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: fontSizes.lg,
-    color: theme.colors.onSurfaceDisabled,
+    color: theme.colors.onSurfaceVariant,
     marginTop: spacing.md,
     textAlign: 'center',
   },
@@ -742,7 +747,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   chartTitle: {
     fontSize: fontSizes.lg,
@@ -765,7 +770,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#2A2A2A',
   },
   statusItem: {
     flexDirection: 'row',

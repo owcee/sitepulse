@@ -140,9 +140,9 @@ export default function App() {
     return (
       <PaperProvider theme={theme}>
         <SafeAreaProvider>
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text>Loading SitePulse...</Text>
-          </View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <Text style={{ color: theme.colors.text }}>Loading SitePulse...</Text>
+      </View>
         </SafeAreaProvider>
       </PaperProvider>
     );
@@ -218,7 +218,7 @@ export default function App() {
     return (
       <PaperProvider theme={theme}>
         <SafeAreaProvider>
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={{ marginTop: 16, color: theme.colors.text }}>Creating account...</Text>
           </View>
@@ -285,7 +285,7 @@ export default function App() {
   return (
     <PaperProvider theme={theme}>
       <SafeAreaProvider>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={{ marginTop: 16, color: theme.colors.text }}>Loading project data...</Text>
         </View>

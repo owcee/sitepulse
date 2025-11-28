@@ -70,7 +70,7 @@ export default function ReportLogsScreen() {
     switch (type) {
       case 'equipment': return 'construct';
       case 'material': return 'cube';
-      case 'task': return 'checkmark-circle';
+      case 'task': return 'check-circle';
       case 'damage': return 'warning';
       default: return 'document';
     }
@@ -308,7 +308,7 @@ export default function ReportLogsScreen() {
             </View>
             <View style={styles.historyStatusIcon}>
               <Ionicons 
-                name={log.status === 'approved' ? 'checkmark-circle' : 'close-circle'} 
+                name={log.status === 'approved' ? 'check-circle' : 'close-circle'} 
                 size={24} 
                 color={log.status === 'approved' ? constructionColors.complete : constructionColors.urgent}
               />
@@ -327,9 +327,6 @@ export default function ReportLogsScreen() {
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.header}>
           <Title style={styles.screenTitle}>Report Logs</Title>
-          <Paragraph style={styles.subtitle}>
-            Review and verify worker submissions
-          </Paragraph>
         </View>
 
         {loading ? (
@@ -517,15 +514,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
+    backgroundColor: theme.colors.background,
+    elevation: 0,
   },
   screenTitle: {
-    fontSize: fontSizes.xl,
+    fontSize: fontSizes.xxl,
     fontWeight: 'bold',
-    color: theme.colors.primary,
-    marginBottom: spacing.xs,
+    color: theme.colors.text,
   },
   subtitle: {
     fontSize: fontSizes.md,
@@ -557,7 +558,7 @@ const styles = StyleSheet.create({
   workerFolderName: {
     fontSize: fontSizes.md,
     fontWeight: '500',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     textAlign: 'center',
     marginTop: spacing.xs,
   },
@@ -593,6 +594,8 @@ const styles = StyleSheet.create({
   logCard: {
     marginBottom: spacing.md,
     elevation: 1,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
   },
   logHeader: {
     flexDirection: 'row',
@@ -613,7 +616,7 @@ const styles = StyleSheet.create({
   logTitle: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   logTimestamp: {
     fontSize: fontSizes.sm,
@@ -625,22 +628,22 @@ const styles = StyleSheet.create({
   notesLabel: {
     fontSize: fontSizes.sm,
     fontWeight: '600',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   notesContainer: {
     padding: spacing.sm,
-    backgroundColor: theme.colors.surfaceVariant,
+    backgroundColor: theme.colors.background,
     borderRadius: theme.roundness,
   },
   engineerNotesContainer: {
     padding: spacing.sm,
-    backgroundColor: theme.colors.primaryContainer,
+    backgroundColor: 'rgba(255, 107, 53, 0.2)',
     borderRadius: theme.roundness,
   },
   notesText: {
     fontSize: fontSizes.sm,
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     lineHeight: 20,
   },
   verificationInfo: {

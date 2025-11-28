@@ -688,9 +688,9 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
   },
   header: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
@@ -719,8 +719,9 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     marginHorizontal: spacing.xs / 2,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
+    borderRadius: theme.roundness,
   },
   summaryContent: {
     alignItems: 'center',
@@ -742,8 +743,9 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     marginBottom: spacing.lg,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
+    borderRadius: theme.roundness,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -755,7 +757,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   countChip: {
     backgroundColor: theme.colors.primaryContainer,
@@ -779,6 +781,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     marginBottom: spacing.sm,
     elevation: 1,
+    backgroundColor: theme.colors.background,
   },
   listItemContent: {
     flex: 1,
@@ -811,7 +814,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalSurface: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
     width: '90%',
     maxWidth: 500,
@@ -823,12 +826,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
   },
   modalTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   modalContent: {
     maxHeight: 400,
@@ -855,7 +858,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#2A2A2A',
   },
   cancelButton: {
     flex: 1,

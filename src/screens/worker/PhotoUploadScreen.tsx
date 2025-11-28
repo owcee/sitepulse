@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 1,
   },
   screenTitle: {
@@ -610,6 +610,7 @@ const styles = StyleSheet.create({
   card: {
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
     marginBottom: spacing.md,
   },
   cardTitle: {
@@ -699,7 +700,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   captureButton: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: 35,
   },
   
@@ -811,7 +812,7 @@ const styles = StyleSheet.create({
   lowConfidenceWarning: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#fff3e0',
+    backgroundColor: constructionColors.warning + '20',
     padding: spacing.sm,
     borderRadius: theme.roundness,
   },

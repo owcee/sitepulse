@@ -11,7 +11,7 @@ import {
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
+import { theme, constructionColors, spacing, fontSizes, softDarkOrange } from '../../utils/theme';
 import { 
   getWorkerInvites, 
   acceptAssignment, 
@@ -251,7 +251,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
             <Title style={styles.cardTitle}>What You Can Do Now</Title>
             <View style={styles.availableActions}>
               <View style={styles.actionItem}>
-                <Ionicons name="notifications-outline" size={24} color={theme.colors.primary} />
+                <Ionicons name="notifications-outline" size={24} color={softDarkOrange} />
                 <View style={styles.actionText}>
                   <Paragraph style={styles.actionTitle}>Check Notifications</Paragraph>
                   <Paragraph style={styles.actionDescription}>
@@ -261,7 +261,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
               </View>
               
               <View style={styles.actionItem}>
-                <Ionicons name="person-outline" size={24} color={theme.colors.primary} />
+                <Ionicons name="person-outline" size={24} color={softDarkOrange} />
                 <View style={styles.actionText}>
                   <Paragraph style={styles.actionTitle}>Update Profile</Paragraph>
                   <Paragraph style={styles.actionDescription}>
@@ -271,7 +271,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
               </View>
               
               <View style={styles.actionItem}>
-                <Ionicons name="chatbubbles-outline" size={24} color={theme.colors.primary} />
+                <Ionicons name="chatbubbles-outline" size={24} color={softDarkOrange} />
                 <View style={styles.actionText}>
                   <Paragraph style={styles.actionTitle}>General Chat</Paragraph>
                   <Paragraph style={styles.actionDescription}>

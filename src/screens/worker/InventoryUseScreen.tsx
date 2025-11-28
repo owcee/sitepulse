@@ -24,7 +24,12 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import { UsageSubmission } from '../../types';
 import { submitUsageReport, checkDuplicateUsage } from '../../services/firebaseService';
+// @ts-ignore - firebaseConfig exports auth which may have implicit any type
 import { auth } from '../../firebaseConfig';
+import type { Auth } from 'firebase/auth';
+
+// @ts-ignore - auth type from firebaseConfig
+const typedAuth: Auth = auth as unknown as Auth;
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -102,7 +107,7 @@ export default function InventoryUseScreen() {
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
 
-  const openUsageModal = (type: 'material' | 'equipment', itemId: string, taskId: string = 'current-task-1') => {
+  const openUsageModal = (type: 'material' | 'equipment' | 'damage', itemId: string, taskId: string = 'current-task-1') => {
     setSubmissionType(type);
     setSelectedItem(itemId);
     setCurrentTaskId(taskId);
@@ -157,9 +162,9 @@ export default function InventoryUseScreen() {
 
   const checkForDuplicates = async (itemId: string, quantity: string, taskId: string): Promise<boolean> => {
     try {
-      if (!auth.currentUser) return false;
+      if (!typedAuth?.currentUser) return false;
       
-      const duplicates = await checkDuplicateUsage(taskId, itemId, parseInt(quantity), auth.currentUser.uid);
+      const duplicates = await checkDuplicateUsage(taskId, itemId, parseInt(quantity), typedAuth.currentUser.uid);
       return duplicates.length > 0;
     } catch (error) {
       console.error('Error checking duplicates:', error);
@@ -209,7 +214,7 @@ export default function InventoryUseScreen() {
   };
 
   const proceedWithSubmission = async () => {
-    if (!auth.currentUser) {
+    if (!typedAuth?.currentUser) {
       Alert.alert('Authentication Error', 'Please log in to submit usage reports.');
       return;
     }
@@ -300,7 +305,7 @@ export default function InventoryUseScreen() {
           contentContainerStyle={styles.modalContainer}
         >
           <Card style={styles.modalCard}>
-            <Card.Content>
+            <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.modalTitle}>
                 Select {submissionType === 'material' ? 'Material' : 'Equipment'}
               </Title>
@@ -312,8 +317,8 @@ export default function InventoryUseScreen() {
                     title={item.name}
                     description={
                       submissionType === 'material' 
-                        ? `Available: ${item.quantity} ${item.unit}`
-                        : `Status: ${item.status} | Condition: ${item.condition}`
+                        ? `Available: ${(item as any).quantity} ${(item as any).unit}`
+                        : `Status: ${(item as any).status} | Condition: ${(item as any).condition}`
                     }
                     left={() => (
                       <List.Icon 
@@ -323,6 +328,8 @@ export default function InventoryUseScreen() {
                     )}
                     onPress={() => selectItem(item.id)}
                     style={styles.itemListItem}
+                    titleStyle={{ color: theme.colors.text }}
+                    descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
                   />
                 ))}
               </ScrollView>
@@ -387,10 +394,9 @@ export default function InventoryUseScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Title style={styles.screenTitle}>Inventory Usage</Title>
-          <Paragraph style={styles.subtitle}>
-            Report material and equipment usage with photos
-          </Paragraph>
+          <View style={styles.headerLeft}>
+            <Title style={styles.screenTitle}>Inventory Usage</Title>
+          </View>
         </View>
 
         {/* Tab Selector */}
@@ -422,7 +428,7 @@ export default function InventoryUseScreen() {
         {/* Materials Tab */}
         {activeTab === 'materials' && (
           <Card style={styles.card}>
-            <Card.Content>
+            <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.cardTitle}>Report Material Usage</Title>
               
               <Paragraph style={styles.instructions}>
@@ -441,6 +447,9 @@ export default function InventoryUseScreen() {
                     left={() => (
                       <List.Icon icon="package-variant" color={theme.colors.primary} />
                     )}
+                    style={{ backgroundColor: 'transparent' }}
+                    titleStyle={{ color: theme.colors.text }}
+                    descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
                   />
                   <View style={styles.materialActions}>
                     <Button
@@ -462,7 +471,7 @@ export default function InventoryUseScreen() {
         {/* Equipment Tab */}
         {activeTab === 'equipment' && (
           <Card style={styles.card}>
-            <Card.Content>
+            <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.cardTitle}>Equipment Reports</Title>
               
               <Paragraph style={styles.instructions}>
@@ -481,6 +490,9 @@ export default function InventoryUseScreen() {
                     left={() => (
                       <List.Icon icon="hammer" color={theme.colors.primary} />
                     )}
+                    style={{ backgroundColor: 'transparent' }}
+                    titleStyle={{ color: theme.colors.text }}
+                    descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
                   />
                   <View style={styles.equipmentActions}>
                     <Button
@@ -514,7 +526,7 @@ export default function InventoryUseScreen() {
         {/* History Tab */}
         {activeTab === 'history' && (
           <Card style={styles.card}>
-            <Card.Content>
+            <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.cardTitle}>Usage History</Title>
               
               {mockSubmissions.map((submission) => (
@@ -582,7 +594,7 @@ export default function InventoryUseScreen() {
                   {getSelectedItemInfo()?.name}
                 </Title>
                 <Paragraph style={styles.selectedItemDetails}>
-                  Available: {getSelectedItemInfo()?.quantity} {getSelectedItemInfo()?.unit}
+                  Available: {(getSelectedItemInfo() as any)?.quantity} {(getSelectedItemInfo() as any)?.unit}
                 </Paragraph>
               </Surface>
 
@@ -608,7 +620,8 @@ export default function InventoryUseScreen() {
                     value={quantity}
                     onChangeText={(text) => {
                       const num = parseInt(text) || 1;
-                      if (num > 0 && num <= (getSelectedItemInfo()?.quantity || 0)) {
+                      const item = getSelectedItemInfo() as any;
+                      if (num > 0 && num <= (item?.quantity || 0)) {
                         setQuantity(text);
                       }
                     }}
@@ -618,7 +631,7 @@ export default function InventoryUseScreen() {
                   />
                   
                   <Text style={styles.unitText}>
-                    {getSelectedItemInfo()?.unit}
+                    {(getSelectedItemInfo() as any)?.unit}
                   </Text>
                   
                   <IconButton
@@ -628,12 +641,13 @@ export default function InventoryUseScreen() {
                     style={styles.quantityButton}
                     onPress={() => {
                       const current = parseInt(quantity) || 0;
-                      const available = getSelectedItemInfo()?.quantity || 0;
+                      const item = getSelectedItemInfo() as any;
+                      const available = item?.quantity || 0;
                       if (current < available) {
                         setQuantity((current + 1).toString());
                       }
                     }}
-                    disabled={parseInt(quantity) >= (getSelectedItemInfo()?.quantity || 0)}
+                    disabled={parseInt(quantity) >= ((getSelectedItemInfo() as any)?.quantity || 0)}
                   />
                 </View>
               </View>
@@ -647,14 +661,15 @@ export default function InventoryUseScreen() {
                 numberOfLines={3}
                 style={styles.notesInput}
                 placeholder="Describe how the material was used, location, purpose, etc..."
+                textColor={theme.colors.text}
               />
 
               {/* Photo Section */}
-              <View style={styles.photoSection}>
+              <View style={[styles.photoSection, { backgroundColor: theme.colors.background }]}>
                 <Paragraph style={styles.photoLabel}>Photo Evidence:</Paragraph>
                 {capturedImage ? (
                   <View style={styles.photoPreview}>
-                    <Image source={{ uri: capturedImage }} style={styles.previewImage} />
+                    <Image source={{ uri: capturedImage || '' }} style={styles.previewImage} />
                     <Button
                       mode="text"
                       onPress={() => setCapturedImage(null)}
@@ -721,7 +736,7 @@ export default function InventoryUseScreen() {
                   {getSelectedItemInfo()?.name}
                 </Title>
                 <Paragraph style={styles.selectedItemDetails}>
-                  Status: {getSelectedItemInfo()?.status} | Condition: {getSelectedItemInfo()?.condition}
+                  Status: {(getSelectedItemInfo() as any)?.status} | Condition: {(getSelectedItemInfo() as any)?.condition}
                 </Paragraph>
               </Surface>
 
@@ -738,14 +753,15 @@ export default function InventoryUseScreen() {
                     ? "Describe the damage, how it occurred, location, severity, etc..."
                     : "Describe how the equipment was used, location, purpose, etc..."
                 }
+                textColor={theme.colors.text}
               />
 
               {/* Photo Section */}
-              <View style={styles.photoSection}>
+              <View style={[styles.photoSection, { backgroundColor: theme.colors.background }]}>
                 <Paragraph style={styles.photoLabel}>Photo Evidence:</Paragraph>
                 {capturedImage ? (
                   <View style={styles.photoPreview}>
-                    <Image source={{ uri: capturedImage }} style={styles.previewImage} />
+                    <Image source={{ uri: capturedImage || '' }} style={styles.previewImage} />
                     <Button
                       mode="text"
                       onPress={() => setCapturedImage(null)}
@@ -862,7 +878,7 @@ export default function InventoryUseScreen() {
               />
 
               {/* Photo Section */}
-              <Surface style={styles.photoSection}>
+              <Surface style={[styles.photoSection, { backgroundColor: theme.colors.background }]}>
                 <View style={styles.photoHeader}>
                   <Paragraph style={styles.photoTitle}>Photo Evidence * (Required)</Paragraph>
                   <Paragraph style={styles.photoSubtitle}>
@@ -943,34 +959,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-    backgroundColor: 'white',
+    paddingBottom: spacing.sm,
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   screenTitle: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: fontSizes.md,
-    color: theme.colors.placeholder,
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
   },
   tabContainer: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   segmentedButtons: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   card: {
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -1012,17 +1032,23 @@ const styles = StyleSheet.create({
   selectedItemInfo: {
     padding: spacing.md,
     borderRadius: theme.roundness,
-    marginBottom: spacing.md,
-    backgroundColor: '#f5f5f5',
+    marginVertical: spacing.sm,
+    backgroundColor: theme.colors.background,
   },
   selectedItemLabel: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.xs,
   },
   selectedItemName: {
     fontSize: fontSizes.lg,
     color: theme.colors.primary,
     fontWeight: 'bold',
+    marginBottom: spacing.xs,
+  },
+  selectedItemDetails: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
   },
   photoPreview: {
     position: 'relative',
@@ -1041,24 +1067,8 @@ const styles = StyleSheet.create({
     right: 8,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  quantityInput: {
-    marginBottom: spacing.md,
-  },
   notesInput: {
     marginBottom: spacing.md,
-  },
-  formActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cancelButton: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  submitButton: {
-    flex: 1,
-    marginLeft: spacing.sm,
-    backgroundColor: theme.colors.primary,
   },
   modalContainer: {
     flex: 1,
@@ -1067,6 +1077,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     maxHeight: '80%',
+    backgroundColor: theme.colors.surface,
   },
   modalTitle: {
     fontSize: fontSizes.lg,
@@ -1078,9 +1089,11 @@ const styles = StyleSheet.create({
   itemList: {
     maxHeight: 400,
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.surface,
   },
   itemListItem: {
     paddingVertical: spacing.sm,
+    backgroundColor: theme.colors.surface,
   },
   modalCloseButton: {
     marginTop: spacing.sm,
@@ -1132,6 +1145,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: theme.roundness,
     elevation: 1,
+    backgroundColor: theme.colors.background,
   },
   materialActions: {
     paddingTop: spacing.sm,
@@ -1149,6 +1163,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: theme.roundness,
     elevation: 1,
+    backgroundColor: theme.colors.background,
   },
   equipmentActions: {
     flexDirection: 'row',
@@ -1202,6 +1217,9 @@ const styles = StyleSheet.create({
   },
   photoSection: {
     marginVertical: spacing.md,
+    backgroundColor: theme.colors.background,
+    padding: spacing.md,
+    borderRadius: theme.roundness,
   },
   photoLabel: {
     fontSize: fontSizes.md,
@@ -1209,42 +1227,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     color: theme.colors.onSurface,
   },
-  photoPreview: {
-    alignItems: 'center',
-    marginVertical: spacing.sm,
-  },
-  previewImage: {
-    width: 200,
-    height: 150,
-    borderRadius: theme.roundness,
-    marginBottom: spacing.sm,
-  },
-  removePhotoButton: {
-    marginTop: spacing.xs,
+  cameraButton: {
+    backgroundColor: theme.colors.primary,
   },
   cameraButtonContent: {
     paddingVertical: spacing.sm,
-  },
-  selectedItemInfo: {
-    padding: spacing.md,
-    marginVertical: spacing.sm,
-    borderRadius: theme.roundness,
-    backgroundColor: theme.colors.surfaceVariant,
-  },
-  selectedItemLabel: {
-    fontSize: fontSizes.sm,
-    color: theme.colors.onSurfaceVariant,
-    marginBottom: spacing.xs,
-  },
-  selectedItemName: {
-    fontSize: fontSizes.lg,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-    marginBottom: spacing.xs,
-  },
-  selectedItemDetails: {
-    fontSize: fontSizes.sm,
-    color: theme.colors.onSurfaceVariant,
   },
   formActions: {
     flexDirection: 'row',
@@ -1261,14 +1248,8 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
   },
-  // Modal styles
-  modalContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: spacing.md,
-  },
   modalContent: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: 16,
     width: screenWidth - (spacing.md * 2),
     maxHeight: '85%',
@@ -1281,20 +1262,15 @@ const styles = StyleSheet.create({
   modalScroll: {
     maxHeight: '100%',
   },
-  modalTitle: {
-    textAlign: 'center',
-    marginBottom: spacing.md,
-    marginTop: spacing.md,
-    fontSize: fontSizes.lg,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-  },
   textInput: {
     marginBottom: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   photoHeader: {
     marginBottom: spacing.sm,
+    backgroundColor: 'transparent',
+    padding: spacing.sm,
+    borderRadius: theme.roundness,
   },
   photoTitle: {
     fontSize: fontSizes.md,

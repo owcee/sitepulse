@@ -474,12 +474,12 @@ export default function EquipmentManagementPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     marginHorizontal: spacing.xs,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   summaryContent: {
     alignItems: 'center',
@@ -534,8 +534,9 @@ const styles = StyleSheet.create({
   },
   equipmentCard: {
     marginBottom: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
+    borderRadius: theme.roundness,
   },
   equipmentHeader: {
     flexDirection: 'row',
@@ -550,7 +551,7 @@ const styles = StyleSheet.create({
   equipmentName: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   equipmentType: {
     fontSize: fontSizes.md,
@@ -601,7 +602,7 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: fontSizes.sm,
     fontWeight: '500',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   ratesContainer: {
     backgroundColor: constructionColors.inProgress + '20',
@@ -612,12 +613,12 @@ const styles = StyleSheet.create({
   ratesTitle: {
     fontSize: fontSizes.sm,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   rateText: {
     fontSize: fontSizes.sm,
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   notesContainer: {
     marginTop: spacing.sm,
@@ -637,7 +638,7 @@ const styles = StyleSheet.create({
   // Empty state
   emptyCard: {
     marginTop: spacing.xl,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',
@@ -660,7 +661,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: spacing.lg,
     bottom: spacing.lg,
-    backgroundColor: constructionColors.complete,
+    backgroundColor: theme.colors.primary,
   },
 
   // Modal
@@ -670,7 +671,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalSurface: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     padding: spacing.lg,
     borderRadius: 12,
     width: '100%',
@@ -680,11 +681,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.lg,
   },
   input: {
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.background,
   },
   typeSelector: {
     marginBottom: spacing.md,

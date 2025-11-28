@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Appbar, Avatar, Badge, Menu, IconButton, Text } from 'react-native-paper';
+import { Appbar, Badge, Menu, IconButton, Text } from 'react-native-paper';
 import { View, TouchableOpacity } from 'react-native';
 
 import { User, Project } from '../types';
-import { theme } from '../utils/theme';
+import { theme, softDarkOrange } from '../utils/theme';
 import { getWorkerProjects } from '../services/assignmentService';
 import { getProject } from '../services/projectService';
 import { auth } from '../firebaseConfig';
@@ -32,7 +32,6 @@ interface Props {
 
 // Custom header component for workers
 const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { onProjectChange?: (projectId: string) => void }) => {
-  const [menuVisible, setMenuVisible] = useState(false);
   const [projectMenuVisible, setProjectMenuVisible] = useState(false);
   const [workerProjects, setWorkerProjects] = useState<Array<{projectId: string, projectName: string}>>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(project || null);
@@ -81,7 +80,7 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
   };
   
   return (
-    <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+    <Appbar.Header style={{ backgroundColor: softDarkOrange }}>
       <Appbar.Content 
         title="SitePulse" 
         titleStyle={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}
@@ -94,6 +93,7 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
         <Menu
           visible={projectMenuVisible}
           onDismiss={() => setProjectMenuVisible(false)}
+          contentStyle={{ backgroundColor: theme.colors.background }}
           anchor={
             <TouchableOpacity
               onPress={() => setProjectMenuVisible(true)}
@@ -124,33 +124,13 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
               onPress={() => handleProjectSelect(p.projectId)}
               title={p.projectName}
               titleStyle={{ 
-                color: currentProject?.id === p.projectId ? theme.colors.primary : theme.colors.text 
+                color: currentProject?.id === p.projectId ? theme.colors.primary : theme.colors.text,
               }}
+              style={{ backgroundColor: theme.colors.background }}
             />
           ))}
         </Menu>
       )}
-      
-      <Menu
-        visible={menuVisible}
-        onDismiss={() => setMenuVisible(false)}
-        anchor={
-          <Avatar.Image 
-            size={32} 
-            source={{ uri: user.profileImage || 'https://via.placeholder.com/32' }}
-            style={{ marginRight: 16 }}
-            onTouchEnd={() => setMenuVisible(true)}
-          />
-        }
-      >
-        <Menu.Item 
-          onPress={() => {
-            setMenuVisible(false);
-            onLogout && onLogout();
-          }} 
-          title="Logout" 
-        />
-      </Menu>
 
     </Appbar.Header>
   );
@@ -286,11 +266,11 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
             return <Ionicons name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: theme.colors.primary,
-          tabBarInactiveTintColor: 'gray',
+          tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
           tabBarStyle: {
-            backgroundColor: 'white',
+            backgroundColor: theme.colors.surface,
             borderTopWidth: 1,
-            borderTopColor: '#E0E0E0',
+            borderTopColor: '#2A2A2A',
             paddingBottom: 5,
             paddingTop: 5,
             height: 65,

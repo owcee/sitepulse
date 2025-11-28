@@ -17,6 +17,7 @@ import {
   List,
   Divider,
   Button,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -99,7 +100,7 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'urgent'>('all');
 
   useEffect(() => {
     loadNotifications();
@@ -169,26 +170,45 @@ export default function NotificationsScreen() {
     loadNotifications();
   };
 
-  const markAsRead = async (id: string) => {
+  const handleDeleteNotification = async (id: string) => {
     try {
-      await markNotificationAsRead(id);
+      await markNotificationAsRead(id); // Mark as read when deleting
       // Remove notification from list immediately
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('Error deleting notification:', error);
     }
   };
 
-  const markAllAsRead = async () => {
+  const handleDeleteAllNotifications = async () => {
     try {
+      // Mark all as read and remove from list
       const unreadNotifications = notifications.filter(n => !n.isRead);
       await Promise.all(
         unreadNotifications.map(notification => markNotificationAsRead(notification.id))
       );
-      // Remove all unread notifications from list immediately
-      setNotifications(prev => prev.filter(n => n.isRead));
+      // Clear all notifications from list
+      setNotifications([]);
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+      console.error('Error deleting all notifications:', error);
+    }
+  };
+
+  const handleNotificationPress = (notification: Notification) => {
+    // Navigate to source based on notification type
+    if (notification.type === 'task') {
+      // @ts-ignore
+      navigation.navigate('Tasks');
+    } else if (notification.type === 'message') {
+      // @ts-ignore
+      navigation.navigate('Chat');
+    } else if (notification.type === 'project_assignment') {
+      // Could navigate to project details or do nothing
+      return;
+    } else {
+      // Default: navigate to Tasks for other notification types
+      // @ts-ignore
+      navigation.navigate('Tasks');
     }
   };
 
@@ -358,38 +378,31 @@ export default function NotificationsScreen() {
     }
   };
 
-  const filteredNotifications = filter === 'all' 
-    ? notifications 
-    : notifications.filter(n => !n.isRead);
+  const filteredNotifications = notifications.filter(notification => {
+    if (filter === 'unread') return !notification.isRead;
+    if (filter === 'urgent') return notification.priority === 'urgent' || notification.priority === 'high';
+    return true;
+  });
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading notifications...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const urgentCount = notifications.filter(n => (n.priority === 'urgent' || n.priority === 'high') && !n.isRead).length;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Notifications</Text>
-        {unreadCount > 0 && (
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Notifications</Text>
+        </View>
+        {notifications.length > 0 && (
           <View style={styles.headerActions}>
-            <Button
-              mode="text"
-              onPress={markAllAsRead}
-              textColor={theme.colors.primary}
-              style={styles.markAsReadButton}
-              labelStyle={styles.markAsReadLabel}
-            >
-              Mark as read
-            </Button>
+            <Badge style={styles.unreadBadge}>{unreadCount}</Badge>
+            <IconButton
+              icon="delete"
+              size={24}
+              onPress={handleDeleteAllNotifications}
+              iconColor={constructionColors.urgent}
+            />
           </View>
         )}
       </View>
@@ -412,18 +425,31 @@ export default function NotificationsScreen() {
         >
           Unread ({unreadCount})
         </Chip>
+        <Chip
+          selected={filter === 'urgent'}
+          onPress={() => setFilter('urgent')}
+          style={styles.filterChip}
+          textStyle={filter === 'urgent' ? styles.selectedChipText : styles.chipText}
+        >
+          Urgent ({urgentCount})
+        </Chip>
       </View>
 
       {/* Notifications List */}
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        showsVerticalScrollIndicator={false}
       >
-        {filteredNotifications.length === 0 ? (
+        {loading ? (
+          <View style={{ padding: spacing.xl, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={{ marginTop: spacing.md, color: theme.colors.onSurfaceVariant }}>
+              Loading notifications...
+            </Text>
+          </View>
+        ) : filteredNotifications.length === 0 ? (
           <Card style={styles.emptyCard}>
             <Card.Content style={styles.emptyContent}>
               <Ionicons 
@@ -432,7 +458,8 @@ export default function NotificationsScreen() {
                 color={theme.colors.onSurfaceDisabled} 
               />
               <Text style={styles.emptyText}>
-                {filter === 'unread' ? 'No unread notifications' : 'No notifications'}
+                {filter === 'unread' ? 'No unread notifications' : 
+                 filter === 'urgent' ? 'No urgent notifications' : 'No notifications'}
               </Text>
             </Card.Content>
           </Card>
@@ -442,25 +469,24 @@ export default function NotificationsScreen() {
               key={notification.id} 
               style={[
                 styles.notificationCard,
-                !notification.isRead && styles.unreadCard
+                !notification.isRead && styles.unreadCard,
+                notification.priority === 'urgent' && styles.urgentCard
               ]}
             >
               <List.Item
                 title={notification.title}
                 description={notification.message}
                 left={(props) => (
-                  <View style={styles.iconContainer}>
-                    <Avatar.Icon
-                      {...props}
-                      icon={getNotificationIcon(notification.type)}
-                      style={[
-                        styles.notificationIcon,
-                        { backgroundColor: getNotificationColor(notification.type, notification.priority) }
-                      ]}
-                      color="white"
-                      size={48}
-                    />
-                  </View>
+                  <Avatar.Icon
+                    {...props}
+                    icon={getNotificationIcon(notification.type)}
+                    style={[
+                      styles.notificationIcon,
+                      { backgroundColor: getNotificationColor(notification.type, notification.priority) }
+                    ]}
+                    color="white"
+                    size={48}
+                  />
                 )}
                 right={(props) => (
                   <View style={styles.notificationMeta}>
@@ -468,24 +494,25 @@ export default function NotificationsScreen() {
                       {formatTimestamp(notification)}
                     </Text>
                     {notification.type === 'project_assignment' && notification.status === 'pending' ? (
-                      <View style={styles.assignmentActions}>
+                      <View style={styles.notificationActions}>
                         <IconButton
                           icon="check"
                           size={20}
                           onPress={() => handleAcceptAssignment(notification)}
                           iconColor={constructionColors.complete}
-                          style={styles.acceptButton}
                         />
                       </View>
-                    ) : !notification.isRead ? (
-                      <IconButton
-                        {...props}
-                        icon="check"
-                        size={20}
-                        onPress={() => markAsRead(notification.id)}
-                        iconColor={theme.colors.primary}
-                      />
-                    ) : null}
+                    ) : (
+                      <View style={styles.notificationActions}>
+                        <IconButton
+                          {...props}
+                          icon="delete"
+                          size={20}
+                          onPress={() => handleDeleteNotification(notification.id)}
+                          iconColor={constructionColors.urgent}
+                        />
+                      </View>
+                    )}
                   </View>
                 )}
                 titleStyle={[
@@ -494,19 +521,13 @@ export default function NotificationsScreen() {
                 ]}
                 descriptionStyle={styles.notificationDescription}
                 onPress={() => {
-                  // For project_assignment notifications, don't mark as read on click
-                  // Only the check button should mark as read
                   if (notification.type === 'project_assignment') {
-                    // Could navigate to project details or do nothing
                     return;
                   }
-                  // For other notifications, mark as read on click
-                  if (!notification.isRead) {
-                    markAsRead(notification.id);
-                  }
+                  handleNotificationPress(notification);
                 }}
-                style={styles.listItem}
               />
+              {index < filteredNotifications.length - 1 && <Divider />}
             </Card>
           ))
         )}
@@ -518,7 +539,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -527,37 +548,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  markAsReadButton: {
-    marginRight: -spacing.sm,
-  },
-  markAsReadLabel: {
-    fontSize: fontSizes.sm,
-    fontWeight: '500',
+  unreadBadge: {
+    backgroundColor: constructionColors.urgent,
+    marginRight: spacing.xs,
   },
   filterContainer: {
     flexDirection: 'row',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
   },
   filterChip: {
     marginRight: spacing.sm,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: theme.colors.surface,
   },
   chipText: {
     color: theme.colors.onSurfaceVariant,
@@ -568,35 +591,32 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  scrollContent: {
     padding: spacing.md,
-    paddingBottom: spacing.xl,
   },
   notificationCard: {
-    marginBottom: spacing.md,
-    backgroundColor: 'white',
+    marginBottom: spacing.sm,
+    backgroundColor: theme.colors.surface,
     elevation: 2,
-    borderRadius: 8,
+    borderRadius: theme.roundness,
   },
   unreadCard: {
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
   },
-  iconContainer: {
-    marginRight: spacing.sm,
+  urgentCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: constructionColors.urgent,
   },
   notificationIcon: {
-    marginLeft: 0,
+    marginLeft: spacing.sm,
   },
   notificationMeta: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    marginRight: spacing.xs,
-    minWidth: 80,
+    marginRight: spacing.sm,
   },
-  listItem: {
-    paddingVertical: spacing.sm,
+  notificationActions: {
+    flexDirection: 'row',
   },
   timestamp: {
     fontSize: fontSizes.sm,
@@ -606,9 +626,11 @@ const styles = StyleSheet.create({
   notificationTitle: {
     fontWeight: '600',
     fontSize: fontSizes.md,
+    color: theme.colors.text,
   },
   unreadTitle: {
     fontWeight: 'bold',
+    color: theme.colors.text,
   },
   notificationDescription: {
     fontSize: fontSizes.sm,
@@ -617,7 +639,7 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     marginTop: spacing.xl,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',

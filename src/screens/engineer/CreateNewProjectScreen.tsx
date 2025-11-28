@@ -278,20 +278,22 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.md,
     elevation: 2,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
   },
   cardTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.md,
   },
   input: {
     marginBottom: spacing.md,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
   },
   infoBox: {
     padding: spacing.md,
-    backgroundColor: theme.colors.surfaceVariant,
+    backgroundColor: theme.colors.background,
     borderRadius: theme.roundness,
     marginTop: spacing.sm,
   },

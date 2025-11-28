@@ -260,17 +260,18 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: fontSizes.md,
-    color: theme.colors.text,
+    color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
   },
   card: {
     elevation: 4,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   cardTitle: {
     textAlign: 'center',
     marginBottom: spacing.lg,
-    color: theme.colors.primary,
+    color: theme.colors.text,
   },
   roleSection: {
     marginBottom: spacing.lg,
@@ -286,10 +287,12 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.surface,
   },
   signUpButton: {
     marginTop: spacing.md,
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.primary,
   },
   signUpButtonContent: {
     paddingVertical: spacing.sm,
@@ -298,14 +301,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   gmailNotice: {
-    backgroundColor: '#E8F5E8',
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
     padding: spacing.md,
     borderRadius: theme.roundness,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.success,
   },
   gmailText: {
     fontSize: fontSizes.sm,
-    color: '#2E7D32',
+    color: theme.colors.success,
     fontWeight: '500',
     textAlign: 'center',
   },

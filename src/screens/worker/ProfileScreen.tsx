@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 1,
   },
   screenTitle: {
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xs,
   },
   specialtyChip: {
-    backgroundColor: '#e3f2fd',
+    backgroundColor: theme.colors.primaryContainer,
   },
   specialtyText: {
     color: theme.colors.primary,
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     color: theme.colors.placeholder,
   },
   emergencyDetails: {
-    backgroundColor: '#ffebee',
+    backgroundColor: constructionColors.urgent + '20',
     padding: spacing.md,
     borderRadius: theme.roundness,
     marginTop: spacing.sm,

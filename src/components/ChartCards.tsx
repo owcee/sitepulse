@@ -28,21 +28,21 @@ export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
       name: 'Completed',
       population: taskData.completed,
       color: constructionColors.complete,
-      legendFontColor: '#7F7F7F',
+              legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
     {
       name: 'In Progress',
       population: taskData.inProgress,
       color: constructionColors.inProgress,
-      legendFontColor: '#7F7F7F',
+              legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
     {
       name: 'Not Started',
       population: taskData.notStarted,
       color: constructionColors.notStarted,
-      legendFontColor: '#7F7F7F',
+              legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
   ];
@@ -77,7 +77,7 @@ export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
             }}
             accessor="population"
-            backgroundColor="transparent"
+            backgroundColor={theme.colors.surface}
             paddingLeft="15"
             absolute
           />
@@ -104,21 +104,21 @@ export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
       name: 'On Schedule',
       population: taskDelayData.onSchedule,
       color: constructionColors.complete,
-      legendFontColor: '#7F7F7F',
+              legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
     {
       name: 'At Risk',
       population: taskDelayData.atRisk,
       color: constructionColors.warning,
-      legendFontColor: '#7F7F7F',
+              legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
     {
       name: 'Delayed',
       population: taskDelayData.delayed,
       color: constructionColors.urgent,
-      legendFontColor: '#7F7F7F',
+              legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
   ].filter(item => item.population > 0);
@@ -164,7 +164,7 @@ export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
             }}
             accessor="population"
-            backgroundColor="transparent"
+            backgroundColor={theme.colors.surface}
             paddingLeft="15"
             absolute
           />
@@ -238,7 +238,7 @@ export const BudgetChart: React.FC<ChartCardProps> = ({ onPress }) => {
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
             }}
             accessor="population"
-            backgroundColor="transparent"
+            backgroundColor={theme.colors.surface}
             paddingLeft="15"
             absolute
           />
@@ -254,9 +254,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
   },
   card: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 4,
     marginVertical: spacing.sm,
+    borderRadius: theme.roundness,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -267,7 +268,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   headerChip: {
     backgroundColor: theme.colors.primary,

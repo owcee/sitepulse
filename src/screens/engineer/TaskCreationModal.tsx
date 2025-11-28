@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, ActivityIndicator, Text } from 'react-native';
 import { 
   Modal,
   Portal,
@@ -165,6 +165,12 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
   const [projectWorkers, setProjectWorkers] = useState<any[]>([]);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [taskStatus, setTaskStatus] = useState<'not_started' | 'in_progress' | 'completed'>('not_started');
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [startCalendarMonth, setStartCalendarMonth] = useState(new Date().getMonth());
+  const [startCalendarYear, setStartCalendarYear] = useState(new Date().getFullYear());
+  const [endCalendarMonth, setEndCalendarMonth] = useState(new Date().getMonth());
+  const [endCalendarYear, setEndCalendarYear] = useState(new Date().getFullYear());
 
   // UI state
   const [currentStep, setCurrentStep] = useState<'category' | 'subtask' | 'details'>('category');
@@ -198,6 +204,12 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
     setSelectedWorkers([]);
     setNotes('');
     setCurrentStep('category');
+    setShowStartDatePicker(false);
+    setShowEndDatePicker(false);
+    setStartCalendarMonth(new Date().getMonth());
+    setStartCalendarYear(new Date().getFullYear());
+    setEndCalendarMonth(new Date().getMonth());
+    setEndCalendarYear(new Date().getFullYear());
   };
 
   const handleCategorySelect = (categoryId: string) => {
@@ -293,6 +305,178 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
         [{ text: 'OK' }]
       );
     }
+  };
+
+  const handleDateIconPress = (type: 'start' | 'end') => {
+    if (type === 'start') {
+      setShowStartDatePicker(true);
+    } else {
+      setShowEndDatePicker(true);
+    }
+  };
+
+  const handleDateSelect = (type: 'start' | 'end', date: Date) => {
+    // Format date in local timezone to avoid timezone conversion issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const formattedDate = `${year}-${month}-${day}`;
+    
+    if (type === 'start') {
+      setStartDateText(formattedDate);
+      setShowStartDatePicker(false);
+    } else {
+      setEndDateText(formattedDate);
+      setShowEndDatePicker(false);
+    }
+  };
+
+  const renderCalendar = (type: 'start' | 'end') => {
+    const currentMonth = type === 'start' ? startCalendarMonth : endCalendarMonth;
+    const currentYear = type === 'start' ? startCalendarYear : endCalendarYear;
+    const setCurrentMonth = type === 'start' ? setStartCalendarMonth : setEndCalendarMonth;
+    const setCurrentYear = type === 'start' ? setStartCalendarYear : setEndCalendarYear;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const firstDayOfWeek = firstDayOfMonth.getDay();
+    const daysInMonth = lastDayOfMonth.getDate();
+    
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const getDaysArray = () => {
+      const days = [];
+      
+      // Previous month days
+      const prevMonthLastDay = new Date(currentYear, currentMonth, 0).getDate();
+      for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+        const date = new Date(currentYear, currentMonth - 1, prevMonthLastDay - i);
+        date.setHours(0, 0, 0, 0);
+        days.push({ date, isCurrentMonth: false, isToday: false });
+      }
+      
+      // Current month days
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        date.setHours(0, 0, 0, 0);
+        const isToday = date.getTime() === today.getTime();
+        days.push({ date, isCurrentMonth: true, isToday });
+      }
+      
+      // Next month days to fill the grid
+      const remainingDays = 42 - days.length; // 6 rows * 7 days
+      for (let day = 1; day <= remainingDays; day++) {
+        const date = new Date(currentYear, currentMonth + 1, day);
+        date.setHours(0, 0, 0, 0);
+        days.push({ date, isCurrentMonth: false, isToday: false });
+      }
+      
+      return days;
+    };
+    
+    const navigateMonth = (direction: 'prev' | 'next') => {
+      if (direction === 'prev') {
+        if (currentMonth === 0) {
+          setCurrentMonth(11);
+          setCurrentYear(currentYear - 1);
+        } else {
+          setCurrentMonth(currentMonth - 1);
+        }
+      } else {
+        if (currentMonth === 11) {
+          setCurrentMonth(0);
+          setCurrentYear(currentYear + 1);
+        } else {
+          setCurrentMonth(currentMonth + 1);
+        }
+      }
+    };
+    
+    const days = getDaysArray();
+    const selectedDate = type === 'start' ? startDateText : endDateText;
+    
+    return (
+      <View style={styles.calendarContainer}>
+        {/* Month/Year Header */}
+        <View style={styles.calendarHeader}>
+          <IconButton
+            icon="chevron-left"
+            size={24}
+            onPress={() => navigateMonth('prev')}
+            iconColor={theme.colors.text}
+          />
+          <Title style={styles.calendarMonthYear}>
+            {monthNames[currentMonth]} {currentYear}
+          </Title>
+          <IconButton
+            icon="chevron-right"
+            size={24}
+            onPress={() => navigateMonth('next')}
+            iconColor={theme.colors.text}
+          />
+        </View>
+        
+        {/* Days of Week Header */}
+        <View style={styles.daysOfWeekContainer}>
+          {daysOfWeek.map((day, index) => (
+            <View key={index} style={styles.dayOfWeekHeader}>
+              <Text style={styles.dayOfWeekText}>{day}</Text>
+            </View>
+          ))}
+        </View>
+        
+        {/* Calendar Grid */}
+        <View style={styles.calendarGrid}>
+          {days.map((dayInfo, index) => {
+            // Format date in local timezone to match selection
+            const year = dayInfo.date.getFullYear();
+            const month = String(dayInfo.date.getMonth() + 1).padStart(2, '0');
+            const day = String(dayInfo.date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            const isSelected = selectedDate === dateStr;
+            const isPast = dayInfo.date < today && !dayInfo.isToday;
+            const isLastInRow = (index + 1) % 7 === 0;
+            const isLastRow = index >= 35;
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.calendarDay,
+                  !dayInfo.isCurrentMonth && styles.calendarDayOtherMonth,
+                  isSelected && styles.calendarDaySelected,
+                  dayInfo.isToday && !isSelected && styles.calendarDayToday,
+                  isLastInRow && { borderRightWidth: 0 },
+                  isLastRow && { borderBottomWidth: 0 },
+                ]}
+                onPress={() => {
+                  if (!isPast || dayInfo.isToday) {
+                    handleDateSelect(type, dayInfo.date);
+                  }
+                }}
+                disabled={isPast && !dayInfo.isToday}
+              >
+                <Text
+                  style={[
+                    styles.calendarDayText,
+                    !dayInfo.isCurrentMonth && styles.calendarDayTextOtherMonth,
+                    isSelected && styles.calendarDayTextSelected,
+                    isPast && !dayInfo.isToday && styles.calendarDayTextPast,
+                    dayInfo.isToday && !isSelected && styles.calendarDayTextToday,
+                  ]}
+                >
+                  {dayInfo.date.getDate()}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
   };
 
   const renderCategoryStep = () => (
@@ -437,7 +621,7 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
               onChangeText={setStartDateText}
               style={styles.dateInput}
               placeholder="2024-01-30"
-              right={<TextInput.Icon icon="calendar" />}
+              right={<TextInput.Icon icon="calendar" onPress={() => handleDateIconPress('start')} />}
             />
 
             <TextInput
@@ -446,7 +630,7 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
               onChangeText={setEndDateText}
               style={styles.dateInput}
               placeholder="2024-02-05"
-              right={<TextInput.Icon icon="calendar" />}
+              right={<TextInput.Icon icon="calendar" onPress={() => handleDateIconPress('end')} />}
             />
 
             <Paragraph style={styles.durationText}>
@@ -606,6 +790,39 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
           {currentStep === 'details' && renderDetailsStep()}
         </View>
       </Modal>
+
+      {/* Date Picker Modals */}
+      <Portal>
+        {/* Calendar Date Picker Modal for Start Date */}
+        <Modal
+          visible={showStartDatePicker}
+          onDismiss={() => setShowStartDatePicker(false)}
+          contentContainerStyle={styles.datePickerContainer}
+        >
+          <Surface style={styles.datePickerSurface}>
+            <Title style={styles.datePickerTitle}>Select Start Date</Title>
+            {renderCalendar('start')}
+            <View style={styles.datePickerActions}>
+              <Button onPress={() => setShowStartDatePicker(false)}>Cancel</Button>
+            </View>
+          </Surface>
+        </Modal>
+
+        {/* Calendar Date Picker Modal for End Date */}
+        <Modal
+          visible={showEndDatePicker}
+          onDismiss={() => setShowEndDatePicker(false)}
+          contentContainerStyle={styles.datePickerContainer}
+        >
+          <Surface style={styles.datePickerSurface}>
+            <Title style={styles.datePickerTitle}>Select End Date</Title>
+            {renderCalendar('end')}
+            <View style={styles.datePickerActions}>
+              <Button onPress={() => setShowEndDatePicker(false)}>Cancel</Button>
+            </View>
+          </Surface>
+        </Modal>
+      </Portal>
     </Portal>
   );
 }
@@ -616,7 +833,7 @@ const styles = StyleSheet.create({
     height: '85%',
   },
   modalCard: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
     height: '100%',
     elevation: 4,
@@ -653,11 +870,12 @@ const styles = StyleSheet.create({
   categoryCard: {
     marginBottom: spacing.sm,
     elevation: 1,
+    backgroundColor: theme.colors.background,
   },
   categoryTitle: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   categoryTagalog: {
@@ -680,6 +898,7 @@ const styles = StyleSheet.create({
   subtaskCard: {
     marginBottom: spacing.sm,
     elevation: 1,
+    backgroundColor: theme.colors.background,
   },
   subtaskHeader: {
     flexDirection: 'row',
@@ -692,7 +911,7 @@ const styles = StyleSheet.create({
   subtaskTitle: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   subtaskTagalog: {
@@ -705,19 +924,19 @@ const styles = StyleSheet.create({
   },
   selectedTaskInfo: {
     padding: spacing.md,
-    backgroundColor: theme.colors.primaryContainer,
+    backgroundColor: 'rgba(255, 107, 53, 0.2)',
     borderRadius: theme.roundness,
     marginBottom: spacing.md,
   },
   selectedTaskTitle: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onPrimaryContainer,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   selectedTaskTagalog: {
     fontSize: fontSizes.sm,
-    color: theme.colors.onPrimaryContainer,
+    color: theme.colors.onSurfaceVariant,
     fontStyle: 'italic',
     marginBottom: spacing.sm,
   },
@@ -727,12 +946,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.sm,
   },
   dateInput: {
     marginBottom: spacing.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
   },
   durationText: {
     fontSize: fontSizes.sm,
@@ -757,7 +976,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xs,
     marginBottom: spacing.xs,
-    backgroundColor: theme.colors.surfaceVariant,
+    backgroundColor: theme.colors.background,
     borderRadius: theme.roundness,
   },
   statusOptionContent: {
@@ -772,7 +991,7 @@ const styles = StyleSheet.create({
   statusLabel: {
     fontSize: fontSizes.sm,
     fontWeight: '600',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   statusDescription: {
     fontSize: fontSizes.xs,
@@ -791,7 +1010,7 @@ const styles = StyleSheet.create({
   workerName: {
     fontSize: fontSizes.sm,
     fontWeight: '500',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   workerRole: {
     fontSize: fontSizes.xs,
@@ -810,7 +1029,7 @@ const styles = StyleSheet.create({
   emptyWorkers: {
     alignItems: 'center',
     paddingVertical: spacing.lg,
-    backgroundColor: theme.colors.surfaceVariant,
+    backgroundColor: theme.colors.background,
     borderRadius: theme.roundness,
     paddingHorizontal: spacing.md,
   },
@@ -828,7 +1047,7 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     marginBottom: spacing.md,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -836,7 +1055,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.outlineVariant,
+    borderTopColor: '#2A2A2A',
     backgroundColor: theme.colors.surface,
   },
   cancelButton: {
@@ -846,5 +1065,109 @@ const styles = StyleSheet.create({
   createButton: {
     flex: 1,
     backgroundColor: theme.colors.primary,
+  },
+  datePickerContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  datePickerSurface: {
+    width: '85%',
+    maxWidth: 350,
+    padding: spacing.md,
+    paddingBottom: spacing.sm,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+    elevation: 4,
+  },
+  datePickerTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  datePickerActions: {
+    marginTop: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  calendarContainer: {
+    marginTop: spacing.sm,
+    marginBottom: 0,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  calendarMonthYear: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+  },
+  daysOfWeekContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+    paddingBottom: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  dayOfWeekHeader: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  dayOfWeekText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '600',
+    color: theme.colors.onSurfaceVariant,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: theme.colors.background,
+  },
+  calendarDayOtherMonth: {
+    backgroundColor: theme.colors.background,
+  },
+  calendarDaySelected: {
+    backgroundColor: theme.colors.primary,
+  },
+  calendarDayToday: {
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  calendarDayText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.text,
+  },
+  calendarDayTextOtherMonth: {
+    color: theme.colors.onSurfaceDisabled,
+  },
+  calendarDayTextSelected: {
+    color: theme.colors.onPrimary,
+    fontWeight: 'bold',
+  },
+  calendarDayTextPast: {
+    color: theme.colors.onSurfaceDisabled,
+  },
+  calendarDayTextToday: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
   },
 });

@@ -292,7 +292,7 @@ export default function WorkerTaskDetailScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Task Info Card */}
         <Card style={styles.card}>
-          <Card.Content>
+          <Card.Content style={{ backgroundColor: theme.colors.background }}>
             <View style={styles.taskHeader}>
               <Title style={styles.taskTitle}>{task.title}</Title>
               <View style={styles.taskMeta}>
@@ -322,7 +322,7 @@ export default function WorkerTaskDetailScreen() {
             {(isOverdue || isDueSoon) && (
               <View style={[
                 styles.dueDateAlert,
-                { backgroundColor: isOverdue ? '#ffebee' : '#fff3e0' }
+                { backgroundColor: isOverdue ? constructionColors.urgent + '20' : constructionColors.warning + '20' }
               ]}>
                 <IconButton 
                   icon={isOverdue ? 'alert-circle' : 'clock-alert'} 
@@ -372,7 +372,7 @@ export default function WorkerTaskDetailScreen() {
 
         {/* Photo Submission Card */}
         <Card style={[styles.card, { overflow: 'visible' }]}>
-          <Card.Content style={{ overflow: 'visible' }}>
+          <Card.Content style={{ overflow: 'visible', backgroundColor: theme.colors.background }}>
             <View style={[styles.photoHeader, { overflow: 'visible' }]}>
               <Title style={styles.cardTitle}>Photo Verification</Title>
               {verificationInfo && (
@@ -434,7 +434,7 @@ export default function WorkerTaskDetailScreen() {
         {/* Engineer Notes */}
         {task.notes && (
           <Card style={styles.card}>
-            <Card.Content>
+            <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.cardTitle}>Engineer Notes</Title>
               <View style={styles.notesSection}>
                 <Paragraph style={styles.notesText}>{task.notes}</Paragraph>
@@ -479,7 +479,7 @@ export default function WorkerTaskDetailScreen() {
           contentContainerStyle={styles.notesModalContainer}
         >
           <Card style={styles.notesModalCard}>
-            <Card.Content>
+            <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.notesModalTitle}>Add Notes (Optional)</Title>
               <Paragraph style={styles.notesModalSubtitle}>
                 Describe the work completed, any issues encountered, or questions for the engineer:
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
   },
   headerTitle: {
@@ -550,6 +550,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -597,7 +598,7 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   taskDetails: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
     padding: spacing.md,
     borderRadius: theme.roundness,
   },
@@ -763,7 +764,7 @@ const styles = StyleSheet.create({
   aiClassification: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f7ff',
+    backgroundColor: theme.colors.primaryContainer,
     padding: spacing.sm,
     borderRadius: theme.roundness,
     marginBottom: spacing.md,
@@ -777,7 +778,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   workerNotes: {
-    backgroundColor: '#e8f5e8',
+    backgroundColor: constructionColors.complete + '20',
     padding: spacing.md,
     borderRadius: theme.roundness,
     marginBottom: spacing.md,
@@ -793,7 +794,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   engineerFeedback: {
-    backgroundColor: '#ffebee',
+    backgroundColor: constructionColors.urgent + '20',
     padding: spacing.md,
     borderRadius: theme.roundness,
     marginBottom: spacing.md,
@@ -811,7 +812,7 @@ const styles = StyleSheet.create({
   },
   uploadInfo: {
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: '#2A2A2A',
     paddingTop: spacing.sm,
   },
   uploadText: {
@@ -894,7 +895,7 @@ const styles = StyleSheet.create({
   notesSection: {
     marginTop: spacing.md,
     padding: spacing.md,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
     borderRadius: theme.roundness,
   },
   // Camera styles
@@ -946,6 +947,7 @@ const styles = StyleSheet.create({
   },
   notesModalCard: {
     maxHeight: '80%',
+    backgroundColor: theme.colors.background,
   },
   notesModalTitle: {
     fontSize: fontSizes.lg,

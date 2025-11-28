@@ -282,9 +282,8 @@ export default function ChatScreen({ user }: Props) {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerInfo}>
+        <View style={styles.headerLeft}>
           <Title style={styles.screenTitle}>Team Chat</Title>
-          <Paragraph style={styles.projectName}>Project Communication</Paragraph>
         </View>
       </View>
 
@@ -376,27 +375,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
-    elevation: 1,
+    backgroundColor: theme.colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
   },
   headerInfo: {
     flex: 1,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   screenTitle: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.text,
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
   },
   projectName: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
   },
   keyboardAvoid: {
     flex: 1,
   },
   messagesContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
   },
   messagesContent: {
     padding: spacing.md,
@@ -408,8 +413,8 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
-    backgroundColor: 'white',
+    color: theme.colors.onSurfaceVariant,
+    backgroundColor: theme.colors.surface,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 16,
@@ -444,7 +449,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   otherUserBubble: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderBottomLeftRadius: 4,
   },
   messageBubbleWithoutAvatar: {
@@ -493,7 +498,7 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: fontSizes.xs,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     marginTop: 4,
     marginBottom: spacing.xs,
     paddingHorizontal: spacing.xs,
@@ -516,14 +521,16 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     fontStyle: 'italic',
   },
   inputContainer: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     elevation: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#2A2A2A',
   },
   inputRow: {
     flexDirection: 'row',
@@ -533,6 +540,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
     maxHeight: 100,
+    backgroundColor: theme.colors.background,
   },
   actionButtons: {
     flexDirection: 'row',

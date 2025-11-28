@@ -153,7 +153,7 @@ export default function ResourcesScreen() {
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
             }}
             accessor="population"
-            backgroundColor="transparent"
+            backgroundColor={theme.colors.surface}
             paddingLeft="15"
             absolute
           />
@@ -466,8 +466,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
-    elevation: 1,
+    backgroundColor: theme.colors.background,
+    elevation: 0,
   },
   headerLeft: {
     flex: 1,
@@ -479,15 +479,17 @@ const styles = StyleSheet.create({
   },
   exportButton: {
     marginLeft: spacing.sm,
+    backgroundColor: theme.colors.primary,
   },
   tabContainer: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
   },
   segmentedButtons: {
     marginBottom: spacing.sm,
+    backgroundColor: theme.colors.surface,
   },
   content: {
     flex: 1,
@@ -497,6 +499,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderRadius: theme.roundness,
     overflow: 'visible',
+    backgroundColor: theme.colors.surface,
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -525,7 +528,7 @@ const styles = StyleSheet.create({
   },
   budgetLabel: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.xs,
   },
   budgetValue: {
@@ -595,7 +598,7 @@ const styles = StyleSheet.create({
   },
   categoryBudget: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
   },
   categoryProgress: {
     height: 6,
@@ -605,7 +608,7 @@ const styles = StyleSheet.create({
   
   // Inventory styles
   alertCard: {
-    backgroundColor: '#ffebee',
+    backgroundColor: 'rgba(244, 67, 54, 0.15)',
     borderColor: constructionColors.urgent,
     borderWidth: 1,
   },
@@ -627,7 +630,7 @@ const styles = StyleSheet.create({
   },
   alertItemStock: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
   },
   inventoryHeader: {
     flexDirection: 'row',
@@ -644,7 +647,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.xs,
   },
   summaryValue: {
@@ -675,7 +678,7 @@ const styles = StyleSheet.create({
   },
   itemUnit: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
   },
   lowStockChip: {
     minWidth: 50,
@@ -709,7 +712,7 @@ const styles = StyleSheet.create({
   },
   lastUpdated: {
     fontSize: fontSizes.xs,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     fontStyle: 'italic',
   },
   itemValue: {

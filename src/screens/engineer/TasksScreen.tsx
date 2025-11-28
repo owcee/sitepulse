@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList, Text } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -194,6 +194,12 @@ export default function TasksScreen() {
   const [dateInputEnd, setDateInputEnd] = useState('');
   const [dateModalTitle, setDateModalTitle] = useState('');
   const [dateModalMessage, setDateModalMessage] = useState('');
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [startCalendarMonth, setStartCalendarMonth] = useState(new Date().getMonth());
+  const [startCalendarYear, setStartCalendarYear] = useState(new Date().getFullYear());
+  const [endCalendarMonth, setEndCalendarMonth] = useState(new Date().getMonth());
+  const [endCalendarYear, setEndCalendarYear] = useState(new Date().getFullYear());
 
   // Subscribe to real-time tasks
   useEffect(() => {
@@ -250,15 +256,33 @@ export default function TasksScreen() {
   };
 
   const openRegressionDateModal = (targetStatus: 'not_started' | 'in_progress', message: string) => {
-    const futureStart = formatDateValue(1);
-    const futureEnd = formatDateValue(14);
+    if (!selectedTask) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    // Use task's current dates as base, or future dates if moving back
+    const currentStart = selectedTask.planned_start_date;
+    const currentEnd = selectedTask.planned_end_date;
+    
+    // If moving back, ensure dates are in the future
+    let futureStart = currentStart > today ? currentStart : formatDateValue(1);
+    let futureEnd = currentEnd > today ? currentEnd : formatDateValue(14);
+    
+    // Ensure end date is after start date
+    if (futureEnd <= futureStart) {
+      futureEnd = formatDateValue(14);
+    }
 
     setPendingStatusTarget(targetStatus);
     setDateInputStart(futureStart);
     setDateInputEnd(futureEnd);
     setDateModalTitle(targetStatus === 'not_started' ? 'Move to Not Started' : 'Move to In Progress');
     setDateModalMessage(message);
-    setDateChangeModalVisible(true);
+    // Close the task action modal first, then open the date modal
+    setShowTaskActionModal(false);
+    // Use setTimeout to ensure the modal closes before opening the new one
+    setTimeout(() => {
+      setDateChangeModalVisible(true);
+    }, 100);
   };
 
   const closeDateModal = () => {
@@ -277,6 +301,33 @@ export default function TasksScreen() {
 
     const today = new Date().toISOString().split('T')[0];
 
+    // For completed → in_progress, only end date is required
+    if (pendingStatusTarget === 'in_progress' && selectedTask.status === 'completed') {
+      if (!isValidDateFormat(dateInputEnd)) {
+        Alert.alert('Invalid Date', 'Please enter end date in YYYY-MM-DD format.');
+        return;
+      }
+
+      if (dateInputEnd < today) {
+        Alert.alert('Invalid Date', 'End date cannot be in the past.');
+        return;
+      }
+
+      try {
+        await updateTask(selectedTask.id, {
+          status: pendingStatusTarget,
+          planned_end_date: dateInputEnd,
+          actual_end_date: null, // Clear completion date
+        });
+        closeDateModal();
+        Alert.alert('Success', 'Task moved to In Progress with new end date.');
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to update task');
+      }
+      return;
+    }
+
+    // For other transitions, both dates are required
     if (!isValidDateFormat(dateInputStart) || !isValidDateFormat(dateInputEnd)) {
       Alert.alert('Invalid Date', 'Please enter dates in YYYY-MM-DD format.');
       return;
@@ -305,6 +356,188 @@ export default function TasksScreen() {
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update task');
     }
+  };
+
+  const formatDateForDisplay = (dateString: string) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const handleDateIconPress = (type: 'start' | 'end') => {
+    if (type === 'start') {
+      setShowStartDatePicker(true);
+    } else {
+      setShowEndDatePicker(true);
+    }
+  };
+
+  const handleDateSelect = (type: 'start' | 'end', date: Date) => {
+    // Format date in local timezone to avoid timezone conversion issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const formattedDate = `${year}-${month}-${day}`;
+    
+    if (type === 'start') {
+      setDateInputStart(formattedDate);
+      setShowStartDatePicker(false);
+    } else {
+      setDateInputEnd(formattedDate);
+      setShowEndDatePicker(false);
+    }
+  };
+
+  const renderCalendar = (type: 'start' | 'end') => {
+    const currentMonth = type === 'start' ? startCalendarMonth : endCalendarMonth;
+    const currentYear = type === 'start' ? startCalendarYear : endCalendarYear;
+    const setCurrentMonth = type === 'start' ? setStartCalendarMonth : setEndCalendarMonth;
+    const setCurrentYear = type === 'start' ? setStartCalendarYear : setEndCalendarYear;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const firstDayOfWeek = firstDayOfMonth.getDay();
+    const daysInMonth = lastDayOfMonth.getDate();
+    
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const getDaysArray = () => {
+      const days = [];
+      
+      // Previous month days
+      const prevMonthLastDay = new Date(currentYear, currentMonth, 0).getDate();
+      for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+        const date = new Date(currentYear, currentMonth - 1, prevMonthLastDay - i);
+        date.setHours(0, 0, 0, 0);
+        days.push({ date, isCurrentMonth: false, isToday: false });
+      }
+      
+      // Current month days
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        date.setHours(0, 0, 0, 0);
+        const isToday = date.getTime() === today.getTime();
+        days.push({ date, isCurrentMonth: true, isToday });
+      }
+      
+      // Next month days to fill the grid
+      const remainingDays = 42 - days.length; // 6 rows * 7 days
+      for (let day = 1; day <= remainingDays; day++) {
+        const date = new Date(currentYear, currentMonth + 1, day);
+        date.setHours(0, 0, 0, 0);
+        days.push({ date, isCurrentMonth: false, isToday: false });
+      }
+      
+      return days;
+    };
+    
+    const navigateMonth = (direction: 'prev' | 'next') => {
+      if (direction === 'prev') {
+        if (currentMonth === 0) {
+          setCurrentMonth(11);
+          setCurrentYear(currentYear - 1);
+        } else {
+          setCurrentMonth(currentMonth - 1);
+        }
+      } else {
+        if (currentMonth === 11) {
+          setCurrentMonth(0);
+          setCurrentYear(currentYear + 1);
+        } else {
+          setCurrentMonth(currentMonth + 1);
+        }
+      }
+    };
+    
+    const days = getDaysArray();
+    const selectedDate = type === 'start' ? dateInputStart : dateInputEnd;
+    
+    return (
+      <View style={styles.calendarContainer}>
+        {/* Month/Year Header */}
+        <View style={styles.calendarHeader}>
+          <IconButton
+            icon="chevron-left"
+            size={24}
+            onPress={() => navigateMonth('prev')}
+            iconColor={theme.colors.text}
+          />
+          <Title style={styles.calendarMonthYear}>
+            {monthNames[currentMonth]} {currentYear}
+          </Title>
+          <IconButton
+            icon="chevron-right"
+            size={24}
+            onPress={() => navigateMonth('next')}
+            iconColor={theme.colors.text}
+          />
+        </View>
+        
+        {/* Days of Week Header */}
+        <View style={styles.daysOfWeekContainer}>
+          {daysOfWeek.map((day, index) => (
+            <View key={index} style={styles.dayOfWeekHeader}>
+              <Text style={styles.dayOfWeekText}>{day}</Text>
+            </View>
+          ))}
+        </View>
+        
+        {/* Calendar Grid */}
+        <View style={styles.calendarGrid}>
+          {days.map((dayInfo, index) => {
+            // Format date in local timezone to match selection
+            const year = dayInfo.date.getFullYear();
+            const month = String(dayInfo.date.getMonth() + 1).padStart(2, '0');
+            const day = String(dayInfo.date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            const isSelected = selectedDate === dateStr;
+            const isPast = dayInfo.date < today && !dayInfo.isToday;
+            const isLastInRow = (index + 1) % 7 === 0;
+            const isLastRow = index >= 35;
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.calendarDay,
+                  !dayInfo.isCurrentMonth && styles.calendarDayOtherMonth,
+                  isSelected && styles.calendarDaySelected,
+                  dayInfo.isToday && !isSelected && styles.calendarDayToday,
+                  isLastInRow && { borderRightWidth: 0 },
+                  isLastRow && { borderBottomWidth: 0 },
+                ]}
+                onPress={() => {
+                  if (!isPast || dayInfo.isToday) {
+                    handleDateSelect(type, dayInfo.date);
+                  }
+                }}
+                disabled={isPast && !dayInfo.isToday}
+              >
+                <Text
+                  style={[
+                    styles.calendarDayText,
+                    !dayInfo.isCurrentMonth && styles.calendarDayTextOtherMonth,
+                    isSelected && styles.calendarDayTextSelected,
+                    isPast && !dayInfo.isToday && styles.calendarDayTextPast,
+                    dayInfo.isToday && !isSelected && styles.calendarDayTextToday,
+                  ]}
+                >
+                  {dayInfo.date.getDate()}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
   };
 
   // Task counts for folder badges
@@ -413,7 +646,7 @@ export default function TasksScreen() {
               </View>
               <View style={styles.taskStatus}>
                 <Ionicons 
-                  name={task.status === 'completed' ? 'checkmark-circle' : 
+                  name={task.status === 'completed' ? 'check-circle' : 
                         task.status === 'in_progress' ? 'time' : 'ellipse-outline'} 
                   size={24} 
                   color={getStatusColor(task.status)} 
@@ -476,8 +709,26 @@ export default function TasksScreen() {
   const handleChangeStatus = async (newStatus: 'not_started' | 'in_progress' | 'completed') => {
     if (!selectedTask) return;
 
+    const currentStatus = selectedTask.status;
     const today = new Date().toISOString().split('T')[0];
 
+    // Workflow rules:
+    // - Not Started: Can only move to In Progress
+    // - In Progress: Can only move to Completed
+    // - Completed: Can go back to In Progress
+
+    // Validate transitions
+    if (currentStatus === 'not_started' && newStatus !== 'in_progress') {
+      Alert.alert('Invalid Transition', 'Not Started tasks can only be moved to In Progress.');
+      return;
+    }
+
+    if (currentStatus === 'in_progress' && newStatus !== 'completed') {
+      Alert.alert('Invalid Transition', 'In Progress tasks can only be moved to Completed.');
+      return;
+    }
+
+    // Handle Completed status (direct update)
     if (newStatus === 'completed') {
       try {
         await updateTask(selectedTask.id, {
@@ -492,10 +743,40 @@ export default function TasksScreen() {
       return;
     }
 
-    const message = selectedTask.status === 'completed'
-      ? 'Reopening this task requires a new timeline. Please select a later start and end date.'
-      : 'Choose a later start and end date to move this task back in the workflow.';
+    // Handle moving from Completed to In Progress (show date modal to set new end date)
+    if (currentStatus === 'completed' && newStatus === 'in_progress') {
+      const today = new Date().toISOString().split('T')[0];
+      const futureEnd = formatDateValue(14);
+      
+      setPendingStatusTarget(newStatus);
+      setDateInputStart(''); // No start date change needed
+      setDateInputEnd(futureEnd);
+      setDateModalTitle('Move to In Progress');
+      setDateModalMessage('Please select a new end date for this task.');
+      setShowTaskActionModal(false);
+      setTimeout(() => {
+        setDateChangeModalVisible(true);
+      }, 100);
+      return;
+    }
 
+    // Handle moving from Not Started to In Progress (direct update)
+    if (currentStatus === 'not_started' && newStatus === 'in_progress') {
+      try {
+        await updateTask(selectedTask.id, {
+          status: newStatus,
+          actual_start_date: today,
+        });
+        setShowTaskActionModal(false);
+        Alert.alert('Success', 'Task moved to In Progress.');
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to update task status');
+      }
+      return;
+    }
+
+    // For any regression (moving backwards), require date change
+    const message = 'Choose a later start and end date to move this task back in the workflow.';
     openRegressionDateModal(newStatus, message);
   };
 
@@ -612,38 +893,33 @@ export default function TasksScreen() {
               <View style={styles.taskActionContent}>
                 <Paragraph style={styles.taskActionLabel}>Change Status:</Paragraph>
                 
-                <Button
-                  mode="contained"
-                  icon="ellipse-outline"
-                  onPress={() => handleChangeStatus('not_started')}
-                  style={[styles.statusButton, { backgroundColor: constructionColors.notStarted }]}
-                  disabled={selectedTask?.status === 'not_started'}
-                >
-                  Not Started
-                </Button>
+                {/* In Progress button - show for not_started and completed tasks */}
+                {(selectedTask?.status === 'not_started' || selectedTask?.status === 'completed') && (
+                  <Button
+                    mode="contained"
+                    icon="time"
+                    onPress={() => handleChangeStatus('in_progress')}
+                    style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
+                  >
+                    In Progress
+                  </Button>
+                )}
 
-                <Button
-                  mode="contained"
-                  icon="time"
-                  onPress={() => handleChangeStatus('in_progress')}
-                  style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
-                  disabled={selectedTask?.status === 'in_progress'}
-                >
-                  In Progress
-                </Button>
-
-                <Button
-                  mode="contained"
-                  icon="checkmark-circle"
-                  onPress={() => handleChangeStatus('completed')}
-                  style={[styles.statusButton, { backgroundColor: constructionColors.complete }]}
-                  disabled={selectedTask?.status === 'completed'}
-                >
-                  Completed
-                </Button>
+                {/* Completed button - only show for in_progress tasks */}
+                {selectedTask?.status === 'in_progress' && (
+                  <Button
+                    mode="contained"
+                    icon="check-circle"
+                    onPress={() => handleChangeStatus('completed')}
+                    style={[styles.statusButton, { backgroundColor: constructionColors.complete }]}
+                  >
+                    Completed
+                  </Button>
+                )}
 
                 <Divider style={styles.divider} />
 
+                {/* Delete button - show for not_started, in_progress, and completed tasks */}
                 <Button
                   mode="contained"
                   icon="trash"
@@ -666,19 +942,33 @@ export default function TasksScreen() {
               <Title style={styles.taskActionTitle}>{dateModalTitle}</Title>
               <Paragraph style={styles.dateModalMessage}>{dateModalMessage}</Paragraph>
 
-              <TextInput
-                label="Start Date (YYYY-MM-DD)"
-                value={dateInputStart}
-                onChangeText={setDateInputStart}
-                style={styles.dateModalInput}
-              />
+              {/* Start Date - only show if not moving from completed to in_progress */}
+              {pendingStatusTarget !== 'in_progress' || selectedTask?.status !== 'completed' ? (
+                <View style={styles.dateInputContainer}>
+                  <TextInput
+                    label="Start Date (YYYY-MM-DD)"
+                    value={dateInputStart}
+                    onChangeText={setDateInputStart}
+                    style={styles.dateModalInput}
+                    textColor={theme.colors.text}
+                    mode="outlined"
+                    right={<TextInput.Icon icon="calendar" onPress={() => handleDateIconPress('start')} />}
+                  />
+                </View>
+              ) : null}
 
-              <TextInput
-                label="End Date (YYYY-MM-DD)"
-                value={dateInputEnd}
-                onChangeText={setDateInputEnd}
-                style={styles.dateModalInput}
-              />
+              <View style={styles.dateInputContainer}>
+                <TextInput
+                  label="End Date (YYYY-MM-DD)"
+                  value={dateInputEnd}
+                  onChangeText={setDateInputEnd}
+                  style={styles.dateModalInput}
+                  textColor={theme.colors.text}
+                  mode="outlined"
+                  right={<TextInput.Icon icon="calendar" onPress={() => handleDateIconPress('end')} />}
+                />
+              </View>
+
 
               <View style={styles.dateModalActions}>
                 <Button mode="outlined" onPress={closeDateModal}>
@@ -779,38 +1069,33 @@ export default function TasksScreen() {
             <View style={styles.taskActionContent}>
               <Paragraph style={styles.taskActionLabel}>Change Status:</Paragraph>
               
-              <Button
-                mode="contained"
-                icon="ellipse-outline"
-                onPress={() => handleChangeStatus('not_started')}
-                style={[styles.statusButton, { backgroundColor: constructionColors.notStarted }]}
-                disabled={selectedTask?.status === 'not_started'}
-              >
-                Not Started
-              </Button>
+              {/* In Progress button - show for not_started and completed tasks */}
+              {(selectedTask?.status === 'not_started' || selectedTask?.status === 'completed') && (
+                <Button
+                  mode="contained"
+                  icon="time"
+                  onPress={() => handleChangeStatus('in_progress')}
+                  style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
+                >
+                  In Progress
+                </Button>
+              )}
 
-              <Button
-                mode="contained"
-                icon="time"
-                onPress={() => handleChangeStatus('in_progress')}
-                style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
-                disabled={selectedTask?.status === 'in_progress'}
-              >
-                In Progress
-              </Button>
-
-              <Button
-                mode="contained"
-                icon="checkmark-circle"
-                onPress={() => handleChangeStatus('completed')}
-                style={[styles.statusButton, { backgroundColor: constructionColors.complete }]}
-                disabled={selectedTask?.status === 'completed'}
-              >
-                Completed
-              </Button>
+              {/* Completed button - only show for in_progress tasks */}
+              {selectedTask?.status === 'in_progress' && (
+                <Button
+                  mode="contained"
+                  icon="check-circle"
+                  onPress={() => handleChangeStatus('completed')}
+                  style={[styles.statusButton, { backgroundColor: constructionColors.complete }]}
+                >
+                  Completed
+                </Button>
+              )}
 
               <Divider style={styles.divider} />
 
+              {/* Delete button - show for all statuses including in_progress */}
               <Button
                 mode="contained"
                 icon="trash"
@@ -822,6 +1107,87 @@ export default function TasksScreen() {
             </View>
           </Surface>
         </Modal>
+
+        {/* Date Change Modal */}
+        <Modal
+          visible={dateChangeModalVisible}
+          onDismiss={closeDateModal}
+          contentContainerStyle={styles.dateModalContainer}
+        >
+          <Surface style={styles.dateModalSurface}>
+            <Title style={styles.taskActionTitle}>{dateModalTitle}</Title>
+            <Paragraph style={styles.dateModalMessage}>{dateModalMessage}</Paragraph>
+
+            {/* Start Date - only show if not moving from completed to in_progress */}
+            {pendingStatusTarget !== 'in_progress' || selectedTask?.status !== 'completed' ? (
+              <View style={styles.dateInputContainer}>
+                <TextInput
+                  label="Start Date (YYYY-MM-DD)"
+                  value={dateInputStart}
+                  onChangeText={setDateInputStart}
+                  style={styles.dateModalInput}
+                  textColor={theme.colors.text}
+                  mode="outlined"
+                    right={<TextInput.Icon icon="calendar" onPress={() => handleDateIconPress('start')} />}
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.dateInputContainer}>
+              <TextInput
+                label="End Date (YYYY-MM-DD)"
+                value={dateInputEnd}
+                onChangeText={setDateInputEnd}
+                style={styles.dateModalInput}
+                textColor={theme.colors.text}
+                mode="outlined"
+                    right={<TextInput.Icon icon="calendar" onPress={() => handleDateIconPress('end')} />}
+              />
+            </View>
+
+            <View style={styles.dateModalActions}>
+              <Button mode="outlined" onPress={closeDateModal}>
+                Cancel
+              </Button>
+              <Button mode="contained" onPress={handleApplyDateChange}>
+                Save
+              </Button>
+            </View>
+          </Surface>
+        </Modal>
+
+          {/* Date Picker Modals - Outside the date change modal */}
+          <Portal>
+            {/* Calendar Date Picker Modal for Start Date */}
+            <Modal
+              visible={showStartDatePicker}
+              onDismiss={() => setShowStartDatePicker(false)}
+              contentContainerStyle={styles.datePickerContainer}
+            >
+              <Surface style={styles.datePickerSurface}>
+                <Title style={styles.datePickerTitle}>Select Start Date</Title>
+                {renderCalendar('start')}
+                <View style={styles.datePickerActions}>
+                  <Button onPress={() => setShowStartDatePicker(false)}>Cancel</Button>
+                </View>
+              </Surface>
+            </Modal>
+
+            {/* Calendar Date Picker Modal for End Date */}
+            <Modal
+              visible={showEndDatePicker}
+              onDismiss={() => setShowEndDatePicker(false)}
+              contentContainerStyle={styles.datePickerContainer}
+            >
+              <Surface style={styles.datePickerSurface}>
+                <Title style={styles.datePickerTitle}>Select End Date</Title>
+                {renderCalendar('end')}
+                <View style={styles.datePickerActions}>
+                  <Button onPress={() => setShowEndDatePicker(false)}>Cancel</Button>
+                </View>
+              </Surface>
+            </Modal>
+          </Portal>
       </Portal>
     </SafeAreaView>
   );
@@ -865,6 +1231,7 @@ const styles = StyleSheet.create({
   card: {
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   folderContent: {
     alignItems: 'center',
@@ -935,7 +1302,7 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: fontSizes.sm,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   chipTextSmall: {
@@ -976,6 +1343,9 @@ const styles = StyleSheet.create({
   },
   taskDates: {
     marginBottom: spacing.sm,
+    backgroundColor: theme.colors.background,
+    padding: spacing.sm,
+    borderRadius: theme.roundness,
   },
   dateText: {
     fontSize: fontSizes.sm,
@@ -997,9 +1367,9 @@ const styles = StyleSheet.create({
   },
   taskNotes: {
     fontSize: fontSizes.sm,
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     fontStyle: 'italic',
-    backgroundColor: theme.colors.surfaceVariant,
+    backgroundColor: theme.colors.background,
     padding: spacing.sm,
     borderRadius: theme.roundness,
   },
@@ -1036,7 +1406,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   taskActionSurface: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
     width: '90%',
     maxWidth: 400,
@@ -1053,6 +1423,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     flex: 1,
+    color: theme.colors.text,
   },
   taskActionContent: {
     gap: spacing.sm,
@@ -1088,13 +1459,119 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     color: theme.colors.onSurfaceVariant,
   },
-  dateModalInput: {
+  dateInputContainer: {
     marginBottom: spacing.sm,
-    backgroundColor: theme.colors.surfaceVariant,
+  },
+  dateModalInput: {
+    backgroundColor: theme.colors.background,
   },
   dateModalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: spacing.sm,
+  },
+  datePickerContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  datePickerSurface: {
+    width: '85%',
+    maxWidth: 350,
+    padding: spacing.md,
+    paddingBottom: spacing.sm,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+    elevation: 4,
+  },
+  datePickerTitle: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  datePickerActions: {
+    marginTop: spacing.md,
+    alignItems: 'flex-end',
+  },
+  calendarContainer: {
+    marginTop: spacing.sm,
+    marginBottom: 0,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  calendarMonthYear: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+  },
+  daysOfWeekContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+    paddingBottom: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  dayOfWeekHeader: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  dayOfWeekText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '600',
+    color: theme.colors.onSurfaceVariant,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: theme.colors.background,
+  },
+  calendarDayOtherMonth: {
+    backgroundColor: theme.colors.background,
+  },
+  calendarDaySelected: {
+    backgroundColor: theme.colors.primary,
+  },
+  calendarDayToday: {
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  calendarDayText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.text, // White for current month
+  },
+  calendarDayTextOtherMonth: {
+    color: theme.colors.onSurfaceDisabled, // Gray for other months
+  },
+  calendarDayTextSelected: {
+    color: theme.colors.onPrimary,
+    fontWeight: 'bold',
+  },
+  calendarDayTextPast: {
+    color: theme.colors.onSurfaceDisabled,
+  },
+  calendarDayTextToday: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
   },
 });

@@ -170,13 +170,30 @@ export async function getEngineerProjects(engineerId?: string): Promise<Project[
     }
 
     const projectsRef = collection(db, 'projects');
-    const q = query(
-      projectsRef,
-      where('engineerId', '==', userId),
-      orderBy('createdAt', 'desc')
-    );
+    
+    // Try with orderBy first, fallback to just where if index is missing
+    let snapshot;
+    try {
+      const q = query(
+        projectsRef,
+        where('engineerId', '==', userId),
+        orderBy('createdAt', 'desc')
+      );
+      snapshot = await getDocs(q);
+    } catch (indexError: any) {
+      // If index error, try without orderBy
+      if (indexError.code === 'failed-precondition' || indexError.message?.includes('index')) {
+        // Silently fallback to query without orderBy
+        const q = query(
+          projectsRef,
+          where('engineerId', '==', userId)
+        );
+        snapshot = await getDocs(q);
+      } else {
+        throw indexError;
+      }
+    }
 
-    const snapshot = await getDocs(q);
     const projects: Project[] = [];
 
     snapshot.forEach((doc) => {
@@ -199,9 +216,20 @@ export async function getEngineerProjects(engineerId?: string): Promise<Project[
       });
     });
 
+    // Sort manually if we couldn't use orderBy
+    projects.sort((a, b) => {
+      const aTime = a.createdAt.getTime();
+      const bTime = b.createdAt.getTime();
+      return bTime - aTime; // Descending order
+    });
+
     return projects;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error getting engineer projects:', error);
+    // Provide more specific error message
+    if (error.message) {
+      throw new Error(`Failed to fetch engineer projects: ${error.message}`);
+    }
     throw new Error('Failed to fetch engineer projects');
   }
 }

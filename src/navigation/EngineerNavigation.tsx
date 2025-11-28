@@ -9,7 +9,7 @@ import { db } from '../firebaseConfig';
 import { getUnreadCount } from '../services/notificationService';
 
 import { User, Project } from '../types';
-import { theme, constructionColors } from '../utils/theme';
+import { theme, constructionColors, softDarkOrange } from '../utils/theme';
 
 // Engineer Screens
 import ProjectToolsScreen from '../screens/engineer/ProjectToolsScreen';
@@ -21,7 +21,6 @@ import WorkersManagementPage from '../screens/engineer/WorkersManagementPage';
 import EquipmentManagementPage from '../screens/engineer/EquipmentManagementPage';
 import BudgetLogsManagementPage from '../screens/engineer/BudgetLogsManagementPage';
 import TasksScreen from '../screens/engineer/TasksScreen';
-import TaskDetailScreen from '../screens/engineer/TaskDetailScreen';
 import DelayPredictionScreen from '../screens/engineer/DelayPredictionScreen';
 import ResourcesScreen from '../screens/engineer/ResourcesScreen';
 import ChatScreen from '../screens/shared/ChatScreen';
@@ -55,19 +54,24 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUnreadNotifications(snapshot.size);
+      // Filter out deleted notifications
+      const unreadCount = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return !data.deleted; // Exclude deleted notifications
+      }).length;
+      setUnreadNotifications(unreadCount);
     });
 
     return () => unsubscribe();
   }, [user.uid]);
 
   return (
-    <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+    <Appbar.Header style={{ backgroundColor: softDarkOrange }}>
       <Appbar.Content 
         title="SitePulse" 
         titleStyle={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}
-        subtitle={`Engineer • ${user.name}`}
-        subtitleStyle={{ color: 'rgba(255,255,255,0.8)' }}
+        subtitle={project?.name || 'Project'}
+        subtitleStyle={{ color: 'rgba(255,255,255,0.9)' }}
       />
       
       {/* Notifications Icon */}
@@ -85,7 +89,7 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
               position: 'absolute', 
               top: 8, 
               right: 8,
-              backgroundColor: theme.colors.error 
+              backgroundColor: theme.colors.background 
             }}
           >
             {unreadNotifications}
@@ -117,11 +121,10 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
   );
 };
 
-// Stack navigator for Tasks to handle task detail navigation
+// Stack navigator for Tasks
 const TasksStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="TasksList" component={TasksScreen} />
-    <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
   </Stack.Navigator>
 );
 
@@ -180,7 +183,7 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
         <CustomHeader user={user} project={project} onLogout={onLogout} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ marginTop: 16, color: theme.colors.onSurface }}>
+          <Text style={{ marginTop: 16, color: theme.colors.text }}>
             Loading your projects...
           </Text>
         </View>
@@ -236,11 +239,11 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
             return <Ionicons name={iconName} size={size} color={color} />;
           },
           tabBarActiveTintColor: theme.colors.primary,
-          tabBarInactiveTintColor: 'gray',
+          tabBarInactiveTintColor: '#9E9E9E',
           tabBarStyle: {
-            backgroundColor: 'white',
+            backgroundColor: theme.colors.surface,
             borderTopWidth: 1,
-            borderTopColor: '#E0E0E0',
+            borderTopColor: '#2A2A2A',
             paddingBottom: 5,
             paddingTop: 5,
             height: 60,

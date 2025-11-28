@@ -1,20 +1,23 @@
 import { DefaultTheme } from 'react-native-paper';
 
+// Dark Mode + Orange Theme - Matching reference images
 export const theme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    primary: '#2196F3', // Blue for primary actions
-    accent: '#FF9800', // Orange for secondary actions
-    background: '#F5F5F5', // Light gray background
-    surface: '#FFFFFF', // White for cards and surfaces
+    primary: '#FF6B35', // Bright orange - main brand color (from images)
+    accent: '#FF6B35', // Orange for secondary actions
+    background: '#121212', // Deep charcoal/black background (from images)
+    surface: '#1E1E1E', // Dark gray for cards and surfaces
     error: '#F44336', // Red for urgent/error states
     warning: '#FFC107', // Yellow for warnings
     success: '#4CAF50', // Green for completed/success states
-    text: '#212121', // Dark text for readability
-    disabled: '#BDBDBD', // Gray for disabled elements
+    text: '#FFFFFF', // White text for readability in dark mode
+    onSurface: '#E0E0E0', // Light gray text on dark surfaces
+    onSurfaceVariant: '#9E9E9E', // Medium gray for secondary text
+    disabled: '#616161', // Darker gray for disabled elements
     placeholder: '#757575', // Medium gray for placeholders
-    backdrop: 'rgba(0, 0, 0, 0.5)',
+    backdrop: 'rgba(0, 0, 0, 0.7)',
   },
   fonts: {
     ...DefaultTheme.fonts,
@@ -38,15 +41,18 @@ export const theme = {
   roundness: 12, // Rounded corners for buttons and cards
 };
 
-// Construction-specific color scheme
+// Construction-specific color scheme - matching reference images
 export const constructionColors = {
-  urgent: '#F44336', // Red
-  warning: '#FFC107', // Yellow
-  complete: '#4CAF50', // Green
-  inProgress: '#FF9800', // Orange
-  notStarted: '#9E9E9E', // Gray
-  fieldBackground: '#FAFAFA', // Very light gray for outdoor readability
+  urgent: '#F44336', // Red for delayed tasks
+  warning: '#FFC107', // Yellow for at-risk tasks
+  complete: '#4CAF50', // Green for completed/on schedule
+  inProgress: '#FF6B35', // Orange for in-progress (matches primary)
+  notStarted: '#757575', // Gray for not started
+  fieldBackground: '#1E1E1E', // Dark gray for cards
 };
+
+// Softer dark orange for headers and dashboard icons
+export const softDarkOrange = '#D45A2A'; // Softer, darker orange
 
 export const spacing = {
   xs: 4,

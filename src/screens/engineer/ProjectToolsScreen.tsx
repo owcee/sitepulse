@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   View, 
   StyleSheet, 
@@ -22,6 +22,10 @@ import { useNavigation, NavigationProp } from '@react-navigation/native';
 
 import { TaskManagementChart, DelayPredictionChart, BudgetChart } from '../../components/ChartCards';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
+import { getEngineerProjects } from '../../services/projectService';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import { getAuth } from 'firebase/auth';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -56,11 +60,65 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const chartScrollRef = useRef<FlatList>(null);
   const [projectMenuVisible, setProjectMenuVisible] = useState(false);
+  const [engineerProjects, setEngineerProjects] = useState<any[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   // Use passed props or fallback to mock data
   const currentProject = project || {
     name: 'Downtown Office Complex',
     description: 'Construction of 12-story office building'
+  };
+
+  // Load engineer's projects when menu opens
+  useEffect(() => {
+    if (projectMenuVisible && user?.uid) {
+      loadEngineerProjects();
+    }
+  }, [projectMenuVisible, user?.uid]);
+
+  const loadEngineerProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const projects = await getEngineerProjects(user?.uid);
+      setEngineerProjects(projects);
+    } catch (error: any) {
+      console.error('Error loading engineer projects:', error);
+      const errorMessage = error?.message || 'Failed to load projects';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const handleProjectMenuPress = () => {
+    // Open menu immediately - projects will load via useEffect
+    setProjectMenuVisible(true);
+  };
+
+  const handleProjectSelect = async (selectedProject: any) => {
+    try {
+      setProjectMenuVisible(false);
+      
+      // Update engineer's currentProjectId in Firestore
+      const firebaseAuth = getAuth();
+      const currentUser = firebaseAuth.currentUser;
+      if (currentUser && selectedProject.id) {
+        const engineerRef = doc(db, 'engineer_accounts', currentUser.uid);
+        await updateDoc(engineerRef, {
+          currentProjectId: selectedProject.id,
+          projectId: selectedProject.id, // Legacy support
+        });
+        
+        Alert.alert(
+          'Project Switched',
+          `Switched to "${selectedProject.name}". Please refresh the app to see the changes.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error switching project:', error);
+      Alert.alert('Error', 'Failed to switch project');
+    }
   };
 
   // Chart data for carousel
@@ -160,46 +218,69 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
           visible={projectMenuVisible}
           onDismiss={() => setProjectMenuVisible(false)}
           anchor={
-            <TouchableOpacity style={styles.titleRow} onPress={() => setProjectMenuVisible(true)}>
+            <TouchableOpacity 
+              style={styles.titleRow} 
+              onPress={() => setProjectMenuVisible(true)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.projectTitle}>{currentProject.name}</Text>
               <Ionicons name="chevron-down" size={20} color="#666" style={{ marginLeft: 4 }} />
             </TouchableOpacity>
           }
-          contentStyle={styles.menuContent}
+          contentStyle={[styles.menuContent, { backgroundColor: theme.colors.background }]}
         >
           <Menu.Item 
             onPress={() => {
               setProjectMenuVisible(false);
             }} 
             title={currentProject.name}
-            titleStyle={styles.currentProjectTitle}
+            titleStyle={[styles.currentProjectTitle, { color: theme.colors.primary }]}
+            style={{ backgroundColor: theme.colors.background }}
           />
           <Divider />
-          <Menu.Item 
-            onPress={() => {
-              setProjectMenuVisible(false);
-              Alert.alert(
-                'Switch Project',
-                'Project switching functionality would be implemented here.',
-                [{ text: 'OK' }]
+          {loadingProjects ? (
+            <Menu.Item 
+              title="Loading projects..." 
+              titleStyle={{ color: theme.colors.onSurfaceVariant }}
+              style={{ backgroundColor: theme.colors.background }}
+              disabled
+            />
+          ) : engineerProjects.length === 0 ? (
+            <Menu.Item 
+              title="No projects available" 
+              titleStyle={{ color: theme.colors.onSurfaceVariant }}
+              style={{ backgroundColor: theme.colors.background }}
+              disabled
+            />
+          ) : (() => {
+            // Filter out the current project
+            const otherProjects = engineerProjects.filter(p => p.id !== project?.id);
+            
+            if (otherProjects.length === 0) {
+              return (
+                <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: theme.colors.background, minWidth: 280 }}>
+                  <Text style={{ 
+                    color: theme.colors.onSurfaceVariant,
+                    fontSize: fontSizes.sm,
+                  }}>
+                    You don't have any other projects
+                  </Text>
+                </View>
               );
-            }} 
-            title="Switch Project" 
-          />
-          <Menu.Item 
-            onPress={() => {
-              setProjectMenuVisible(false);
-              onLogout && onLogout();
-            }} 
-            title="Switch to Worker View" 
-          />
-          <Menu.Item 
-            onPress={() => {
-              setProjectMenuVisible(false);
-              onLogout && onLogout();
-            }} 
-            title="Logout" 
-          />
+            }
+            
+            return otherProjects.map((p) => (
+              <Menu.Item
+                key={p.id}
+                onPress={() => handleProjectSelect(p)}
+                title={p.name}
+                titleStyle={{ 
+                  color: theme.colors.text,
+                }}
+                style={{ backgroundColor: theme.colors.background }}
+              />
+            ));
+          })()}
         </Menu>
 
         <Text style={styles.projectSubtitle}>{currentProject.description}</Text>
@@ -251,15 +332,15 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   projectHeader: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
   },
   projectTouchable: {
     flexDirection: 'row',
@@ -273,7 +354,7 @@ const styles = StyleSheet.create({
   projectTitle: {
     fontSize: fontSizes.xxl,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   projectSubtitle: {
     fontSize: fontSizes.sm,
@@ -292,7 +373,7 @@ const styles = StyleSheet.create({
     height: 1,
   },
   menuContent: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: 8,
     elevation: 8,
     shadowColor: '#000',
@@ -302,6 +383,7 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    minWidth: 280,
   },
   currentProjectTitle: {
     fontWeight: 'bold',
@@ -319,7 +401,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   sectionSubtitle: {
     fontSize: fontSizes.sm,
@@ -348,7 +430,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.lg,
     padding: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     borderRadius: 12,
     elevation: 2,
     shadowColor: '#000',
@@ -370,7 +452,7 @@ const styles = StyleSheet.create({
   toolTitle: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },

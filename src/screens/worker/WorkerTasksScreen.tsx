@@ -10,7 +10,8 @@ import {
   IconButton,
   FAB,
   Button,
-  ActivityIndicator
+  ActivityIndicator,
+  Text
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -191,7 +192,7 @@ export default function WorkerTasksScreen() {
             {(isOverdue || isDueSoon) && (
               <View style={[
                 styles.dueDateAlert,
-                { backgroundColor: isOverdue ? '#ffebee' : '#fff3e0', overflow: 'visible' }
+                { backgroundColor: isOverdue ? constructionColors.urgent + '20' : constructionColors.warning + '20', overflow: 'visible' }
               ]}>
                 <IconButton 
                   icon={isOverdue ? 'alert-circle' : 'clock-alert'} 
@@ -273,7 +274,9 @@ export default function WorkerTasksScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <Title style={styles.screenTitle}>My Tasks</Title>
+        <View style={styles.headerLeft}>
+          <Text style={styles.screenTitle}>My Tasks</Text>
+        </View>
         <IconButton
           icon="refresh"
           size={24}
@@ -289,6 +292,9 @@ export default function WorkerTasksScreen() {
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={styles.searchBar}
+        iconColor={theme.colors.onSurfaceVariant}
+        inputStyle={{ color: theme.colors.text }}
+        placeholderTextColor={theme.colors.onSurfaceVariant}
       />
 
       {/* Task Statistics */}
@@ -378,23 +384,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
-    elevation: 1,
+    backgroundColor: theme.colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   screenTitle: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.text,
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
   },
   searchBar: {
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
+    backgroundColor: theme.colors.surface,
   },
   statsCard: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   statsRow: {
     flexDirection: 'row',
@@ -423,6 +437,7 @@ const styles = StyleSheet.create({
   taskCard: {
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   overdueCard: {
     borderLeftWidth: 4,
@@ -504,7 +519,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   photoStatus: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.surfaceVariant,
     padding: spacing.sm,
     borderRadius: theme.roundness,
     marginBottom: spacing.sm,
@@ -563,6 +578,7 @@ const styles = StyleSheet.create({
   emptyCard: {
     margin: spacing.md,
     elevation: 1,
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',

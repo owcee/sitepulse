@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,6 +27,7 @@ import { useNavigation } from '@react-navigation/native';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { exportBudgetToPDF } from '../../services/pdfExportService';
 import { useProjectData } from '../../context/ProjectDataContext';
+import { updateProject, getProject } from '../../services/projectService';
 
 interface BudgetCategory {
   id: string;
@@ -53,13 +54,14 @@ interface ProjectInfo {
 
 export default function BudgetLogsManagementPage() {
   const navigation = useNavigation();
-  const { state } = useProjectData();
+  const { state, projectId } = useProjectData();
   const [modalVisible, setModalVisible] = useState(false);
   const [categoriesModalVisible, setCategoriesModalVisible] = useState(false);
   const [totalBudgetModalVisible, setTotalBudgetModalVisible] = useState(false);
   const [projectInfoModalVisible, setProjectInfoModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [loadingProjectInfo, setLoadingProjectInfo] = useState(true);
   
   // Calculate equipment and materials spent amounts from actual data
   const calculateEquipmentSpent = () => {
@@ -87,6 +89,32 @@ export default function BudgetLogsManagementPage() {
     title: projectInfo.title,
     description: projectInfo.description,
   });
+
+  // Load project info from Firestore
+  useEffect(() => {
+    const loadProjectInfo = async () => {
+      if (!projectId) return;
+      
+      try {
+        setLoadingProjectInfo(true);
+        const project = await getProject(projectId);
+        if (project) {
+          const loadedInfo = {
+            title: project.name,
+            description: project.description || '',
+          };
+          setProjectInfo(loadedInfo);
+          setProjectInfoForm(loadedInfo);
+        }
+      } catch (error) {
+        console.error('Error loading project info:', error);
+      } finally {
+        setLoadingProjectInfo(false);
+      }
+    };
+
+    loadProjectInfo();
+  }, [projectId]);
   
   // Budget state with smaller default values in Peso
   const initialEquipmentSpent = calculateEquipmentSpent();
@@ -333,19 +361,36 @@ export default function BudgetLogsManagementPage() {
     setProjectInfoModalVisible(true);
   };
 
-  const saveProjectInfo = () => {
+  const saveProjectInfo = async () => {
     if (!projectInfoForm.title.trim()) {
       Alert.alert('Error', 'Project title is required');
       return;
     }
 
-    setProjectInfo({
-      title: projectInfoForm.title.trim(),
-      description: projectInfoForm.description.trim(),
-    });
+    if (!projectId) {
+      Alert.alert('Error', 'Project ID not found');
+      return;
+    }
 
-    Alert.alert('Success', 'Project information updated successfully');
-    setProjectInfoModalVisible(false);
+    try {
+      // Update project in Firestore
+      await updateProject(projectId, {
+        name: projectInfoForm.title.trim(),
+        description: projectInfoForm.description.trim(),
+      });
+
+      // Update local state
+      setProjectInfo({
+        title: projectInfoForm.title.trim(),
+        description: projectInfoForm.description.trim(),
+      });
+
+      Alert.alert('Success', 'Project information updated successfully');
+      setProjectInfoModalVisible(false);
+    } catch (error: any) {
+      console.error('Error updating project info:', error);
+      Alert.alert('Error', error?.message || 'Failed to update project information');
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -557,6 +602,7 @@ export default function BudgetLogsManagementPage() {
               onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
               style={styles.input}
               disabled={editingCategory?.isPrimary}
+              textColor={theme.colors.text}
             />
 
             <TextInput
@@ -567,6 +613,7 @@ export default function BudgetLogsManagementPage() {
               keyboardType="numeric"
               style={styles.input}
               left={<TextInput.Icon icon="cash" />}
+              textColor={theme.colors.text}
             />
 
             {!editingCategory?.isPrimary && (
@@ -578,6 +625,7 @@ export default function BudgetLogsManagementPage() {
                 keyboardType="numeric"
                 style={styles.input}
                 left={<TextInput.Icon icon="cash" />}
+                textColor={theme.colors.text}
               />
             )}
 
@@ -597,6 +645,7 @@ export default function BudgetLogsManagementPage() {
               numberOfLines={3}
               style={styles.input}
               disabled={editingCategory?.isPrimary}
+              textColor={theme.colors.text}
             />
 
             <View style={styles.modalActions}>
@@ -631,6 +680,7 @@ export default function BudgetLogsManagementPage() {
               keyboardType="numeric"
               style={styles.input}
               left={<TextInput.Icon icon="cash" />}
+              textColor={theme.colors.text}
             />
 
             <TextInput
@@ -641,6 +691,7 @@ export default function BudgetLogsManagementPage() {
               keyboardType="numeric"
               style={styles.input}
               right={<TextInput.Affix text="%" />}
+              textColor={theme.colors.text}
             />
 
             <View style={styles.contingencyInfo}>
@@ -679,6 +730,7 @@ export default function BudgetLogsManagementPage() {
               value={projectInfoForm.title}
               onChangeText={(text) => setProjectInfoForm(prev => ({ ...prev, title: text }))}
               style={styles.input}
+              textColor={theme.colors.text}
             />
 
             <TextInput
@@ -689,6 +741,7 @@ export default function BudgetLogsManagementPage() {
               multiline
               numberOfLines={4}
               style={styles.input}
+              textColor={theme.colors.text}
             />
 
             <View style={styles.modalActions}>
@@ -816,12 +869,12 @@ export default function BudgetLogsManagementPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
     paddingVertical: spacing.sm,
   },
   headerContent: {
@@ -839,7 +892,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   subtitle: {
     fontSize: fontSizes.md,
@@ -850,8 +903,9 @@ const styles = StyleSheet.create({
   projectInfoCard: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 3,
+    borderRadius: theme.roundness,
   },
   projectInfoHeader: {
     flexDirection: 'row',
@@ -877,8 +931,9 @@ const styles = StyleSheet.create({
   totalBudgetCard: {
     marginHorizontal: spacing.lg,
     marginVertical: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 4,
+    borderRadius: theme.roundness,
   },
   totalBudgetHeader: {
     flexDirection: 'row',
@@ -889,7 +944,7 @@ const styles = StyleSheet.create({
   totalBudgetTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   budgetSummary: {
     marginBottom: spacing.md,
@@ -906,7 +961,7 @@ const styles = StyleSheet.create({
   budgetValue: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   progressSection: {
     marginTop: spacing.md,
@@ -955,7 +1010,7 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.sm,
   },
   infoText: {
@@ -965,9 +1020,9 @@ const styles = StyleSheet.create({
   },
   categoryCard: {
     marginBottom: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
-    borderRadius: 8,
+    borderRadius: theme.roundness,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -982,7 +1037,7 @@ const styles = StyleSheet.create({
   categoryName: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     flexShrink: 1,
   },
   categoryDescription: {
@@ -1011,7 +1066,7 @@ const styles = StyleSheet.create({
   amountValue: {
     fontSize: fontSizes.md,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginTop: spacing.xs,
   },
   categoryProgress: {
@@ -1048,7 +1103,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalSurface: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     padding: spacing.lg,
     borderRadius: 12,
     width: '100%',
@@ -1057,11 +1112,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.lg,
   },
   input: {
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.surface,
   },
   contingencyInfo: {
     backgroundColor: constructionColors.complete + '20',
@@ -1102,7 +1158,7 @@ const styles = StyleSheet.create({
   },
   autoCalcLabel: {
     fontSize: fontSizes.md,
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     fontWeight: '500',
   },
   autoCalcValue: {
@@ -1113,7 +1169,7 @@ const styles = StyleSheet.create({
 
   // Categories Modal
   categoriesModalSurface: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     padding: spacing.lg,
     borderRadius: 12,
     width: '95%',

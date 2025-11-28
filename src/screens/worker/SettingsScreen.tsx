@@ -160,10 +160,9 @@ export default function SettingsScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Title style={styles.screenTitle}>Settings</Title>
-          <Paragraph style={styles.subtitle}>
-            Manage your profile and app preferences
-          </Paragraph>
+          <View style={styles.headerLeft}>
+            <Title style={styles.screenTitle}>Settings</Title>
+          </View>
         </View>
 
         {/* Profile Card */}
@@ -408,27 +407,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingTop: 0,
-    paddingBottom: spacing.md,
-    backgroundColor: 'white',
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   screenTitle: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: fontSizes.md,
-    color: theme.colors.placeholder,
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
   },
   card: {
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -499,7 +502,7 @@ const styles = StyleSheet.create({
   modalSurface: {
     padding: spacing.lg,
     borderRadius: theme.roundness,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   modalTitle: {
     fontSize: fontSizes.lg,

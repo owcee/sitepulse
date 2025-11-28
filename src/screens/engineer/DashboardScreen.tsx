@@ -13,7 +13,7 @@ import {
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
+import { theme, constructionColors, spacing, fontSizes, softDarkOrange } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { getTaskCounts } from '../../services/taskService';
 
@@ -184,7 +184,7 @@ export default function DashboardScreen() {
                       color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                     }}
                     accessor="population"
-                    backgroundColor="transparent"
+                    backgroundColor={theme.colors.surface}
                     paddingLeft="15"
                     absolute
                   />
@@ -208,7 +208,7 @@ export default function DashboardScreen() {
               <IconButton 
                 icon="camera" 
                 size={20} 
-                iconColor={theme.colors.primary}
+                iconColor={softDarkOrange}
               />
             </View>
             
@@ -276,12 +276,12 @@ export default function DashboardScreen() {
               width={Math.min(screenWidth - 80, 350)}
               height={160}
               chartConfig={{
-                backgroundColor: '#ffffff',
-                backgroundGradientFrom: '#ffffff',
-                backgroundGradientTo: '#ffffff',
+                backgroundColor: theme.colors.surface,
+                backgroundGradientFrom: theme.colors.surface,
+                backgroundGradientTo: theme.colors.surface,
                 decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                color: (opacity = 1) => `rgba(255, 107, 53, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                 style: {
                   borderRadius: 16,
                 },
@@ -300,7 +300,7 @@ export default function DashboardScreen() {
               <IconButton 
                 icon="wallet" 
                 size={20} 
-                iconColor={theme.colors.primary}
+                iconColor={softDarkOrange}
               />
             </View>
 
@@ -380,6 +380,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
   photoPlaceholder: {
     width: 90,
     height: 90,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.colors.background,
     borderRadius: theme.roundness,
     justifyContent: 'center',
     alignItems: 'center',
@@ -494,7 +495,7 @@ const styles = StyleSheet.create({
   photoStatus: {
     fontSize: fontSizes.xs,
     textAlign: 'center',
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
   },
   delayInfo: {
     marginBottom: spacing.md,
@@ -523,7 +524,7 @@ const styles = StyleSheet.create({
   },
   resourceLabel: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.xs,
   },
   resourceValue: {

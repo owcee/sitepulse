@@ -356,12 +356,12 @@ export default function MaterialsManagementPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   subtitle: {
     fontSize: fontSizes.md,
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     marginHorizontal: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   summaryContent: {
     alignItems: 'center',
@@ -416,8 +416,9 @@ const styles = StyleSheet.create({
   },
   materialCard: {
     marginBottom: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
+    borderRadius: theme.roundness,
   },
   materialHeader: {
     flexDirection: 'row',
@@ -428,7 +429,7 @@ const styles = StyleSheet.create({
   materialName: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     flex: 1,
   },
   materialActions: {
@@ -449,7 +450,7 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: fontSizes.sm,
     fontWeight: '500',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
   },
   totalCost: {
     color: constructionColors.complete,
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
   // Empty state
   emptyCard: {
     marginTop: spacing.xl,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',
@@ -496,7 +497,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: spacing.lg,
     bottom: spacing.lg,
-    backgroundColor: constructionColors.complete,
+    backgroundColor: theme.colors.primary,
   },
 
   // Modal
@@ -506,7 +507,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modalSurface: {
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     padding: spacing.lg,
     borderRadius: 12,
     width: '100%',
@@ -516,11 +517,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginBottom: spacing.lg,
   },
   input: {
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.background,
   },
   inputRow: {
     flexDirection: 'row',

@@ -19,6 +19,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
@@ -118,6 +119,7 @@ interface NotificationsScreenProps {
 }
 
 export default function NotificationsScreen({ visible, onDismiss }: NotificationsScreenProps = {}) {
+  const navigation = useNavigation();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'urgent'>('all');
@@ -154,31 +156,59 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
     }, 1000);
   };
 
-  const handleMarkAsRead = async (id: string) => {
-    try {
-      await markAsRead(id);
-      // Remove notification from list immediately
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
-  };
-
-  const handleMarkAllAsRead = async () => {
-    try {
-      await markAllAsRead();
-      // Remove all unread notifications from list immediately
-      setNotifications(prev => prev.filter(n => n.isRead));
-    } catch (error) {
-      console.error('Error marking all as read:', error);
-    }
-  };
-
   const handleDeleteNotification = async (id: string) => {
     try {
       await deleteNotification(id);
+      // Remove notification from list immediately
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (error) {
       console.error('Error deleting notification:', error);
+    }
+  };
+
+  const handleDeleteAllNotifications = async () => {
+    try {
+      // Delete all notifications
+      const deletePromises = notifications.map(n => deleteNotification(n.id));
+      await Promise.all(deletePromises);
+      // Clear all notifications from list
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error deleting all notifications:', error);
+    }
+  };
+
+  const handleNotificationPress = (notification: Notification) => {
+    // Close the modal first
+    if (onDismiss) {
+      onDismiss();
+    }
+    
+    // Navigate to source based on notification type
+    if (notification.type === 'task_approval' || notification.type === 'task_rejection') {
+      // Navigate to Report Logs (verification logs)
+      // @ts-ignore - Navigation typing would be properly configured in production
+      navigation.navigate('Report Logs');
+    } else if (notification.type === 'delay_warning') {
+      // Navigate to delay prediction screen
+      // @ts-ignore
+      navigation.navigate('Delay Prediction');
+    } else if (notification.type === 'resource_alert') {
+      // Navigate to resources screen
+      // @ts-ignore
+      navigation.navigate('Resources');
+    } else if (notification.type === 'chat_message') {
+      // Navigate to chat screen
+      // @ts-ignore
+      navigation.navigate('Chat');
+    } else if (notification.type === 'worker_request') {
+      // Navigate to workers management
+      // @ts-ignore
+      navigation.navigate('WorkersManagement');
+    } else {
+      // Default: navigate to Report Logs for other notification types
+      // @ts-ignore
+      navigation.navigate('Report Logs');
     }
   };
 
@@ -263,19 +293,19 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
               icon="close"
               size={24}
               onPress={onDismiss}
-              iconColor={theme.colors.onSurface}
+              iconColor={theme.colors.text}
             />
           )}
           <Text style={styles.title}>Notifications</Text>
         </View>
-        {unreadCount > 0 && (
+        {notifications.length > 0 && (
           <View style={styles.headerActions}>
             <Badge style={styles.unreadBadge}>{unreadCount}</Badge>
             <IconButton
-              icon="check-all"
+              icon="delete"
               size={24}
-              onPress={handleMarkAllAsRead}
-              iconColor={theme.colors.primary}
+              onPress={handleDeleteAllNotifications}
+              iconColor={constructionColors.urgent}
             />
           </View>
         )}
@@ -368,15 +398,6 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
                       {formatTimestamp(notification.timestamp)}
                     </Text>
                     <View style={styles.notificationActions}>
-                      {!notification.isRead && (
-                        <IconButton
-                          {...props}
-                          icon="check"
-                          size={20}
-                          onPress={() => handleMarkAsRead(notification.id)}
-                          iconColor={constructionColors.complete}
-                        />
-                      )}
                       <IconButton
                         {...props}
                         icon="delete"
@@ -392,7 +413,7 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
                   !notification.isRead && styles.unreadTitle
                 ]}
                 descriptionStyle={styles.notificationDescription}
-                onPress={() => handleMarkAsRead(notification.id)}
+                onPress={() => handleNotificationPress(notification)}
               />
               {index < filteredNotifications.length - 1 && <Divider />}
             </Card>
@@ -423,7 +444,7 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.colors.background,
   },
   modalContainer: {
     flex: 1,
@@ -433,6 +454,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -441,9 +463,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -452,7 +474,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSizes.xl,
     fontWeight: 'bold',
-    color: theme.colors.onSurface,
+    color: theme.colors.text,
     marginLeft: spacing.sm,
   },
   headerActions: {
@@ -467,13 +489,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
   },
   filterChip: {
     marginRight: spacing.sm,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: theme.colors.surface,
   },
   chipText: {
     color: theme.colors.onSurfaceVariant,
@@ -488,8 +510,9 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     marginBottom: spacing.sm,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
     elevation: 2,
+    borderRadius: theme.roundness,
   },
   unreadCard: {
     borderLeftWidth: 4,
@@ -518,9 +541,11 @@ const styles = StyleSheet.create({
   notificationTitle: {
     fontWeight: '600',
     fontSize: fontSizes.md,
+    color: theme.colors.text,
   },
   unreadTitle: {
     fontWeight: 'bold',
+    color: theme.colors.text,
   },
   notificationDescription: {
     fontSize: fontSizes.sm,
@@ -529,7 +554,7 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     marginTop: spacing.xl,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   emptyContent: {
     alignItems: 'center',

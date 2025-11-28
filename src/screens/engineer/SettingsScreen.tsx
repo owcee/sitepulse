@@ -176,7 +176,6 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
           )}
           <View style={styles.headerText}>
             <Title style={styles.screenTitle}>Settings</Title>
-            <Paragraph style={styles.subtitle}>Manage your account and preferences</Paragraph>
           </View>
         </View>
       </View>
@@ -188,9 +187,9 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
             <Title style={styles.cardTitle}>Engineer Profile</Title>
             
             <View style={styles.profileHeader}>
-              <Avatar.Image 
+              <Avatar.Text 
                 size={80} 
-                source={{ uri: userProfile?.profileImage || 'https://via.placeholder.com/150' }} 
+                label={userProfile?.name?.charAt(0)?.toUpperCase() || 'U'} 
                 style={styles.avatar}
               />
               <View style={styles.profileInfo}>
@@ -425,9 +424,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: 0,
     paddingBottom: spacing.md,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#2A2A2A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -444,12 +443,13 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: fontSizes.md,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
   },
   card: {
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -464,6 +464,7 @@ const styles = StyleSheet.create({
   },
   avatar: {
     marginRight: spacing.md,
+    backgroundColor: theme.colors.primary,
   },
   profileInfo: {
     flex: 1,
@@ -476,12 +477,12 @@ const styles = StyleSheet.create({
   },
   email: {
     fontSize: fontSizes.md,
-    color: theme.colors.primary,
+    color: theme.colors.text,
     marginBottom: spacing.xs,
   },
   phone: {
     fontSize: fontSizes.sm,
-    color: theme.colors.placeholder,
+    color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.xs,
   },
   role: {
@@ -491,6 +492,7 @@ const styles = StyleSheet.create({
   },
   editProfileButton: {
     marginTop: spacing.sm,
+    borderColor: theme.colors.primary,
   },
   settingsItem: {
     paddingVertical: spacing.xs,
@@ -512,16 +514,18 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
+    backgroundColor: theme.colors.background,
   },
   innerModalContainer: {
     flex: 1,
     justifyContent: 'center',
     padding: spacing.md,
+    backgroundColor: theme.colors.background,
   },
   modalSurface: {
     padding: spacing.lg,
     borderRadius: theme.roundness,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.surface,
   },
   modalTitle: {
     fontSize: fontSizes.lg,
@@ -532,6 +536,7 @@ const styles = StyleSheet.create({
   },
   modalInput: {
     marginBottom: spacing.md,
+    backgroundColor: theme.colors.background,
   },
   modalActions: {
     flexDirection: 'row',
