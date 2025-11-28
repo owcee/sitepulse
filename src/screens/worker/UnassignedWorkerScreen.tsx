@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Alert, Text, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, ScrollView } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -7,7 +7,9 @@ import {
   Button,
   Avatar,
   Surface,
-  ActivityIndicator
+  ActivityIndicator,
+  Portal,
+  Dialog
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +36,13 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [showSwitchDialog, setShowSwitchDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState('');
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [pendingInvite, setPendingInvite] = useState<WorkerAssignment | null>(null);
 
   // Load worker invitations
   useEffect(() => {
@@ -55,41 +64,8 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
   const handleAccept = async (invite: WorkerAssignment) => {
     // Check if this is a project switch
     if (invite.isProjectSwitch && user.projectId) {
-      Alert.alert(
-        'Switch Project?',
-        `You are currently assigned to another project. Accepting this invitation will switch you to "${invite.projectName}".\n\nDo you want to continue?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Switch Project',
-            onPress: async () => {
-              setAccepting(true);
-              try {
-                await acceptAssignment(user.uid, invite.projectId);
-                Alert.alert(
-                  'Project Switched! 🎉',
-                  `You've joined ${invite.projectName}. Refreshing...`,
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        if (onRefresh) onRefresh();
-                      }
-                    }
-                  ]
-                );
-              } catch (error: any) {
-                Alert.alert('Error', error.message || 'Failed to accept invitation');
-              } finally {
-                setAccepting(false);
-              }
-            }
-          }
-        ]
-      );
+      setPendingInvite(invite);
+      setShowSwitchDialog(true);
       return;
     }
 
@@ -97,49 +73,60 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
     setAccepting(true);
     try {
       await acceptAssignment(user.uid, invite.projectId);
-      Alert.alert(
-        'Invitation Accepted! 🎉',
-        `You've joined ${invite.projectName}. Refreshing...`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              if (onRefresh) onRefresh();
-            }
-          }
-        ]
-      );
+      setDialogTitle('Invitation Accepted! 🎉');
+      setDialogMessage(`You've joined ${invite.projectName}. Refreshing...`);
+      setShowSuccessDialog(true);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to accept invitation');
+      setDialogTitle('Error');
+      setDialogMessage(error.message || 'Failed to accept invitation');
+      setShowErrorDialog(true);
     } finally {
       setAccepting(false);
     }
   };
 
+  const handleSwitchProject = async () => {
+    if (!pendingInvite) return;
+    setShowSwitchDialog(false);
+    setAccepting(true);
+    try {
+      await acceptAssignment(user.uid, pendingInvite.projectId);
+      setDialogTitle('Project Switched! 🎉');
+      setDialogMessage(`You've joined ${pendingInvite.projectName}. Refreshing...`);
+      setShowSuccessDialog(true);
+    } catch (error: any) {
+      setDialogTitle('Error');
+      setDialogMessage(error.message || 'Failed to accept invitation');
+      setShowErrorDialog(true);
+    } finally {
+      setAccepting(false);
+      setPendingInvite(null);
+    }
+  };
+
   const handleReject = async (invite: WorkerAssignment) => {
-    Alert.alert(
-      'Reject Invitation',
-      `Are you sure you want to reject the invitation to ${invite.projectName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async () => {
-            setRejecting(true);
-            try {
-              await rejectAssignment(user.uid);
-              Alert.alert('Invitation Rejected', 'You can be invited to other projects.');
-              loadInvitations();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to reject invitation');
-            } finally {
-              setRejecting(false);
-            }
-          }
-        }
-      ]
-    );
+    setPendingInvite(invite);
+    setShowRejectDialog(true);
+  };
+
+  const confirmReject = async () => {
+    if (!pendingInvite) return;
+    setShowRejectDialog(false);
+    setRejecting(true);
+    try {
+      await rejectAssignment(user.uid);
+      setDialogTitle('Invitation Rejected');
+      setDialogMessage('You can be invited to other projects.');
+      setShowSuccessDialog(true);
+      loadInvitations();
+    } catch (error: any) {
+      setDialogTitle('Error');
+      setDialogMessage(error.message || 'Failed to reject invitation');
+      setShowErrorDialog(true);
+    } finally {
+      setRejecting(false);
+      setPendingInvite(null);
+    }
   };
 
   return (
@@ -337,6 +324,132 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
           Check for Updates
         </Button>
       </ScrollView>
+
+      {/* Switch Project Dialog */}
+      <Portal>
+        <Dialog
+          visible={showSwitchDialog}
+          onDismiss={() => {
+            setShowSwitchDialog(false);
+            setPendingInvite(null);
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Switch Project?</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>
+              You are currently assigned to another project. Accepting this invitation will switch you to "{pendingInvite?.projectName}".{'\n\n'}Do you want to continue?
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setShowSwitchDialog(false);
+                setPendingInvite(null);
+              }}
+              textColor={theme.colors.onSurfaceVariant}
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={handleSwitchProject}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              Switch Project
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Success Dialog */}
+      <Portal>
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => {
+            setShowSuccessDialog(false);
+            if (onRefresh) onRefresh();
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>{dialogTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setShowSuccessDialog(false);
+                if (onRefresh) onRefresh();
+              }}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Error Dialog */}
+      <Portal>
+        <Dialog
+          visible={showErrorDialog}
+          onDismiss={() => setShowErrorDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>{dialogTitle}</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowErrorDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Reject Confirmation Dialog */}
+      <Portal>
+        <Dialog
+          visible={showRejectDialog}
+          onDismiss={() => {
+            setShowRejectDialog(false);
+            setPendingInvite(null);
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Reject Invitation</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>
+              Are you sure you want to reject the invitation to {pendingInvite?.projectName}?
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setShowRejectDialog(false);
+                setPendingInvite(null);
+              }}
+              textColor={theme.colors.onSurfaceVariant}
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={confirmReject}
+              textColor={constructionColors.urgent}
+              labelStyle={styles.dialogButtonText}
+            >
+              Reject
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -404,6 +517,7 @@ const styles = StyleSheet.create({
   availableCard: {
     marginBottom: spacing.lg,
     elevation: 2,
+    backgroundColor: '#1E1E1E',
   },
   cardTitle: {
     fontSize: fontSizes.lg,
@@ -438,6 +552,7 @@ const styles = StyleSheet.create({
   instructionsCard: {
     marginBottom: spacing.lg,
     elevation: 2,
+    backgroundColor: '#1E1E1E',
   },
   stepsList: {
     marginVertical: -spacing.sm,
@@ -530,5 +645,22 @@ const styles = StyleSheet.create({
   rejectButton: {
     flex: 1,
     borderColor: constructionColors.urgent,
+  },
+  dialog: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  dialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+  },
+  dialogButtonText: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
   },
 });

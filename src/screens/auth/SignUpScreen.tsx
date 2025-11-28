@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, Image } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { 
   TextInput, 
   Button, 
@@ -7,7 +7,9 @@ import {
   Card, 
   Title, 
   Paragraph,
-  SegmentedButtons 
+  SegmentedButtons,
+  Portal,
+  Dialog
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,28 +31,38 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'engineer' | 'worker'>('worker');
   const [loading, setLoading] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [showValidationDialog, setShowValidationDialog] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState('');
+  const [successUserName, setSuccessUserName] = useState('');
 
   const validateForm = () => {
     if (!name.trim()) {
-      Alert.alert('Validation Error', 'Please enter your full name');
+      setDialogMessage('Please enter your full name');
+      setShowValidationDialog(true);
       return false;
     }
     if (!email.trim()) {
-      Alert.alert('Validation Error', 'Please enter your email address');
+      setDialogMessage('Please enter your email address');
+      setShowValidationDialog(true);
       return false;
     }
     // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Validation Error', 'Please enter a valid email address');
+      setDialogMessage('Please enter a valid email address');
+      setShowValidationDialog(true);
       return false;
     }
     if (password.length < 6) {
-      Alert.alert('Validation Error', 'Password must be at least 6 characters long');
+      setDialogMessage('Password must be at least 6 characters long');
+      setShowValidationDialog(true);
       return false;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Validation Error', 'Passwords do not match');
+      setDialogMessage('Passwords do not match');
+      setShowValidationDialog(true);
       return false;
     }
     return true;
@@ -90,20 +102,11 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
       onSignUpComplete?.();
 
       // Show success message after sign-out
-      Alert.alert(
-        'Account Created Successfully! 🎉', 
-        `Welcome to SitePulse, ${userData.name}!\n\nYour account has been created. Please sign in with your new credentials to continue.`,
-        [
-          {
-            text: 'Sign In Now',
-            onPress: () => {
-              onBackToLogin();
-            }
-          }
-        ]
-      );
+      setSuccessUserName(userData.name);
+      setShowSuccessDialog(true);
     } catch (error: any) {
-      Alert.alert('Sign Up Failed', error.message);
+      setDialogMessage(error.message);
+      setShowErrorDialog(true);
       // Reset flag on error
       onSignUpComplete?.();
     } finally {
@@ -230,6 +233,88 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
           </Card.Content>
         </Card>
       </View>
+
+      {/* Success Dialog */}
+      <Portal>
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => {
+            setShowSuccessDialog(false);
+            onBackToLogin();
+          }}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>
+            Account Created Successfully! 🎉
+          </Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>
+              Welcome to SitePulse, {successUserName}!
+            </Paragraph>
+            <Paragraph style={styles.dialogMessage}>
+              Your account has been created. Please sign in with your new credentials to continue.
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setShowSuccessDialog(false);
+                onBackToLogin();
+              }}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              Sign In Now
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Error Dialog */}
+      <Portal>
+        <Dialog
+          visible={showErrorDialog}
+          onDismiss={() => setShowErrorDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Sign Up Failed</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowErrorDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Validation Dialog */}
+      <Portal>
+        <Dialog
+          visible={showValidationDialog}
+          onDismiss={() => setShowValidationDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Validation Error</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowValidationDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -342,5 +427,22 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  dialog: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  dialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+  },
+  dialogButtonText: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
   },
 });

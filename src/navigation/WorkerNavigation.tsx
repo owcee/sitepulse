@@ -210,9 +210,9 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
             tabBarActiveTintColor: theme.colors.primary,
             tabBarInactiveTintColor: 'gray',
             tabBarStyle: {
-              backgroundColor: 'white',
+              backgroundColor: '#000000',
               borderTopWidth: 1,
-              borderTopColor: '#E0E0E0',
+              borderTopColor: '#2A2A2A',
               paddingBottom: 5,
               paddingTop: 5,
               height: 65,

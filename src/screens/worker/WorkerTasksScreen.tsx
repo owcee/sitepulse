@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     elevation: 2,
     borderRadius: theme.roundness,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   statsRow: {
     flexDirection: 'row',
@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
   taskCard: {
     elevation: 2,
     borderRadius: theme.roundness,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   overdueCard: {
     borderLeftWidth: 4,
@@ -796,7 +796,7 @@ const styles = StyleSheet.create({
   emptyCard: {
     margin: spacing.md,
     elevation: 1,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   emptyContent: {
     alignItems: 'center',

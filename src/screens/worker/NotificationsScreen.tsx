@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     marginBottom: spacing.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
     elevation: 2,
     borderRadius: theme.roundness,
   },
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     marginTop: spacing.xl,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   emptyContent: {
     alignItems: 'center',

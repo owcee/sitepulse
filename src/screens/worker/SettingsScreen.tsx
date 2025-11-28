@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     elevation: 2,
     borderRadius: theme.roundness,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
   },
   cardTitle: {
     fontSize: fontSizes.lg,

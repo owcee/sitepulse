@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert, Image } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { 
   TextInput, 
   Button, 
@@ -9,7 +9,8 @@ import {
   Paragraph,
   Modal,
   Portal,
-  Surface
+  Surface,
+  Dialog
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,18 +30,25 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [showValidationDialog, setShowValidationDialog] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState('');
 
   const handleLogin = async () => {
     if (!email.trim()) {
-      Alert.alert('Validation Error', 'Please enter your email address');
+      setDialogMessage('Please enter your email address');
+      setShowValidationDialog(true);
       return;
     }
     if (!email.includes('@gmail.com')) {
-      Alert.alert('Validation Error', 'Please use a Gmail address (@gmail.com)');
+      setDialogMessage('Please use a Gmail address (@gmail.com)');
+      setShowValidationDialog(true);
       return;
     }
     if (!password.trim()) {
-      Alert.alert('Validation Error', 'Please enter your password');
+      setDialogMessage('Please enter your password');
+      setShowValidationDialog(true);
       return;
     }
 
@@ -50,18 +58,21 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
       const userData = await signIn(email, password);
       onLogin(userData);
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      setDialogMessage(error.message);
+      setShowErrorDialog(true);
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
     if (!forgotPasswordEmail.trim()) {
-      Alert.alert('Validation Error', 'Please enter your email address');
+      setDialogMessage('Please enter your email address');
+      setShowValidationDialog(true);
       return;
     }
     if (!forgotPasswordEmail.includes('@gmail.com')) {
-      Alert.alert('Validation Error', 'Please use a Gmail address (@gmail.com)');
+      setDialogMessage('Please use a Gmail address (@gmail.com)');
+      setShowValidationDialog(true);
       return;
     }
 
@@ -69,21 +80,12 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
     
     try {
       await resetPassword(forgotPasswordEmail);
-      Alert.alert(
-        'Password Reset Email Sent',
-        'Please check your email for instructions to reset your password.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setShowForgotPassword(false);
-              setForgotPasswordEmail('');
-            }
-          }
-        ]
-      );
+      setShowSuccessDialog(true);
+      setShowForgotPassword(false);
+      setForgotPasswordEmail('');
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      setDialogMessage(error.message);
+      setShowErrorDialog(true);
     } finally {
       setForgotPasswordLoading(false);
     }
@@ -232,6 +234,77 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
           </Surface>
         </Modal>
       </Portal>
+
+      {/* Validation Dialog */}
+      <Portal>
+        <Dialog
+          visible={showValidationDialog}
+          onDismiss={() => setShowValidationDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Validation Error</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowValidationDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Error Dialog */}
+      <Portal>
+        <Dialog
+          visible={showErrorDialog}
+          onDismiss={() => setShowErrorDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Error</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>{dialogMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowErrorDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Success Dialog */}
+      <Portal>
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => setShowSuccessDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Password Reset Email Sent</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogMessage}>
+              Please check your email for instructions to reset your password.
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowSuccessDialog(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.dialogButtonText}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -340,7 +413,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     padding: spacing.sm,
     borderRadius: theme.roundness,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#1E1E1E',
     elevation: 4,
   },
   modalTitle: {
@@ -367,6 +440,23 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     backgroundColor: theme.colors.primary,
+  },
+  dialog: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  dialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+  },
+  dialogButtonText: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
   },
 });
 
