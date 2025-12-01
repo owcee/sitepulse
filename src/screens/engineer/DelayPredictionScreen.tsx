@@ -738,6 +738,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
+    overflow: 'visible',
   },
   taskHeader: {
     flexDirection: 'row',
