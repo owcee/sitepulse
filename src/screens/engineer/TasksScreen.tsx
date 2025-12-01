@@ -610,11 +610,12 @@ export default function TasksScreen() {
     return (
       <TouchableOpacity 
         key={task.id}
-        style={styles.taskCard}
+        style={[styles.taskCard, { overflow: 'visible' }]}
         onPress={() => handleTaskPress(task)}
+        activeOpacity={0.7}
       >
-        <Card style={styles.card}>
-          <Card.Content style={{ overflow: 'visible' }}>
+        <Card style={[styles.card, { overflow: 'visible' }]}>
+          <Card.Content style={{ overflow: 'visible', paddingBottom: spacing.lg, paddingTop: spacing.md }}>
             <View style={styles.taskHeader}>
               <View style={styles.taskInfo}>
                 <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
@@ -624,29 +625,27 @@ export default function TasksScreen() {
                   {task.tagalogLabel}
                 </Paragraph>
                 <View style={styles.taskMeta}>
-                  <Chip 
-                    icon="account-group" 
-                    style={[styles.workerChip, styles.taskMetaChip]}
-                    textStyle={styles.chipTextSmall}
-                  >
-                    {(() => {
-                      const workerName = task.assigned_worker_names.length > 0 
-                        ? task.assigned_worker_names[0] 
-                        : 'Unassigned';
-                      // Truncate if longer than 18 chars to fit in badge
-                      return workerName.length > 18 
-                        ? workerName.substring(0, 18) + '...'
-                        : workerName;
-                    })()}
-                  </Chip>
-                  {task.cnnEligible && (
+                  <View style={styles.workerChipContainer}>
                     <Chip 
-                      icon="brain" 
-                      style={[styles.cnnChip, styles.taskMetaChip, { backgroundColor: '#9C27B0' }]}
-                      textStyle={styles.cnnChipText}
+                      icon="account-group" 
+                      style={[styles.workerChip, styles.taskMetaChip]}
+                      textStyle={styles.chipTextSmall}
                     >
-                      AI
+                      {task.assigned_worker_names.length > 0 
+                        ? task.assigned_worker_names[0] 
+                        : 'Unassigned'}
                     </Chip>
+                  </View>
+                  {task.cnnEligible && (
+                    <View style={styles.cnnChipContainer}>
+                      <Chip 
+                        icon="brain" 
+                        style={[styles.cnnChip, styles.taskMetaChip, { backgroundColor: '#9C27B0' }]}
+                        textStyle={styles.cnnChipText}
+                      >
+                        AI
+                      </Chip>
+                    </View>
                   )}
                 </View>
               </View>
@@ -1238,6 +1237,8 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
+    overflow: 'visible',
+    marginHorizontal: spacing.xs,
   },
   folderContent: {
     alignItems: 'center',
@@ -1294,6 +1295,7 @@ const styles = StyleSheet.create({
   },
   taskCard: {
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   taskHeader: {
     flexDirection: 'row',
@@ -1317,6 +1319,8 @@ const styles = StyleSheet.create({
   },
   chipTextSmall: {
     fontSize: 10,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   cnnChipText: {
     color: 'white',
@@ -1339,17 +1343,29 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     alignItems: 'center',
     gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   taskMetaChip: {
     marginHorizontal: spacing.xs,
     marginVertical: spacing.xs,
     flexShrink: 0,
   },
+  workerChipContainer: {
+    overflow: 'visible',
+    zIndex: 1,
+    alignSelf: 'flex-start',
+  },
   workerChip: {
     backgroundColor: theme.colors.primaryContainer,
     height: 28,
-    maxWidth: 180,
-    minWidth: 60,
+    minHeight: 28,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 0,
+    alignSelf: 'flex-start',
+  },
+  cnnChipContainer: {
+    overflow: 'visible',
+    zIndex: 1,
   },
   cnnChip: {
     height: 28,
