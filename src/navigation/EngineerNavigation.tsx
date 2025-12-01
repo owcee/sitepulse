@@ -3,10 +3,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Appbar, IconButton, Badge, ActivityIndicator, Text } from 'react-native-paper';
-import { View } from 'react-native';
+import { View, Alert } from 'react-native';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { getUnreadCount } from '../services/notificationService';
+import { getProjectTasks, Task } from '../services/taskService';
+import { shouldShowSurvey, submitSurvey, recordSurveySubmission, skipSurveyForToday, SurveyData } from '../services/surveyService';
+import DailySiteSurvey from '../components/DailySiteSurvey';
 
 import { User, Project } from '../types';
 import { theme, constructionColors, softDarkOrange } from '../utils/theme';
@@ -178,6 +181,11 @@ const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
 export default function EngineerNavigation({ user, project, onLogout }: Props) {
   const [hasProjects, setHasProjects] = useState<boolean | null>(null);
   const [isCheckingProjects, setIsCheckingProjects] = useState(true);
+  
+  // Daily Survey State
+  const [showSurvey, setShowSurvey] = useState(false);
+  const [activeTasks, setActiveTasks] = useState<Task[]>([]);
+  const [surveyChecked, setSurveyChecked] = useState(false);
 
   useEffect(() => {
     console.log('🔍 Checking if engineer has projects...');
@@ -206,6 +214,69 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
 
     checkProjects();
   }, [user.uid]);
+
+  // Check if we should show the daily survey
+  useEffect(() => {
+    const checkDailySurvey = async () => {
+      if (!project?.id || !user?.uid || surveyChecked) return;
+      
+      try {
+        console.log('[Survey] Checking if survey should be shown...');
+        const shouldShow = await shouldShowSurvey(user.uid);
+        
+        if (shouldShow) {
+          // Load active tasks for the survey
+          const tasks = await getProjectTasks(project.id);
+          const activeTasksList = tasks.filter(
+            t => t.status === 'in_progress' || t.status === 'not_started'
+          );
+          
+          if (activeTasksList.length > 0) {
+            console.log('[Survey] Showing survey with', activeTasksList.length, 'active tasks');
+            setActiveTasks(activeTasksList);
+            setShowSurvey(true);
+          } else {
+            console.log('[Survey] No active tasks, skipping survey');
+          }
+        } else {
+          console.log('[Survey] Survey already completed today');
+        }
+        
+        setSurveyChecked(true);
+      } catch (error) {
+        console.error('[Survey] Error checking survey:', error);
+        setSurveyChecked(true);
+      }
+    };
+
+    if (hasProjects && !isCheckingProjects) {
+      checkDailySurvey();
+    }
+  }, [project?.id, user?.uid, hasProjects, isCheckingProjects, surveyChecked]);
+
+  // Handle survey submission
+  const handleSurveySubmit = async (surveyData: SurveyData) => {
+    try {
+      console.log('[Survey] Submitting survey...');
+      await submitSurvey(surveyData);
+      await recordSurveySubmission(user.uid, project.id);
+      Alert.alert('Success', 'Daily survey submitted! Delay predictions have been updated.');
+    } catch (error: any) {
+      console.error('[Survey] Submission error:', error);
+      Alert.alert('Error', error.message || 'Failed to submit survey');
+      throw error; // Re-throw to keep modal open
+    }
+  };
+
+  // Handle survey skip
+  const handleSurveySkip = async () => {
+    try {
+      await skipSurveyForToday(user.uid);
+      console.log('[Survey] Survey skipped for today');
+    } catch (error) {
+      console.error('[Survey] Error skipping survey:', error);
+    }
+  };
 
   // Show loading while checking for projects
   if (isCheckingProjects) {
@@ -241,6 +312,24 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
   return (
     <View style={{ flex: 1 }}>
       <CustomHeader user={user} project={project} onLogout={onLogout} />
+      
+      {/* Daily Site Survey Modal */}
+      <DailySiteSurvey
+        isVisible={showSurvey}
+        onClose={() => setShowSurvey(false)}
+        onSubmit={handleSurveySubmit}
+        onSkip={handleSurveySkip}
+        engineerName={user.displayName || user.email || 'Engineer'}
+        projectName={project?.name || 'Project'}
+        projectId={project?.id || ''}
+        activeTasks={activeTasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          subTask: t.subTask,
+          status: t.status
+        }))}
+      />
+      
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,

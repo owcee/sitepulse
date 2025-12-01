@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
+/**
+ * SITEPULSE - Delay Prediction Screen
+ * 
+ * Shows AI-powered delay predictions for all project tasks.
+ * Data comes from the predictAllDelays cloud function.
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Dimensions, Alert, RefreshControl } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -8,273 +15,243 @@ import {
   Chip, 
   ProgressBar,
   IconButton,
-  List,
-  Divider,
-  SegmentedButtons 
+  SegmentedButtons,
+  ActivityIndicator,
+  Surface,
+  Text,
 } from 'react-native-paper';
 import { PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { DelayPrediction, DelayFactor, Task } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { 
+  predictAllDelays, 
+  DelayPrediction, 
+  PredictAllDelaysResponse,
+  getRiskLevelColor,
+  formatDelayDays,
+} from '../../services/delayPredictionService';
+import { getProjectTasks, Task } from '../../services/taskService';
 
 const screenWidth = Dimensions.get('window').width;
-
-// Mock task data with delay predictions
-const mockTasks: Task[] = [
-  {
-    id: 'task-1',
-    title: 'Foundation Excavation',
-    description: 'Dig foundation for building structure',
-    assignedTo: 'worker-1',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-02-15',
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-23',
-  },
-  {
-    id: 'task-2',
-    title: 'Concrete Pouring',
-    description: 'Pour concrete for foundation',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-02-20',
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-25',
-  },
-  {
-    id: 'task-3',
-    title: 'Framing Installation',
-    description: 'Install steel frame structure',
-    assignedTo: 'worker-3',
-    projectId: 'project-1',
-    status: 'in_progress',
-    dueDate: '2024-02-28',
-    createdAt: '2024-01-20',
-    updatedAt: '2024-01-26',
-  },
-  {
-    id: 'task-4',
-    title: 'Site Preparation',
-    description: 'Clear and prepare construction site',
-    assignedTo: 'worker-1',
-    projectId: 'project-1',
-    status: 'completed',
-    dueDate: '2024-01-30',
-    createdAt: '2024-01-05',
-    updatedAt: '2024-01-28',
-  },
-  {
-    id: 'task-5',
-    title: 'Utility Connections',
-    description: 'Connect water and electrical utilities',
-    assignedTo: 'worker-2',
-    projectId: 'project-1',
-    status: 'completed',
-    dueDate: '2024-02-05',
-    createdAt: '2024-01-12',
-    updatedAt: '2024-02-03',
-  },
-];
-
-// Mock delay predictions for in-progress tasks
-const mockDelayPredictions: DelayPrediction[] = [
-  {
-    taskId: 'task-1',
-    taskTitle: 'Foundation Excavation',
-    originalDueDate: '2024-02-15',
-    estimatedCompletionDate: '2024-02-18',
-    delayDays: 3,
-    confidenceLevel: 0.85,
-    currentStatus: 'delayed',
-    factors: [
-      {
-        name: 'Weather Conditions',
-        impact: 0.6,
-        description: 'Heavy rainfall has made soil conditions difficult for excavation',
-      },
-      {
-        name: 'Equipment Issues',
-        impact: 0.4,
-        description: 'Excavator required maintenance causing 1-day delay',
-      },
-    ],
-  },
-  {
-    taskId: 'task-2',
-    taskTitle: 'Concrete Pouring',
-    originalDueDate: '2024-02-20',
-    estimatedCompletionDate: '2024-02-21',
-    delayDays: 1,
-    confidenceLevel: 0.78,
-    currentStatus: 'at_risk',
-    factors: [
-      {
-        name: 'Material Delivery',
-        impact: 0.7,
-        description: 'Concrete supplier has limited availability next week',
-      },
-      {
-        name: 'Dependency Tasks',
-        impact: 0.3,
-        description: 'Foundation excavation delay affects concrete pouring schedule',
-      },
-    ],
-  },
-  {
-    taskId: 'task-3',
-    taskTitle: 'Framing Installation',
-    originalDueDate: '2024-02-28',
-    estimatedCompletionDate: '2024-02-27',
-    delayDays: -1,
-    confidenceLevel: 0.92,
-    currentStatus: 'in_progress',
-    factors: [
-      {
-        name: 'Efficient Progress',
-        impact: -0.3,
-        description: 'Team is working ahead of schedule with good weather',
-      },
-      {
-        name: 'Material Availability',
-        impact: -0.2,
-        description: 'Steel frames arrived earlier than expected',
-      },
-    ],
-  },
-];
 
 type ViewMode = 'in_progress' | 'completed';
 
 export default function DelayPredictionScreen() {
+  const { projectId } = useProjectData();
+  
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('in_progress');
+  
+  // Data from cloud function
+  const [predictions, setPredictions] = useState<DelayPrediction[]>([]);
+  const [summary, setSummary] = useState({
+    totalTasks: 0,
+    highRiskCount: 0,
+    mediumRiskCount: 0,
+    lowRiskCount: 0,
+  });
+  
+  // Completed tasks from Firestore
+  const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
 
-  const handleRefreshPrediction = async () => {
-    setRefreshing(true);
-    // Simulate API call to regenerate predictions
-    setTimeout(() => {
+  // Load predictions and tasks
+  const loadData = useCallback(async (showRefreshIndicator = false) => {
+    if (!projectId) {
+      setError('No project selected');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      if (showRefreshIndicator) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      // Fetch predictions from cloud function
+      console.log('[DelayPrediction] Fetching predictions for project:', projectId);
+      const result = await predictAllDelays(projectId);
+      
+      setPredictions(result.predictions);
+      setSummary({
+        totalTasks: result.totalTasks,
+        highRiskCount: result.highRiskCount,
+        mediumRiskCount: result.mediumRiskCount,
+        lowRiskCount: result.lowRiskCount,
+      });
+
+      // Also fetch completed tasks
+      const allTasks = await getProjectTasks(projectId);
+      const completed = allTasks.filter(t => t.status === 'completed');
+      setCompletedTasks(completed);
+
+      console.log('[DelayPrediction] Loaded', result.predictions.length, 'predictions and', completed.length, 'completed tasks');
+
+    } catch (err: any) {
+      console.error('[DelayPrediction] Error loading data:', err);
+      setError(err.message || 'Failed to load predictions');
+    } finally {
+      setLoading(false);
       setRefreshing(false);
-      Alert.alert('Updated', 'Delay predictions have been refreshed with latest data.');
-    }, 2000);
+    }
+  }, [projectId]);
+
+  // Initial load
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Handle refresh
+  const handleRefresh = () => {
+    loadData(true);
   };
 
   const handleExportPDF = () => {
     Alert.alert('Export Report', 'Task delay prediction report exported successfully.', [{ text: 'OK' }]);
   };
 
-  const getDelayRiskColor = (delayDays: number) => {
-    if (delayDays <= 0) return constructionColors.complete;
-    if (delayDays <= 2) return constructionColors.warning;
-    return constructionColors.urgent;
-  };
-
-  const getStatusColor = (status: 'in_progress' | 'at_risk' | 'delayed') => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'in_progress':
+        return constructionColors.inProgress;
+      case 'not_started':
+        return constructionColors.notStarted;
+      case 'completed':
         return constructionColors.complete;
-      case 'at_risk':
-        return constructionColors.warning;
-      case 'delayed':
-        return constructionColors.urgent;
       default:
         return theme.colors.disabled;
     }
   };
 
-  const getImpactColor = (impact: number) => {
-    const absImpact = Math.abs(impact);
-    if (absImpact >= 0.5) return constructionColors.urgent;
-    if (absImpact >= 0.3) return constructionColors.warning;
-    return constructionColors.complete;
-  };
+  const renderTaskPrediction = (prediction: DelayPrediction) => {
+    const riskColor = getRiskLevelColor(prediction.riskLevel);
+    
+    // Calculate estimated completion date
+    const plannedEnd = prediction.plannedEndDate ? new Date(prediction.plannedEndDate) : null;
+    const estimatedEnd = plannedEnd && prediction.delayDays > 0 
+      ? new Date(plannedEnd.getTime() + prediction.delayDays * 24 * 60 * 60 * 1000)
+      : plannedEnd;
 
-  const inProgressTasks = mockTasks.filter(task => task.status === 'in_progress');
-  const completedTasks = mockTasks.filter(task => task.status === 'completed');
-  const tasksWithDelays = mockDelayPredictions.filter(pred => pred.delayDays > 0).length;
-
-  const renderTaskPrediction = (prediction: DelayPrediction) => (
-    <Card key={prediction.taskId} style={styles.taskCard}>
-      <Card.Content style={{ overflow: 'visible' }}>
-        <View style={styles.taskHeader}>
-          <View style={styles.taskInfo}>
-            <Title style={styles.taskTitle}>{prediction.taskTitle}</Title>
-            <Chip 
-              style={[styles.statusChip, { backgroundColor: getStatusColor(prediction.currentStatus) }]}
-              textStyle={styles.statusChipText}
-            >
-              {prediction.currentStatus.replace('_', ' ').toUpperCase()}
-            </Chip>
-          </View>
-          <Chip 
-            style={[styles.confidenceChip, { backgroundColor: theme.colors.primary }]}
-            textStyle={styles.confidenceChipText}
-          >
-            {Math.round(prediction.confidenceLevel * 100)}%
-          </Chip>
-        </View>
-
-        <View style={styles.predictionDetails}>
-          <View style={styles.dateRow}>
-            <Paragraph style={styles.dateLabel}>Original Due:</Paragraph>
-            <Paragraph style={styles.originalDate}>
-              {new Date(prediction.originalDueDate).toLocaleDateString()}
-            </Paragraph>
-          </View>
-          
-          <View style={styles.dateRow}>
-            <Paragraph style={styles.dateLabel}>Predicted:</Paragraph>
-            <Paragraph style={[styles.predictedDate, { color: getDelayRiskColor(prediction.delayDays) }]}>
-              {new Date(prediction.estimatedCompletionDate).toLocaleDateString()}
-            </Paragraph>
+    return (
+      <Card key={prediction.taskId} style={styles.taskCard}>
+        <Card.Content style={{ overflow: 'visible' }}>
+          <View style={styles.taskHeader}>
+            <View style={styles.taskInfo}>
+              <Title style={styles.taskTitle}>{prediction.taskTitle}</Title>
+              {prediction.taskType && (
+                <Paragraph style={styles.taskType}>{prediction.taskType}</Paragraph>
+              )}
+              <Chip 
+                style={[styles.statusChip, { backgroundColor: getStatusColor(prediction.status || 'in_progress') }]}
+                textStyle={styles.statusChipText}
+              >
+                {(prediction.status || 'in_progress').replace('_', ' ').toUpperCase()}
+              </Chip>
+            </View>
+            <View style={styles.riskBadge}>
+              <Chip 
+                style={[styles.riskChip, { backgroundColor: riskColor }]}
+                textStyle={styles.riskChipText}
+                icon={prediction.riskLevel === 'High' ? 'alert' : prediction.riskLevel === 'Medium' ? 'alert-circle-outline' : 'check-circle'}
+              >
+                {prediction.riskLevel}
+              </Chip>
+            </View>
           </View>
 
-          {prediction.delayDays !== 0 && (
-            <View style={styles.delayAlert}>
-              <IconButton 
-                icon={prediction.delayDays > 0 ? "alert-circle" : "check-circle"} 
-                size={16} 
-                iconColor={getDelayRiskColor(prediction.delayDays)}
-              />
-              <Paragraph style={[styles.delayText, { color: getDelayRiskColor(prediction.delayDays) }]}>
-                {prediction.delayDays > 0 ? 
-                  `${prediction.delayDays} day${prediction.delayDays > 1 ? 's' : ''} behind` :
-                  `${Math.abs(prediction.delayDays)} day${Math.abs(prediction.delayDays) > 1 ? 's' : ''} ahead`
-                }
+          <View style={styles.predictionDetails}>
+            <View style={styles.dateRow}>
+              <Paragraph style={styles.dateLabel}>Planned Duration:</Paragraph>
+              <Paragraph style={styles.dateValue}>
+                {prediction.plannedDuration} days
               </Paragraph>
             </View>
-          )}
-
-          <ProgressBar 
-            progress={0.6} // This would be calculated based on actual task progress
-            color={getStatusColor(prediction.currentStatus)}
-            style={styles.progressBar}
-          />
-        </View>
-
-        {/* Factors affecting this task */}
-        <View style={styles.factorsSection}>
-          <Title style={styles.factorsTitle}>Contributing Factors:</Title>
-          {prediction.factors.map((factor, index) => (
-            <View key={index} style={styles.factorItem}>
-              <View style={styles.factorHeader}>
-                <Paragraph style={styles.factorName}>{factor.name}</Paragraph>
-                <Chip 
-                  style={[styles.impactChip, { backgroundColor: getImpactColor(factor.impact) }]}
-                  textStyle={styles.impactChipText}
-                >
-                  {factor.impact > 0 ? '+' : ''}{Math.round(factor.impact * 100)}%
-                </Chip>
-              </View>
-              <Paragraph style={styles.factorDescription}>{factor.description}</Paragraph>
+            
+            <View style={styles.dateRow}>
+              <Paragraph style={styles.dateLabel}>Predicted Duration:</Paragraph>
+              <Paragraph style={[styles.dateValue, { color: riskColor, fontWeight: 'bold' }]}>
+                {prediction.predictedDuration} days
+              </Paragraph>
             </View>
-          ))}
-        </View>
-      </Card.Content>
-    </Card>
-  );
+
+            {plannedEnd && (
+              <View style={styles.dateRow}>
+                <Paragraph style={styles.dateLabel}>Planned End:</Paragraph>
+                <Paragraph style={styles.dateValue}>
+                  {plannedEnd.toLocaleDateString()}
+                </Paragraph>
+              </View>
+            )}
+
+            {prediction.delayDays > 0 && (
+              <View style={[styles.delayAlert, { borderColor: riskColor, backgroundColor: riskColor + '15' }]}>
+                <IconButton 
+                  icon="alert-circle" 
+                  size={16} 
+                  iconColor={riskColor}
+                  style={{ margin: 0 }}
+                />
+                <Paragraph style={[styles.delayText, { color: riskColor }]}>
+                  {formatDelayDays(prediction.delayDays)}
+                </Paragraph>
+              </View>
+            )}
+
+            {prediction.delayDays <= 0 && (
+              <View style={[styles.delayAlert, { borderColor: constructionColors.complete, backgroundColor: constructionColors.complete + '15' }]}>
+                <IconButton 
+                  icon="check-circle" 
+                  size={16} 
+                  iconColor={constructionColors.complete}
+                  style={{ margin: 0 }}
+                />
+                <Paragraph style={[styles.delayText, { color: constructionColors.complete }]}>
+                  On track
+                </Paragraph>
+              </View>
+            )}
+
+            {/* Progress Bar based on predicted vs planned */}
+            <View style={styles.progressContainer}>
+              <Paragraph style={styles.progressLabel}>
+                Delay Risk
+              </Paragraph>
+              <ProgressBar 
+                progress={Math.min(prediction.delayDays / prediction.plannedDuration, 1)} 
+                color={riskColor}
+                style={styles.progressBar}
+              />
+            </View>
+          </View>
+
+          {/* Contributing Factors */}
+          {prediction.factors && prediction.factors.length > 0 && (
+            <View style={styles.factorsSection}>
+              <Title style={styles.factorsTitle}>Contributing Factors:</Title>
+              <View style={styles.factorsList}>
+                {prediction.factors.map((factor, index) => (
+                  <Chip 
+                    key={index}
+                    style={styles.factorChip}
+                    textStyle={styles.factorChipText}
+                    icon={factor === 'On track' ? 'check' : 'alert-circle-outline'}
+                  >
+                    {factor}
+                  </Chip>
+                ))}
+              </View>
+            </View>
+          )}
+        </Card.Content>
+      </Card>
+    );
+  };
 
   const renderCompletedTask = (task: Task) => (
     <Card key={task.id} style={styles.completedTaskCard}>
@@ -294,23 +271,26 @@ export default function DelayPredictionScreen() {
         <View style={styles.completedTaskDetails}>
           <View style={styles.dateRow}>
             <Paragraph style={styles.dateLabel}>Due Date:</Paragraph>
-            <Paragraph style={styles.originalDate}>
-              {new Date(task.dueDate).toLocaleDateString()}
+            <Paragraph style={styles.dateValue}>
+              {new Date(task.planned_end_date).toLocaleDateString()}
             </Paragraph>
           </View>
           
-          <View style={styles.dateRow}>
-            <Paragraph style={styles.dateLabel}>Completed:</Paragraph>
-            <Paragraph style={[styles.completedDate, { color: constructionColors.complete }]}>
-              {new Date(task.updatedAt).toLocaleDateString()}
-            </Paragraph>
-          </View>
+          {task.actual_end_date && (
+            <View style={styles.dateRow}>
+              <Paragraph style={styles.dateLabel}>Completed:</Paragraph>
+              <Paragraph style={[styles.completedDate, { color: constructionColors.complete }]}>
+                {new Date(task.actual_end_date).toLocaleDateString()}
+              </Paragraph>
+            </View>
+          )}
 
           <View style={styles.statusIndicator}>
             <IconButton 
               icon="check-circle" 
               size={16} 
               iconColor={constructionColors.complete}
+              style={{ margin: 0 }}
             />
             <Paragraph style={[styles.statusText, { color: constructionColors.complete }]}>
               Task completed successfully
@@ -320,6 +300,39 @@ export default function DelayPredictionScreen() {
       </Card.Content>
     </Card>
   );
+
+  // Loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.header}>
+          <Title style={styles.screenTitle}>Task Delay Prediction</Title>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Paragraph style={styles.loadingText}>Analyzing task delays...</Paragraph>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.header}>
+          <Title style={styles.screenTitle}>Task Delay Prediction</Title>
+        </View>
+        <View style={styles.errorContainer}>
+          <IconButton icon="alert-circle" size={48} iconColor={constructionColors.urgent} />
+          <Paragraph style={styles.errorText}>{error}</Paragraph>
+          <Button mode="contained" onPress={() => loadData()} style={styles.retryButton}>
+            Retry
+          </Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -331,7 +344,7 @@ export default function DelayPredictionScreen() {
             icon="refresh"
             size={24}
             iconColor={theme.colors.primary}
-            onPress={handleRefreshPrediction}
+            onPress={handleRefresh}
             disabled={refreshing}
           />
           <IconButton
@@ -348,20 +361,26 @@ export default function DelayPredictionScreen() {
         <Card.Content>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
-              <Paragraph style={styles.summaryNumber}>{inProgressTasks.length}</Paragraph>
-              <Paragraph style={styles.summaryLabel}>In Progress</Paragraph>
+              <Paragraph style={styles.summaryNumber}>{summary.totalTasks}</Paragraph>
+              <Paragraph style={styles.summaryLabel}>Active</Paragraph>
             </View>
             <View style={styles.summaryItem}>
               <Paragraph style={[styles.summaryNumber, { color: constructionColors.urgent }]}>
-                {tasksWithDelays}
+                {summary.highRiskCount}
               </Paragraph>
-              <Paragraph style={styles.summaryLabel}>With Delays</Paragraph>
+              <Paragraph style={styles.summaryLabel}>High Risk</Paragraph>
+            </View>
+            <View style={styles.summaryItem}>
+              <Paragraph style={[styles.summaryNumber, { color: constructionColors.warning }]}>
+                {summary.mediumRiskCount}
+              </Paragraph>
+              <Paragraph style={styles.summaryLabel}>Medium</Paragraph>
             </View>
             <View style={styles.summaryItem}>
               <Paragraph style={[styles.summaryNumber, { color: constructionColors.complete }]}>
-                {completedTasks.length}
+                {summary.lowRiskCount}
               </Paragraph>
-              <Paragraph style={styles.summaryLabel}>Completed</Paragraph>
+              <Paragraph style={styles.summaryLabel}>Low Risk</Paragraph>
             </View>
           </View>
         </Card.Content>
@@ -373,91 +392,96 @@ export default function DelayPredictionScreen() {
           value={viewMode}
           onValueChange={(value) => setViewMode(value as ViewMode)}
           buttons={[
-            { value: 'in_progress', label: 'In Progress Tasks', icon: 'clock' },
-            { value: 'completed', label: 'Completed Tasks', icon: 'check-circle' },
+            { value: 'in_progress', label: 'Active Tasks', icon: 'clock' },
+            { value: 'completed', label: 'Completed', icon: 'check-circle' },
           ]}
           style={styles.segmentedButtons}
         />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[theme.colors.primary]}
+            tintColor={theme.colors.primary}
+          />
+        }
+      >
         {viewMode === 'in_progress' ? (
           <>
-            {/* Task Status Pie Chart */}
-            <Card style={styles.chartCard}>
-              <Card.Content>
-                <Title style={styles.chartTitle}>Task Status Overview</Title>
-                <Paragraph style={styles.chartDescription}>
-                  Current status distribution of all project tasks
-                </Paragraph>
-                
-                {(() => {
-                  const taskStatusData = [
-                    {
-                      name: 'In Progress',
-                      population: inProgressTasks.length,
-                      color: constructionColors.inProgress,
-                      legendFontColor: '#7F7F7F',
-                      legendFontSize: 12,
-                    },
-                    {
-                      name: 'Completed',
-                      population: completedTasks.length,
-                      color: constructionColors.complete,
-                      legendFontColor: '#7F7F7F',
-                      legendFontSize: 12,
-                    },
-                    {
-                      name: 'With Delays',
-                      population: tasksWithDelays,
-                      color: constructionColors.urgent,
-                      legendFontColor: '#7F7F7F',
-                      legendFontSize: 12,
-                    },
-                  ].filter(item => item.population > 0);
+            {/* Risk Distribution Chart */}
+            {predictions.length > 0 && (
+              <Card style={styles.chartCard}>
+                <Card.Content>
+                  <Title style={styles.chartTitle}>Risk Distribution</Title>
+                  <Paragraph style={styles.chartDescription}>
+                    Delay risk levels for active tasks
+                  </Paragraph>
+                  
+                  {(() => {
+                    const chartData = [
+                      {
+                        name: 'High Risk',
+                        population: summary.highRiskCount,
+                        color: constructionColors.urgent,
+                        legendFontColor: theme.colors.text,
+                        legendFontSize: 12,
+                      },
+                      {
+                        name: 'Medium',
+                        population: summary.mediumRiskCount,
+                        color: constructionColors.warning,
+                        legendFontColor: theme.colors.text,
+                        legendFontSize: 12,
+                      },
+                      {
+                        name: 'Low Risk',
+                        population: summary.lowRiskCount,
+                        color: constructionColors.complete,
+                        legendFontColor: theme.colors.text,
+                        legendFontSize: 12,
+                      },
+                    ].filter(item => item.population > 0);
 
-                  return (
-                    <PieChart
-                      data={taskStatusData}
-                      width={screenWidth - 80}
-                      height={200}
-                      chartConfig={{
-                        color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                      }}
-                      accessor="population"
-                      backgroundColor={theme.colors.surface}
-                      paddingLeft="15"
-                      absolute
-                    />
-                  );
-                })()}
+                    if (chartData.length === 0) {
+                      return (
+                        <View style={styles.noDataContainer}>
+                          <Paragraph style={styles.noDataText}>No data to display</Paragraph>
+                        </View>
+                      );
+                    }
 
-                {/* Task Status Summary */}
-                <View style={styles.statusSummary}>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, { backgroundColor: constructionColors.inProgress }]} />
-                    <Paragraph style={styles.statusLabel}>In Progress: {inProgressTasks.length}</Paragraph>
-                  </View>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, { backgroundColor: constructionColors.complete }]} />
-                    <Paragraph style={styles.statusLabel}>Completed: {completedTasks.length}</Paragraph>
-                  </View>
-                  <View style={styles.statusItem}>
-                    <View style={[styles.statusDot, { backgroundColor: constructionColors.urgent }]} />
-                    <Paragraph style={styles.statusLabel}>With Delays: {tasksWithDelays}</Paragraph>
-                  </View>
-                </View>
-              </Card.Content>
-            </Card>
+                    return (
+                      <PieChart
+                        data={chartData}
+                        width={screenWidth - 80}
+                        height={180}
+                        chartConfig={{
+                          color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                        }}
+                        accessor="population"
+                        backgroundColor={theme.colors.surface}
+                        paddingLeft="15"
+                        absolute
+                      />
+                    );
+                  })()}
+                </Card.Content>
+              </Card>
+            )}
 
-            {/* In Progress Tasks Section */}
-            {mockDelayPredictions.length > 0 ? (
-              mockDelayPredictions.map(renderTaskPrediction)
+            {/* Active Tasks with Predictions */}
+            {predictions.length > 0 ? (
+              predictions.map(renderTaskPrediction)
             ) : (
               <Card style={styles.emptyCard}>
                 <Card.Content style={styles.emptyContent}>
-                  <IconButton icon="clock-check" size={48} iconColor="#ccc" />
-                  <Title style={styles.emptyTitle}>No In-Progress Tasks</Title>
+                  <IconButton icon="clock-check" size={48} iconColor={theme.colors.disabled} />
+                  <Title style={styles.emptyTitle}>No Active Tasks</Title>
                   <Paragraph style={styles.emptyText}>
                     All tasks are either completed or not started yet.
                   </Paragraph>
@@ -472,7 +496,7 @@ export default function DelayPredictionScreen() {
             ) : (
               <Card style={styles.emptyCard}>
                 <Card.Content style={styles.emptyContent}>
-                  <IconButton icon="clipboard-check" size={48} iconColor="#ccc" />
+                  <IconButton icon="clipboard-check" size={48} iconColor={theme.colors.disabled} />
                   <Title style={styles.emptyTitle}>No Completed Tasks</Title>
                   <Paragraph style={styles.emptyText}>
                     No tasks have been completed yet.
@@ -482,6 +506,9 @@ export default function DelayPredictionScreen() {
             )}
           </>
         )}
+        
+        {/* Bottom padding */}
+        <View style={{ height: spacing.xl }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -500,15 +527,38 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     backgroundColor: theme.colors.background,
-    elevation: 0,
   },
   screenTitle: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
     color: theme.colors.text,
   },
   headerActions: {
     flexDirection: 'row',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    color: theme.colors.onSurfaceVariant,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  errorText: {
+    color: constructionColors.urgent,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  retryButton: {
+    backgroundColor: theme.colors.primary,
   },
   summaryCard: {
     marginHorizontal: spacing.md,
@@ -527,16 +577,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryNumber: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
     color: theme.colors.primary,
-    lineHeight: 32,
+    lineHeight: 28,
   },
   summaryLabel: {
     fontSize: fontSizes.xs,
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
   tabContainer: {
     paddingHorizontal: spacing.md,
@@ -553,7 +603,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     elevation: 2,
     borderRadius: theme.roundness,
-    overflow: 'visible',
     backgroundColor: theme.colors.surface,
   },
   taskHeader: {
@@ -561,12 +610,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.md,
-    overflow: 'visible',
   },
   taskInfo: {
     flex: 1,
     marginRight: spacing.sm,
-    maxWidth: '70%',
   },
   taskTitle: {
     fontSize: fontSizes.lg,
@@ -574,21 +621,30 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: spacing.xs,
   },
+  taskType: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.sm,
+  },
+  riskBadge: {
+    alignItems: 'flex-end',
+  },
+  riskChip: {
+    height: 28,
+  },
+  riskChipText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   statusChip: {
     alignSelf: 'flex-start',
-    minWidth: 50,
+    height: 24,
   },
   statusChipText: {
     color: 'white',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 'bold',
-    lineHeight: 14,
-    includeFontPadding: false,
-  },
-  confidenceChip: {
-    minWidth: 50,
-    height: 24,
-    alignSelf: 'flex-start',
   },
   predictionDetails: {
     marginBottom: spacing.md,
@@ -602,35 +658,36 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
   },
-  originalDate: {
+  dateValue: {
     fontSize: fontSizes.sm,
     fontWeight: '500',
     color: theme.colors.text,
   },
-  predictedDate: {
-    fontSize: fontSizes.sm,
-    fontWeight: 'bold',
-  },
   delayAlert: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 193, 7, 0.2)',
     padding: spacing.sm,
     borderRadius: theme.roundness,
     marginTop: spacing.sm,
     marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: constructionColors.warning,
   },
   delayText: {
     fontSize: fontSizes.sm,
-    fontWeight: '500',
+    fontWeight: '600',
     marginLeft: spacing.xs,
+  },
+  progressContainer: {
+    marginTop: spacing.sm,
+  },
+  progressLabel: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: spacing.xs,
   },
   progressBar: {
     height: 8,
     borderRadius: 4,
-    marginTop: spacing.sm,
   },
   factorsSection: {
     marginTop: spacing.md,
@@ -639,48 +696,23 @@ const styles = StyleSheet.create({
     borderTopColor: '#2A2A2A',
   },
   factorsTitle: {
-    fontSize: fontSizes.md,
+    fontSize: fontSizes.sm,
     fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: spacing.sm,
   },
-  factorItem: {
-    marginBottom: spacing.md,
-  },
-  factorHeader: {
+  factorsList: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  factorChip: {
+    backgroundColor: theme.colors.background,
     marginBottom: spacing.xs,
-    overflow: 'visible',
   },
-  factorName: {
-    fontSize: fontSizes.sm,
-    fontWeight: '500',
-    color: theme.colors.text,
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  confidenceChipText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: 'bold',
-    lineHeight: 14,
-    includeFontPadding: false,
-  },
-  impactChip: {
-    minWidth: 55,
-    alignSelf: 'flex-start',
-  },
-  impactChipText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  factorDescription: {
-    fontSize: fontSizes.sm,
+  factorChipText: {
+    fontSize: fontSizes.xs,
     color: theme.colors.onSurfaceVariant,
-    fontStyle: 'italic',
   },
   completedTaskCard: {
     margin: spacing.md,
@@ -755,32 +787,14 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     fontStyle: 'italic',
   },
-  statusSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    flexWrap: 'wrap',
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-  },
-  statusItem: {
-    flexDirection: 'row',
+  noDataContainer: {
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    paddingVertical: spacing.xl,
   },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: spacing.sm,
-  },
-  statusLabel: {
-    fontSize: fontSizes.sm,
-    color: theme.colors.text,
-    fontWeight: '500',
+  noDataText: {
+    color: theme.colors.onSurfaceVariant,
   },
 });
