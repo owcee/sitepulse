@@ -17,7 +17,8 @@ import {
   Divider,
   List,
   SegmentedButtons,
-  ActivityIndicator
+  ActivityIndicator,
+  Snackbar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -200,6 +201,8 @@ export default function TasksScreen() {
   const [startCalendarYear, setStartCalendarYear] = useState(new Date().getFullYear());
   const [endCalendarMonth, setEndCalendarMonth] = useState(new Date().getMonth());
   const [endCalendarYear, setEndCalendarYear] = useState(new Date().getFullYear());
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   // Subscribe to real-time tasks
   useEffect(() => {
@@ -763,9 +766,11 @@ export default function TasksScreen() {
         await updateTask(selectedTask.id, {
           status: newStatus,
           actual_start_date: today,
+          planned_start_date: today, // Update planned start date to today as well
         });
         setShowTaskActionModal(false);
-        Alert.alert('Success', 'Task moved to In Progress.');
+        setSnackbarMessage('Task moved to In Progress. Start date updated to today.');
+        setSnackbarVisible(true);
       } catch (error: any) {
         Alert.alert('Error', error.message || 'Failed to update task status');
       }
@@ -1186,6 +1191,15 @@ export default function TasksScreen() {
             </Modal>
           </Portal>
       </Portal>
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={Snackbar.DURATION_SHORT}
+        style={{ backgroundColor: theme.colors.surface }}
+        theme={{ colors: { onSurface: theme.colors.text } }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </SafeAreaView>
   );
 }
