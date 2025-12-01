@@ -81,7 +81,10 @@ export default function DelayPredictionScreen() {
       console.log('[DelayPrediction] Fetching predictions for project:', projectId);
       const result = await predictAllDelays(projectId);
       
-      setPredictions(result.predictions);
+      // Filter out not_started tasks - they haven't started yet so no delay prediction needed
+      const filteredPredictions = result.predictions.filter(p => p.status !== 'not_started');
+      
+      setPredictions(filteredPredictions);
       setSummary({
         totalTasks: result.totalTasks,
         highRiskCount: result.highRiskCount,
