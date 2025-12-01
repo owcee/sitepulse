@@ -919,7 +919,7 @@ export default function TasksScreen() {
                 {/* Delete button - show for not_started, in_progress, and completed tasks */}
                 <Button
                   mode="contained"
-                  icon="trash"
+                  icon="delete"
                   onPress={handleDeleteTask}
                   style={[styles.deleteButton, { backgroundColor: constructionColors.urgent }]}
                 >

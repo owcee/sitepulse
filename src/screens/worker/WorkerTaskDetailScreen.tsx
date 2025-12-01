@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Image, Alert, Text as RNText, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, Alert, Text as RNText, Text, ActivityIndicator } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -17,6 +17,7 @@ import {
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { getTaskById, updateTaskStatus, Task as FirebaseTask } from '../../services/taskService';
@@ -402,11 +403,11 @@ export default function WorkerTaskDetailScreen() {
 
             {/* CNN Status Info */}
             {task.cnnEligible && (
-              <View style={[styles.cnnInfo, { backgroundColor: theme.colors.primaryContainer }]}>
-                <IconButton icon="chart-line" size={20} iconColor={theme.colors.primary} />
-                <Paragraph style={styles.cnnInfoText}>
-                  This task requires AI verification
-                </Paragraph>
+              <View style={[styles.cnnInfo, { backgroundColor: theme.colors.primaryContainer, overflow: 'visible' }]}>
+                <View style={[styles.customBadge, styles.cnnBadge]}>
+                  <Ionicons name="sparkles" size={14} color="#FFFFFF" style={styles.badgeIcon} />
+                  <Text style={styles.cnnBadgeText}>CNN Eligible</Text>
+                </View>
               </View>
             )}
 
@@ -1078,6 +1079,28 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     borderRadius: theme.roundness,
     marginBottom: spacing.md,
+    overflow: 'visible',
+  },
+  customBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    overflow: 'visible',
+    alignSelf: 'flex-start',
+  },
+  cnnBadge: {
+    backgroundColor: '#9C27B0',
+    paddingHorizontal: spacing.sm,
+  },
+  cnnBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  badgeIcon: {
+    marginRight: spacing.xs / 2,
   },
   cnnInfoText: {
     fontSize: fontSizes.sm,

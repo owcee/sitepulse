@@ -498,20 +498,20 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
               <Title style={styles.categoryTitle}>{categoryData.label}</Title>
               <Paragraph style={styles.categoryTagalog}>{categoryData.tagalog}</Paragraph>
               <View style={styles.categoryMeta}>
-                <Chip 
-                  icon="format-list-bulleted" 
-                  style={styles.subtaskCountChip}
-                  textStyle={styles.badgeText}
-                >
-                  {categoryData.subtasks.length} tasks
-                </Chip>
-                <Chip 
-                  icon="brain" 
-                  style={[styles.cnnCountChip, { backgroundColor: '#9C27B0' }]}
-                  textStyle={styles.badgeTextWhite}
-                >
-                  {categoryData.subtasks.filter(s => s.cnnEligible).length} CNN
-                </Chip>
+                <View style={[styles.customBadge, styles.subtaskCountBadge]}>
+                  <Ionicons name="list" size={14} color={theme.colors.primary} style={styles.badgeIcon} />
+                  <Text style={styles.badgeText}>
+                    {categoryData.subtasks.length} tasks
+                  </Text>
+                </View>
+                {categoryData.subtasks.filter(s => s.cnnEligible).length > 0 && (
+                  <View style={[styles.customBadge, styles.cnnCountBadge]}>
+                    <Ionicons name="sparkles" size={14} color="#FFFFFF" style={styles.badgeIcon} />
+                    <Text style={styles.badgeTextWhite}>
+                      {categoryData.subtasks.filter(s => s.cnnEligible).length} CNN
+                    </Text>
+                  </View>
+                )}
               </View>
             </Card.Content>
           </Card>
@@ -555,13 +555,10 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
                     <Paragraph style={styles.subtaskTagalog}>{subtask.tagalog}</Paragraph>
                   </View>
                   {subtask.cnnEligible && (
-                    <Chip 
-                      icon="brain" 
-                      style={[styles.cnnChip, { backgroundColor: '#9C27B0' }]}
-                      textStyle={{ color: 'white', fontSize: 10 }}
-                    >
-                      CNN
-                    </Chip>
+                    <View style={[styles.customBadge, styles.cnnBadge]}>
+                      <Ionicons name="sparkles" size={14} color="#FFFFFF" style={styles.badgeIcon} />
+                      <Text style={styles.cnnBadgeText}>CNN</Text>
+                    </View>
                   )}
                 </View>
               </Card.Content>
@@ -906,26 +903,40 @@ const styles = StyleSheet.create({
   categoryMeta: {
     flexDirection: 'row',
     gap: spacing.sm,
+    flexWrap: 'wrap',
+    overflow: 'visible',
   },
-  subtaskCountChip: {
+  customBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    overflow: 'visible',
+    alignSelf: 'flex-start',
+  },
+  subtaskCountBadge: {
     backgroundColor: theme.colors.primaryContainer,
-    height: 32,
-    paddingHorizontal: spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
-  cnnCountChip: {
-    height: 32,
-    paddingHorizontal: spacing.xs,
+  cnnCountBadge: {
+    backgroundColor: '#9C27B0',
   },
   badgeText: {
     fontSize: 11,
     fontWeight: '600',
-    paddingHorizontal: spacing.xs,
+    color: theme.colors.primary,
+    marginLeft: spacing.xs / 2,
   },
   badgeTextWhite: {
     color: 'white',
     fontSize: 11,
     fontWeight: '600',
-    paddingHorizontal: spacing.xs,
+    marginLeft: spacing.xs / 2,
+  },
+  badgeIcon: {
+    marginRight: spacing.xs / 2,
   },
   subtaskCard: {
     marginBottom: spacing.sm,
@@ -951,8 +962,14 @@ const styles = StyleSheet.create({
     color: theme.colors.onSurfaceVariant,
     fontStyle: 'italic',
   },
-  cnnChip: {
-    height: 28,
+  cnnBadge: {
+    backgroundColor: '#9C27B0',
+    paddingHorizontal: spacing.sm,
+  },
+  cnnBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '700',
   },
   selectedTaskInfo: {
     padding: spacing.md,

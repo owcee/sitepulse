@@ -159,8 +159,8 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         }
       }
       
-      // Fetch real worker name from worker_accounts
-      const workerName = data.uploaderName || await getWorkerName(data.uploaderId);
+      // Fetch real worker name from worker_accounts - prioritize getWorkerName to avoid hardcoded "Worker"
+      const workerName = await getWorkerName(data.uploaderId);
       
       logs.push({
         id: docSnapshot.id,
@@ -188,8 +188,8 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       if (data.type === 'equipment') type = 'equipment';
       if (data.type === 'damage') type = 'damage';
 
-      // Fetch real worker name from worker_accounts
-      const workerName = data.workerName || await getWorkerName(data.workerId);
+      // Fetch real worker name from worker_accounts - prioritize getWorkerName to avoid hardcoded "Worker"
+      const workerName = await getWorkerName(data.workerId);
 
       logs.push({
         id: docItem.id,
