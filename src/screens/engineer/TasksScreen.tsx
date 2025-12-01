@@ -629,9 +629,15 @@ export default function TasksScreen() {
                     style={[styles.workerChip, styles.taskMetaChip]}
                     textStyle={styles.chipTextSmall}
                   >
-                    {task.assigned_worker_names.length > 0 
-                      ? task.assigned_worker_names[0] 
-                      : 'Unassigned'}
+                    {(() => {
+                      const workerName = task.assigned_worker_names.length > 0 
+                        ? task.assigned_worker_names[0] 
+                        : 'Unassigned';
+                      // Truncate if longer than 18 chars to fit in badge
+                      return workerName.length > 18 
+                        ? workerName.substring(0, 18) + '...'
+                        : workerName;
+                    })()}
                   </Chip>
                   {task.cnnEligible && (
                     <Chip 
@@ -1295,11 +1301,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: spacing.sm,
     overflow: 'visible',
+    minHeight: 0,
   },
   taskInfo: {
     flex: 1,
     overflow: 'visible',
-    paddingRight: spacing.sm,
+    paddingRight: spacing.md,
+    minWidth: 0,
   },
   taskTitle: {
     fontSize: fontSizes.sm,
@@ -1329,22 +1337,29 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginHorizontal: -spacing.xs,
     overflow: 'visible',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   taskMetaChip: {
     marginHorizontal: spacing.xs,
     marginVertical: spacing.xs,
+    flexShrink: 0,
   },
   workerChip: {
     backgroundColor: theme.colors.primaryContainer,
     height: 28,
-    maxWidth: 140,
+    maxWidth: 180,
+    minWidth: 60,
   },
   cnnChip: {
     height: 28,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
+    flexShrink: 0,
   },
   taskStatus: {
     marginLeft: spacing.sm,
+    flexShrink: 0,
+    alignItems: 'flex-end',
   },
   taskDates: {
     marginBottom: spacing.sm,
