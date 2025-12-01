@@ -85,11 +85,17 @@ export default function DelayPredictionScreen() {
       const filteredPredictions = result.predictions.filter(p => p.status !== 'not_started');
       
       setPredictions(filteredPredictions);
+      
+      // Recalculate summary based on filtered predictions (excluding not_started)
+      const filteredHighRisk = filteredPredictions.filter(p => p.riskLevel === 'High').length;
+      const filteredMediumRisk = filteredPredictions.filter(p => p.riskLevel === 'Medium').length;
+      const filteredLowRisk = filteredPredictions.filter(p => p.riskLevel === 'Low').length;
+      
       setSummary({
-        totalTasks: result.totalTasks,
-        highRiskCount: result.highRiskCount,
-        mediumRiskCount: result.mediumRiskCount,
-        lowRiskCount: result.lowRiskCount,
+        totalTasks: filteredPredictions.length,
+        highRiskCount: filteredHighRisk,
+        mediumRiskCount: filteredMediumRisk,
+        lowRiskCount: filteredLowRisk,
       });
 
       // Also fetch completed tasks
