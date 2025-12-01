@@ -625,26 +625,18 @@ export default function TasksScreen() {
                   {task.tagalogLabel}
                 </Paragraph>
                 <View style={styles.taskMeta}>
-                  <View style={styles.workerChipContainer}>
-                    <Chip 
-                      icon="account-group" 
-                      style={[styles.workerChip, styles.taskMetaChip]}
-                      textStyle={styles.chipTextSmall}
-                    >
+                  <View style={[styles.workerChipContainer, styles.customBadge]}>
+                    <Ionicons name="people" size={14} color={theme.colors.primary} style={styles.badgeIcon} />
+                    <Text style={styles.workerBadgeText} numberOfLines={1}>
                       {task.assigned_worker_names.length > 0 
                         ? task.assigned_worker_names[0] 
                         : 'Unassigned'}
-                    </Chip>
+                    </Text>
                   </View>
                   {task.cnnEligible && (
-                    <View style={styles.cnnChipContainer}>
-                      <Chip 
-                        icon="brain" 
-                        style={[styles.cnnChip, styles.taskMetaChip, { backgroundColor: '#9C27B0' }]}
-                        textStyle={styles.cnnChipText}
-                      >
-                        AI
-                      </Chip>
+                    <View style={[styles.cnnChipContainer, styles.customBadge, styles.cnnBadge]}>
+                      <Ionicons name="sparkles" size={14} color="#FFFFFF" style={styles.badgeIcon} />
+                      <Text style={styles.cnnBadgeText}>AI</Text>
                     </View>
                   )}
                 </View>
@@ -1317,11 +1309,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: spacing.xs,
   },
-  chipTextSmall: {
-    fontSize: 10,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
   cnnChipText: {
     color: 'white',
     fontSize: 9,
@@ -1350,27 +1337,44 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xs,
     flexShrink: 0,
   },
-  workerChipContainer: {
-    overflow: 'visible',
-    zIndex: 1,
-    alignSelf: 'flex-start',
-  },
-  workerChip: {
-    backgroundColor: theme.colors.primaryContainer,
-    height: 28,
-    minHeight: 28,
+  customBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 0,
+    paddingVertical: spacing.xs,
+    marginRight: spacing.xs,
+    marginVertical: spacing.xs,
+    overflow: 'visible',
     alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  workerChipContainer: {
+    backgroundColor: theme.colors.primaryContainer,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  workerBadgeText: {
+    fontSize: 10,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    marginLeft: spacing.xs / 2,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  badgeIcon: {
+    marginRight: spacing.xs / 2,
   },
   cnnChipContainer: {
-    overflow: 'visible',
-    zIndex: 1,
+    backgroundColor: '#9C27B0',
   },
-  cnnChip: {
-    height: 28,
-    paddingHorizontal: 6,
-    flexShrink: 0,
+  cnnBadge: {
+    paddingHorizontal: spacing.sm,
+  },
+  cnnBadgeText: {
+    fontSize: 9,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   taskStatus: {
     marginLeft: spacing.sm,
