@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, Alert, RefreshControl, Text as RNText } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -20,6 +20,7 @@ import {
   Surface,
   Text,
 } from 'react-native-paper';
+import { Ionicons } from '@expo/vector-icons';
 import { PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
@@ -278,21 +279,24 @@ export default function DelayPredictionScreen() {
               {prediction.taskType && (
                 <Paragraph style={styles.taskType}>{prediction.taskType}</Paragraph>
               )}
-              <Chip 
-                style={[styles.statusChip, { backgroundColor: getStatusColor(prediction.status || 'in_progress') }]}
-                textStyle={styles.statusChipText}
-              >
-                {(prediction.status || 'in_progress').replace('_', ' ').toUpperCase()}
-              </Chip>
+              <View style={[styles.customBadge, styles.statusBadge, { backgroundColor: getStatusColor(prediction.status || 'in_progress') }]}>
+                <Text style={styles.statusBadgeText}>
+                  {(prediction.status || 'in_progress').replace('_', ' ').toUpperCase()}
+                </Text>
+              </View>
             </View>
-            <View style={styles.riskBadge}>
-              <Chip 
-                style={[styles.riskChip, { backgroundColor: riskColor }]}
-                textStyle={styles.riskChipText}
-                icon={prediction.riskLevel === 'High' ? 'alert' : prediction.riskLevel === 'Medium' ? 'alert-circle-outline' : 'check-circle'}
-              >
-                {prediction.riskLevel}
-              </Chip>
+            <View style={[styles.riskBadge, { overflow: 'visible' }]}>
+              <View style={[styles.customBadge, styles.riskBadgeContainer, { backgroundColor: riskColor }]}>
+                <Ionicons 
+                  name={prediction.riskLevel === 'High' ? 'alert-circle' : prediction.riskLevel === 'Medium' ? 'warning' : 'checkmark-circle'} 
+                  size={14} 
+                  color="#FFFFFF" 
+                  style={styles.badgeIcon} 
+                />
+                <Text style={styles.riskBadgeText}>
+                  {prediction.riskLevel}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -390,12 +394,11 @@ export default function DelayPredictionScreen() {
         <View style={styles.completedTaskHeader}>
           <View style={styles.taskInfo}>
             <Title style={styles.completedTaskTitle}>{task.title}</Title>
-            <Chip 
-              style={[styles.statusChip, { backgroundColor: constructionColors.complete }]}
-              textStyle={{ color: 'white', fontSize: 12 }}
-            >
-              COMPLETED
-            </Chip>
+            <View style={[styles.customBadge, { backgroundColor: constructionColors.complete }]}>
+              <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                COMPLETED
+              </Text>
+            </View>
           </View>
         </View>
         
@@ -741,10 +744,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.md,
+    overflow: 'visible',
   },
   taskInfo: {
     flex: 1,
     marginRight: spacing.sm,
+    overflow: 'visible',
+    minWidth: 0,
   },
   taskTitle: {
     fontSize: fontSizes.lg,
@@ -759,23 +765,37 @@ const styles = StyleSheet.create({
   },
   riskBadge: {
     alignItems: 'flex-end',
+    overflow: 'visible',
+    flexShrink: 0,
   },
-  riskChip: {
-    height: 28,
-  },
-  riskChipText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  statusChip: {
+  customBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    overflow: 'visible',
     alignSelf: 'flex-start',
-    height: 24,
   },
-  statusChipText: {
+  statusBadge: {
+    marginTop: spacing.xs,
+  },
+  statusBadgeText: {
     color: 'white',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  riskBadgeContainer: {
+    paddingHorizontal: spacing.sm,
+  },
+  riskBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: spacing.xs / 2,
+  },
+  badgeIcon: {
+    marginRight: spacing.xs / 2,
   },
   predictionDetails: {
     marginBottom: spacing.md,
