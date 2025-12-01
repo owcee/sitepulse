@@ -1,55 +1,34 @@
 {
   "expo": {
     "name": "SitePulse",
-    "slug": "sitepulse",
+    "slug": "sitepulse01",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/sitepulse-splashscreen.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon-light.png",
+      "image": "./assets/sitepulse-splashscreen.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.sitepulse.app",
-      "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to capture construction task photos for monitoring and verification.",
-        "NSPhotoLibraryUsageDescription": "This app accesses photo library to upload construction task images."
-      },
-      "splash": {
-        "image": "./assets/splash-icon-light.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#000000"
-      }
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/sitepulse-splashscreen.png",
-        "backgroundColor": "#FF6B35"
+        "backgroundColor": "#000000"
       },
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ],
       "package": "com.sitepulse.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/sitepulse-splashscreen.png"
     },
     "extra": {
       "eas": {
-        "projectId": "85b89d22-8736-4be1-9fd2-064ed1d8fd96"
+        "projectId": "7c05ac72-8558-493f-b81a-b46e31ce6442"
       }
     },
-    "plugins": [
-      "expo-font"
-    ]
+    "owner": "ocdawgsz"
   }
 }

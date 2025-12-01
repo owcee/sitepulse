@@ -160,13 +160,13 @@ export default function EquipmentManagementPage() {
     }
 
     if (editingEquipment) {
-      updateEquipment(editingEquipment.id, equipmentData);
+      updateEquipment(editingEquipment.id, equipmentData as any);
       setDialogTitle('Success');
       setDialogMessage('Equipment updated successfully');
       setIsError(false);
       setShowDialog(true);
     } else {
-      addEquipment(equipmentData);
+      addEquipment(equipmentData as any);
       setDialogTitle('Success');
       setDialogMessage('Equipment added successfully');
       setIsError(false);

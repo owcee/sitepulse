@@ -320,7 +320,7 @@ export function ProjectDataProvider({
           workers,
           equipment,
           budgetLogs,
-          totalBudget: project?.totalBudget || 100000,
+          totalBudget: (project as any)?.totalBudget || 100000,
         },
       });
       
@@ -340,7 +340,7 @@ export function ProjectDataProvider({
         }, 0);
         
         // Update primary categories with current spent amounts
-        const updatedCategories = savedBudget.categories.map((cat: any) => {
+        const updatedCategories = (savedBudget as any).categories.map((cat: any) => {
           if (cat.id === 'equipment') {
             return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
           }
@@ -354,13 +354,13 @@ export function ProjectDataProvider({
         });
         
         // Calculate total spent
-        const totalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+        const totalSpent = updatedCategories.reduce((sum: number, cat: any) => sum + cat.spentAmount, 0);
         
         const loadedBudget: ProjectBudget = {
-          totalBudget: savedBudget.totalBudget,
+          totalBudget: (savedBudget as any).totalBudget,
           totalSpent: totalSpent,
-          contingencyPercentage: savedBudget.contingencyPercentage,
-          lastUpdated: savedBudget.lastUpdated,
+          contingencyPercentage: (savedBudget as any).contingencyPercentage,
+          lastUpdated: (savedBudget as any).lastUpdated,
           categories: updatedCategories,
         };
         dispatch({ type: 'SET_BUDGET', payload: loadedBudget });

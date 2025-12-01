@@ -67,9 +67,9 @@ const mockMessages: ChatMessage[] = [
     senderName: 'Mike Johnson',
     senderRole: 'worker',
     content: 'Here\'s the current site status',
-    type: 'image',
+    type: 'text',
     timestamp: '2024-01-23T08:30:00Z',
-    imageUri: 'https://via.placeholder.com/300x200/4CAF50/FFFFFF?text=Site+Ready',
+    // imageUri: 'https://via.placeholder.com/300x200/4CAF50/FFFFFF?text=Site+Ready', // Removed - not in ChatMessage type
   },
   {
     id: '6',
@@ -190,7 +190,7 @@ export default function ChatScreen({ user }: Props) {
         projectId,
         newMessage.trim(),
         currentUser.name,
-        currentUser.role,
+        currentUser.role as 'engineer' | 'worker',
         'text'
       );
       setNewMessage('');
@@ -352,7 +352,7 @@ export default function ChatScreen({ user }: Props) {
                 disabled={!newMessage.trim() || sending}
                 style={[
                   styles.sendButton,
-                  newMessage.trim() && { backgroundColor: theme.colors.primary + '20' }
+                  newMessage.trim() ? { backgroundColor: theme.colors.primary + '20' } : undefined
                 ]}
               />
             </View>

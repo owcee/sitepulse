@@ -26,6 +26,14 @@ export interface VerificationLog {
   rawTimestamp: Date; // For sorting
   taskTitle?: string; // For task completion photos
   itemName?: string; // For material/equipment/damage
+  cnnPrediction?: {
+    status: 'not_started' | 'in_progress' | 'completed';
+    confidence: number;
+    progressPercent: number;
+    taskMatch: boolean;
+    predictedTask?: string;
+    timestamp: string;
+  };
 }
 
 export interface WorkerVerificationData {
@@ -134,7 +142,8 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         verifiedBy: data.verifiedBy,
         verifiedAt: data.verifiedAt?.toDate().toISOString(),
         rawTimestamp: data.uploadedAt?.toDate() || new Date(),
-        taskTitle: taskTitle
+        taskTitle: taskTitle,
+        cnnPrediction: data.cnnPrediction || undefined
       });
     }
 

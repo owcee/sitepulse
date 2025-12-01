@@ -107,7 +107,7 @@ export async function inviteWorker(
       invitedBy: auth.currentUser.uid,
       invitedByName: engineerData.name,
       invitedAt: serverTimestamp(),
-      decidedAt: null,
+      decidedAt: undefined,
       previousProjectId: hasExistingProject ? currentProjectId : null, // Store previous project if exists
       isProjectSwitch: hasExistingProject // Flag to indicate this is a project switch
     };
@@ -116,7 +116,9 @@ export async function inviteWorker(
 
     const assignment: WorkerAssignment = {
       ...assignmentData,
-      invitedAt: new Date()
+      status: assignmentData.status as 'pending' | 'rejected' | 'accepted',
+      invitedAt: new Date(),
+      decidedAt: assignmentData.decidedAt ? new Date(assignmentData.decidedAt) : undefined
     };
 
     console.log('Worker invited successfully:', workerId);

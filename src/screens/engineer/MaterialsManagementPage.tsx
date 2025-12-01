@@ -126,13 +126,13 @@ export default function MaterialsManagementPage() {
     }
 
     if (editingMaterial) {
-      updateMaterial(editingMaterial.id, materialData);
+      updateMaterial(editingMaterial.id, materialData as any);
       setDialogTitle('Success');
       setDialogMessage('Material updated successfully');
       setIsError(false);
       setShowDialog(true);
     } else {
-      addMaterial(materialData);
+      addMaterial(materialData as any);
       setDialogTitle('Success');
       setDialogMessage('Material added successfully');
       setIsError(false);

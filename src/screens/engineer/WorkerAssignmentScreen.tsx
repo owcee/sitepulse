@@ -95,7 +95,7 @@ export default function WorkerAssignmentScreen({ route, navigation }: WorkerAssi
           const assignment = await assignWorkerToProject(workerId, project.id);
           
           // Send notification to worker
-          await sendProjectAssignmentNotification(workerId, project, assignment.id);
+          await sendProjectAssignmentNotification(workerId, project, workerId);
           
           successCount++;
         } catch (error) {

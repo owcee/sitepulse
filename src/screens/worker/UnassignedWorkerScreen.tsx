@@ -65,7 +65,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
 
   const handleAccept = async (invite: WorkerAssignment) => {
     // Check if this is a project switch
-    if (invite.isProjectSwitch && user.projectId) {
+    if (invite.isProjectSwitch && (user as any).projectId) {
       setPendingInvite(invite);
       setShowSwitchDialog(true);
       return;

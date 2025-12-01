@@ -19,7 +19,6 @@ import {
   getDownloadURL
 } from 'firebase/storage';
 import { Auth } from 'firebase/auth';
-// @ts-expect-error - auth is imported from JS config file
 import { db, storage, auth } from '../firebaseConfig';
 import { sendNotification } from './notificationService';
 import { uploadFileToStorage } from './storageUploadHelper';
@@ -27,7 +26,6 @@ import { uploadWithProgress } from './storageUploadHelperV2';
 import { getProject } from './projectService';
 
 // Type assertion for auth from JS config file
-// @ts-expect-error - Casting auth from JS import
 const typedAuth = auth as Auth;
 
 export interface UsageSubmission {

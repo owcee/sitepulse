@@ -243,7 +243,7 @@ export default function SettingsScreen() {
               description="Read our privacy policy"
               left={() => <List.Icon icon="shield-check" color={theme.colors.primary} />}
               right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => navigation.navigate('Settings', { screen: 'PrivacyPolicy' })}
+              onPress={() => (navigation as any).navigate('Settings', { screen: 'PrivacyPolicy' })}
               style={styles.settingsItem}
             />
             
@@ -254,7 +254,7 @@ export default function SettingsScreen() {
               description="Read our terms of service"
               left={() => <List.Icon icon="file-document" color={theme.colors.primary} />}
               right={() => <List.Icon icon="chevron-right" />}
-              onPress={() => navigation.navigate('Settings', { screen: 'TermsOfService' })}
+              onPress={() => (navigation as any).navigate('Settings', { screen: 'TermsOfService' })}
               style={styles.settingsItem}
             />
             

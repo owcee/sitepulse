@@ -297,7 +297,10 @@ export async function deleteProject(projectId: string): Promise<void> {
     const engineerRef = doc(db, 'engineer_accounts', auth.currentUser.uid);
     const engineerDoc = await getDoc(engineerRef);
     const engineerData = engineerDoc.data();
-    const activeProjects = (engineerData.activeProjectIds || []).filter(id => id !== projectId);
+    if (!engineerData) {
+      throw new Error('Engineer data not found');
+    }
+    const activeProjects = (engineerData.activeProjectIds || []).filter((id: string) => id !== projectId);
     
     await updateDoc(engineerRef, {
       projectId: activeProjects.length > 0 ? activeProjects[0] : null, // Set to first project or null

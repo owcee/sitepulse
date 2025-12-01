@@ -261,7 +261,7 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
               right={() => <List.Icon icon="chevron-right" />}
               onPress={() => {
                 if (onDismiss) onDismiss();
-                navigation.navigate('Project Tools', { screen: 'PrivacyPolicy' });
+                (navigation as any).navigate('Project Tools', { screen: 'PrivacyPolicy' });
               }}
               style={styles.settingsItem}
             />
@@ -275,7 +275,7 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
               right={() => <List.Icon icon="chevron-right" />}
               onPress={() => {
                 if (onDismiss) onDismiss();
-                navigation.navigate('Project Tools', { screen: 'TermsOfService' });
+                (navigation as any).navigate('Project Tools', { screen: 'TermsOfService' });
               }}
               style={styles.settingsItem}
             />

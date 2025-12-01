@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl, Text } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -24,6 +24,7 @@ import { useProjectData } from '../../context/ProjectDataContext';
 import { getProjectVerificationLogs, WorkerVerificationData, VerificationLog } from '../../services/reportService';
 import { approvePhoto, rejectPhoto } from '../../services/photoService';
 import { approveUsageSubmission, rejectUsageSubmission, approveBorrowRequest, rejectBorrowRequest } from '../../services/usageService';
+import { formatStatus, getConfidenceColor } from '../../services/cnnService';
 
 export default function ReportLogsScreen() {
   const { state, projectId } = useProjectData(); // Use projectId directly from context
@@ -240,6 +241,30 @@ export default function ReportLogsScreen() {
               <Image source={{ uri: log.photo }} style={styles.submissionPhoto} />
               <Paragraph style={styles.tapToEnlarge}>Tap to enlarge</Paragraph>
             </TouchableOpacity>
+            
+            {/* CNN Prediction - Show below photo for task completion logs */}
+            {log.type === 'task' && log.cnnPrediction && (
+              <View style={[styles.cnnPredictionContainer, { backgroundColor: getConfidenceColor(log.cnnPrediction.confidence) + '20' }]}>
+                <View style={styles.cnnPredictionHeader}>
+                  <Ionicons name="analytics" size={20} color={getConfidenceColor(log.cnnPrediction.confidence)} />
+                  <Paragraph style={[styles.cnnPredictionTitle, { color: getConfidenceColor(log.cnnPrediction.confidence) }]}>
+                    AI Prediction
+                  </Paragraph>
+                </View>
+                <View style={styles.cnnPredictionContent}>
+                  <Paragraph style={styles.cnnPredictionText}>
+                    <Text style={styles.cnnPredictionLabel}>Status: </Text>
+                    <Text style={styles.cnnPredictionValue}>{formatStatus(log.cnnPrediction.status)}</Text>
+                  </Paragraph>
+                  <Paragraph style={styles.cnnPredictionText}>
+                    <Text style={styles.cnnPredictionLabel}>Confidence: </Text>
+                    <Text style={[styles.cnnPredictionValue, { color: getConfidenceColor(log.cnnPrediction.confidence) }]}>
+                      {Math.round(log.cnnPrediction.confidence * 100)}%
+                    </Text>
+                  </Paragraph>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -912,5 +937,43 @@ const styles = StyleSheet.create({
   },
   dialogMessage: {
     color: theme.colors.text,
+  },
+  cnnPredictionContainer: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.outlineVariant,
+  },
+  cnnPredictionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  cnnPredictionTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
+    marginLeft: spacing.xs,
+  },
+  cnnPredictionContent: {
+    marginTop: spacing.xs,
+  },
+  cnnPredictionText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.text,
+    marginBottom: spacing.xs,
+  },
+  cnnPredictionLabel: {
+    fontWeight: '500',
+    color: theme.colors.onSurfaceVariant,
+  },
+  cnnPredictionValue: {
+    fontWeight: 'bold',
+    color: theme.colors.text,
+  },
+  cnnPredictionWarning: {
+    fontSize: fontSizes.xs,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
   },
 });

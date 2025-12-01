@@ -22,8 +22,9 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { getTaskById, updateTaskStatus, Task as FirebaseTask } from '../../services/taskService';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, CameraType } from 'expo-camera';
-import { uploadTaskPhoto, canWorkerSubmitToday } from '../../services/photoService';
+import { uploadTaskPhoto, canWorkerSubmitToday, getTaskPhotos } from '../../services/photoService';
 import { auth } from '../../firebaseConfig';
+import { cnnStatusPredictor, TaskAwareCNNModel, formatStatus, getConfidenceColor } from '../../services/cnnService';
 
 export default function WorkerTaskDetailScreen() {
   const route = useRoute();
@@ -44,6 +45,34 @@ export default function WorkerTaskDetailScreen() {
   const cameraRef = useRef<Camera>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [cnnInitialized, setCnnInitialized] = useState(false);
+  const [predictingCnn, setPredictingCnn] = useState(false);
+  const [latestPhoto, setLatestPhoto] = useState<any>(null);
+
+  // Debug: Log when latestPhoto changes
+  useEffect(() => {
+    console.log('[WorkerTaskDetail] latestPhoto state changed:', {
+      hasPhoto: !!latestPhoto,
+      hasCnnPrediction: !!latestPhoto?.cnnPrediction,
+      photoData: latestPhoto
+    });
+  }, [latestPhoto]);
+
+  // Initialize CNN on mount
+  useEffect(() => {
+    const initCNN = async () => {
+      try {
+        console.log('[CNN Init] Starting CNN initialization...');
+        await cnnStatusPredictor.initialize();
+        console.log('[CNN Init] ✅ CNN initialized successfully');
+        setCnnInitialized(true);
+      } catch (error) {
+        console.error('[CNN Init] ❌ Failed to initialize CNN:', error);
+        // Continue without CNN - it's optional
+      }
+    };
+    initCNN();
+  }, []);
 
   // Load task from Firestore
   useEffect(() => {
@@ -54,8 +83,30 @@ export default function WorkerTaskDetailScreen() {
     try {
       setLoading(true);
       const taskData = await getTaskById(taskId);
+      console.log('[WorkerTaskDetail] ========== TASK DATA LOADED ==========');
+      console.log('[WorkerTaskDetail] Task ID:', taskId);
+      console.log('[WorkerTaskDetail] Task subTask:', taskData?.subTask);
+      console.log('[WorkerTaskDetail] Task cnnEligible:', taskData?.cnnEligible);
+      console.log('[WorkerTaskDetail] Full task data:', taskData);
+      console.log('[WorkerTaskDetail] =======================================');
+      
       if (taskData) {
         setTask(taskData);
+        
+        // Load latest photo to show CNN prediction
+        try {
+          const photos = await getTaskPhotos(taskId);
+          console.log('[WorkerTaskDetail] Loaded photos:', photos?.length);
+          if (photos && photos.length > 0) {
+            console.log('[WorkerTaskDetail] Latest photo:', photos[0]);
+            console.log('[WorkerTaskDetail] Has CNN prediction:', !!photos[0].cnnPrediction);
+            console.log('[WorkerTaskDetail] CNN prediction data:', photos[0].cnnPrediction);
+            setLatestPhoto(photos[0]); // Most recent photo
+          }
+        } catch (photoError) {
+          console.error('Error loading photos:', photoError);
+          // Don't fail the whole operation
+        }
         
         // Check if photo was rejected and show notification
         if (taskData.verification?.engineerStatus === 'rejected') {
@@ -221,7 +272,7 @@ export default function WorkerTaskDetailScreen() {
                   setShowCamera(false);
                   setPhotoNotes('');
                 }}
-                style={styles.closeButton}
+                style={styles.cameraCloseButton}
               />
               <Title style={styles.cameraTitle}>
                 Photo: {task.title}
@@ -359,7 +410,7 @@ export default function WorkerTaskDetailScreen() {
             {/* CNN Status Info */}
             {task.cnnEligible && (
               <View style={[styles.cnnInfo, { backgroundColor: theme.colors.primaryContainer }]}>
-                <IconButton icon="brain" size={20} iconColor={theme.colors.primary} />
+                <IconButton icon="chart-line" size={20} iconColor={theme.colors.primary} />
                 <Paragraph style={styles.cnnInfoText}>
                   This task requires AI verification
                 </Paragraph>
@@ -369,7 +420,7 @@ export default function WorkerTaskDetailScreen() {
             {/* Current Verification Result */}
             {task.verification?.cnnResult && (
               <View style={styles.aiClassification}>
-                <IconButton icon="brain" size={16} iconColor={theme.colors.primary} />
+                <IconButton icon="chart-line" size={16} iconColor={theme.colors.primary} />
                 <Paragraph style={styles.aiText}>
                   AI Classification: <RNText style={styles.boldText}>{task.verification.cnnResult.label}</RNText> 
                   ({Math.round((task.verification.cnnResult.score || 0) * 100)}% confidence)
@@ -398,6 +449,75 @@ export default function WorkerTaskDetailScreen() {
             >
               {uploadingPhoto ? 'Uploading...' : task.verification?.lastSubmissionId ? 'Upload New Photo' : 'Upload Photo'}
             </Button>
+
+            {/* CNN Prediction Display - Show after photo upload */}
+            {latestPhoto && latestPhoto.cnnPrediction && (
+              <View style={styles.cnnPredictionContainer}>
+                <Divider style={{ marginVertical: spacing.md }} />
+                <Title style={styles.cnnPredictionTitle}>
+                  🤖 AI Prediction
+                </Title>
+                
+                {/* Status Prediction */}
+                <View style={styles.cnnPredictionBox}>
+                  <View style={styles.cnnStatusRow}>
+                    <Paragraph style={styles.cnnLabel}>Predicted Status:</Paragraph>
+                    <Chip 
+                      style={[
+                        styles.cnnStatusChip,
+                        { backgroundColor: getStatusColor(latestPhoto.cnnPrediction.status) }
+                      ]}
+                      textStyle={styles.cnnStatusText}
+                    >
+                      {formatStatus(latestPhoto.cnnPrediction.status)}
+                    </Chip>
+                  </View>
+
+                  {/* Confidence Level */}
+                  <View style={styles.cnnConfidenceRow}>
+                    <Paragraph style={styles.cnnLabel}>Confidence:</Paragraph>
+                    <View style={styles.confidenceContainer}>
+                      <Paragraph 
+                        style={[
+                          styles.confidencePercentage,
+                          { color: getConfidenceColor(latestPhoto.cnnPrediction.confidence) }
+                        ]}
+                      >
+                        {Math.round(latestPhoto.cnnPrediction.confidence * 100)}%
+                      </Paragraph>
+                      {/* Progress Bar */}
+                      <View style={styles.confidenceBarContainer}>
+                        <View 
+                          style={[
+                            styles.confidenceBarFill,
+                            { 
+                              width: `${latestPhoto.cnnPrediction.confidence * 100}%`,
+                              backgroundColor: getConfidenceColor(latestPhoto.cnnPrediction.confidence)
+                            }
+                          ]} 
+                        />
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Progress Percent */}
+                  <View style={styles.cnnProgressRow}>
+                    <Paragraph style={styles.cnnLabel}>Estimated Progress:</Paragraph>
+                    <Paragraph style={styles.cnnProgressValue}>
+                      {latestPhoto.cnnPrediction.progressPercent}%
+                    </Paragraph>
+                  </View>
+
+                  {/* Info Note */}
+                  <View style={styles.cnnInfoNote}>
+                    <IconButton icon="information" size={16} iconColor={theme.colors.onSurfaceVariant} />
+                    <Paragraph style={styles.cnnInfoNoteText}>
+                      AI prediction submitted to engineer for review
+                    </Paragraph>
+                  </View>
+                </View>
+              </View>
+            )}
           </Card.Content>
         </Card>
 
@@ -426,7 +546,7 @@ export default function WorkerTaskDetailScreen() {
               icon="close"
               size={30}
               iconColor="white"
-              style={styles.closeButton}
+              style={styles.modalCloseButton}
               onPress={() => setPhotoModalVisible(false)}
             />
             <Image 
@@ -491,7 +611,53 @@ export default function WorkerTaskDetailScreen() {
                         uid: auth.currentUser.uid
                       } : null;
 
-                      // Upload photo with proper metadata
+                      // Run CNN prediction if task is CNN-eligible
+                      let cnnPrediction = null;
+                      console.log('[CNN] ========== CNN ELIGIBILITY CHECK ==========');
+                      console.log('[CNN] Task exists:', !!task);
+                      console.log('[CNN] Task cnnEligible field:', task?.cnnEligible);
+                      console.log('[CNN] CNN initialized:', cnnInitialized);
+                      console.log('[CNN] Task subTask:', task?.subTask);
+                      console.log('[CNN] Is CNN eligible (model check):', task?.subTask ? TaskAwareCNNModel.isCNNEligible(task.subTask) : 'NO SUBTASK');
+                      console.log('[CNN] =======================================');
+                      
+                      if (task && task.cnnEligible && cnnInitialized && task.subTask && TaskAwareCNNModel.isCNNEligible(task.subTask)) {
+                        try {
+                          setPredictingCnn(true);
+                          console.log('[CNN] ✅✅✅ RUNNING CNN PREDICTION for task:', task.subTask);
+                          console.log('[CNN] Image URI:', selectedPhotoUri);
+                          const prediction = await cnnStatusPredictor.predictStatus(
+                            selectedPhotoUri,
+                            task.subTask
+                          );
+                          cnnPrediction = prediction;
+                          console.log('[CNN] ✅✅✅ PREDICTION SUCCESS:', JSON.stringify(prediction, null, 2));
+                        } catch (cnnError: any) {
+                          console.error('[CNN] ❌❌❌ PREDICTION FAILED:', cnnError);
+                          console.error('[CNN] Error stack:', cnnError.stack);
+                          // Continue without CNN prediction - don't block upload
+                        } finally {
+                          setPredictingCnn(false);
+                        }
+                      } else {
+                        console.log('[CNN] ❌❌❌ SKIPPING CNN PREDICTION');
+                        console.log('[CNN] Reason breakdown:');
+                        if (!task) console.log('[CNN]   - Task is null/undefined');
+                        if (task && !task.cnnEligible) console.log('[CNN]   - task.cnnEligible is false');
+                        if (!cnnInitialized) console.log('[CNN]   - CNN not initialized');
+                        if (task && !task.subTask) console.log('[CNN]   - task.subTask is missing');
+                        if (task && task.subTask && !TaskAwareCNNModel.isCNNEligible(task.subTask)) {
+                          console.log('[CNN]   - task.subTask "' + task.subTask + '" not in CNN model mapping');
+                        }
+                      }
+
+                      // Upload photo with proper metadata including CNN prediction
+                      console.log('[Upload] ========== UPLOADING PHOTO ==========');
+                      console.log('[Upload] Task ID:', taskId);
+                      console.log('[Upload] Image URI:', selectedPhotoUri);
+                      console.log('[Upload] CNN Prediction to upload:', cnnPrediction);
+                      console.log('[Upload] =====================================');
+                      
                       await uploadTaskPhoto(
                         taskId,
                         selectedPhotoUri,
@@ -499,9 +665,12 @@ export default function WorkerTaskDetailScreen() {
                           projectId: userProfile?.projectId || '',
                           uploaderName: userProfile?.name || 'Worker',
                           uploaderId: userProfile?.uid || '',
-                          notes: photoNotes || undefined
+                          notes: photoNotes || undefined,
+                          cnnPrediction: cnnPrediction
                         }
                       );
+                      
+                      console.log('[Upload] ✅ Photo uploaded successfully');
 
                       setSuccessMessage('Photo uploaded successfully. Awaiting engineer review.');
                       setShowSuccessModal(true);
@@ -515,14 +684,15 @@ export default function WorkerTaskDetailScreen() {
                       Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
                     } finally {
                       setUploadingPhoto(false);
+                      setPredictingCnn(false);
                     }
                   }}
                   icon="upload"
-                  loading={uploadingPhoto}
-                  disabled={uploadingPhoto}
+                  loading={uploadingPhoto || predictingCnn}
+                  disabled={uploadingPhoto || predictingCnn}
                   style={styles.notesModalContinueButton}
                 >
-                  {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+                  {predictingCnn ? 'Analyzing with AI...' : uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
                 </Button>
               </View>
             </Card.Content>
@@ -875,7 +1045,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeButton: {
+  modalCloseButton: {
     position: 'absolute',
     top: 50,
     right: 20,
@@ -950,7 +1120,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     paddingBottom: spacing.md,
   },
-  closeButton: {
+  cameraCloseButton: {
     backgroundColor: constructionColors.urgent,
     margin: 0,
   },
@@ -1033,6 +1203,85 @@ const styles = StyleSheet.create({
   },
   successModalButton: {
     marginTop: spacing.md,
+  },
+  cnnPredictionContainer: {
+    marginTop: spacing.md,
+  },
+  cnnPredictionTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    marginBottom: spacing.md,
+  },
+  cnnPredictionBox: {
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: theme.roundness,
+    padding: spacing.md,
+  },
+  cnnStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  cnnLabel: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    fontWeight: '500',
+  },
+  cnnStatusChip: {
+    height: 32,
+  },
+  cnnStatusText: {
+    color: 'white',
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+  },
+  cnnConfidenceRow: {
+    marginBottom: spacing.md,
+  },
+  confidenceContainer: {
+    marginTop: spacing.sm,
+  },
+  confidencePercentage: {
+    fontSize: fontSizes.xl,
+    fontWeight: 'bold',
+    marginBottom: spacing.xs,
+  },
+  confidenceBarContainer: {
+    height: 8,
+    backgroundColor: theme.colors.surfaceDisabled,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  confidenceBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  cnnProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  cnnProgressValue: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.primary,
+  },
+  cnnInfoNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryContainer,
+    padding: spacing.sm,
+    borderRadius: theme.roundness,
+    marginTop: spacing.xs,
+  },
+  cnnInfoNoteText: {
+    flex: 1,
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    fontStyle: 'italic',
   },
 });
 

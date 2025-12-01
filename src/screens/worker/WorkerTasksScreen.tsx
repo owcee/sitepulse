@@ -193,10 +193,10 @@ export default function WorkerTasksScreen() {
     }
   };
 
-  const getStatusIcon = (status: Task['status']) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'check-circle';
+        return 'checkmark-circle';
       case 'in_progress':
         return 'clock';
       case 'not_started':
@@ -240,7 +240,7 @@ export default function WorkerTasksScreen() {
     );
   });
 
-  const handleTaskPress = (task: Task) => {
+  const handleTaskPress = (task: any) => {
     // @ts-ignore - Navigation typing would be properly configured in production
     navigation.navigate('WorkerTaskDetail', { taskId: task.id });
   };
@@ -256,7 +256,7 @@ export default function WorkerTasksScreen() {
     
     // For completed or not_started tasks, use View instead of TouchableOpacity
     const isNotStarted = task.status === 'not_started';
-    const CardWrapper = (isCompleted || isNotStarted) ? View : TouchableOpacity;
+    const CardWrapper: any = (isCompleted || isNotStarted) ? View : TouchableOpacity;
     const cardProps = (isCompleted || isNotStarted) ? {} : { onPress: () => handleTaskPress(task) };
     
     return (
@@ -278,7 +278,7 @@ export default function WorkerTasksScreen() {
       <IconButton
         icon={getStatusIcon(task.status)}
         size={24}
-        iconColor={getTaskStatusColor(task.status)}
+        iconColor={getTaskStatusColor(task.status as 'not_started' | 'in_progress' | 'completed')}
         style={styles.statusIcon}
       />
                 <View style={[styles.titleContainer, { overflow: 'visible' }]}>
@@ -287,7 +287,7 @@ export default function WorkerTasksScreen() {
                   </Title>
                   <View style={[styles.taskMeta, { overflow: 'visible' }]}>
                     <Chip 
-                      style={[styles.statusChip, styles.taskMetaChip, { backgroundColor: getTaskStatusColor(task.status) }]}
+                      style={[styles.statusChip, styles.taskMetaChip, { backgroundColor: getTaskStatusColor(task.status as 'not_started' | 'in_progress' | 'completed') }]}
                       textStyle={styles.statusChipText}
                     >
                       {task.status.replace('_', ' ').toUpperCase()}
@@ -336,12 +336,12 @@ export default function WorkerTasksScreen() {
             )}
 
             {/* Photo Status */}
-            {task.lastPhoto && (
+            {(task as any).lastPhoto && (
               <View style={styles.photoStatus}>
                 <View style={styles.photoInfo}>
                   <IconButton icon="camera" size={16} iconColor="#666" />
                   <Paragraph style={styles.photoText} numberOfLines={1}>
-                    {new Date(task.lastPhoto.uploadedAt).toLocaleDateString()}
+                    {new Date((task as any).lastPhoto.uploadedAt).toLocaleDateString()}
                   </Paragraph>
                 </View>
                 

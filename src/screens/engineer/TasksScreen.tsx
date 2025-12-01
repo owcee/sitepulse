@@ -106,7 +106,7 @@ const TASK_CATEGORIES = {
     subtasks: [
       { id: 'chb_laying', label: 'CHB laying', tagalog: 'Pag-aayos ng hollow blocks', cnnEligible: true },
       { id: 'partition_wall', label: 'Partition wall installation', tagalog: 'Paglalagay ng panloob na pader', cnnEligible: false },
-      { id: 'plastering', label: 'Plastering / rendering', tagalog: 'Pagpalitada', cnnEligible: true },
+      { id: 'plastering', label: 'Plastering / rendering', tagalog: 'Pagpalitada', cnnEligible: false },
       { id: 'wall_reinforcements', label: 'Wall reinforcements', tagalog: 'Paglalagay ng dagdag na bakal sa pader', cnnEligible: false },
       { id: 'chasing', label: 'Chasing for electrical/plumbing', tagalog: 'Pag-ukit sa pader para sa tubo o kable', cnnEligible: false },
     ]
@@ -117,7 +117,7 @@ const TASK_CATEGORIES = {
     subtasks: [
       { id: 'roof_truss', label: 'Roof truss fabrication and installation', tagalog: 'Roof truss fabrication and installation', cnnEligible: false },
       { id: 'purlins', label: 'Purlins installation', tagalog: 'Purlins installation', cnnEligible: false },
-      { id: 'roof_sheeting', label: 'Roof sheeting / panel installation', tagalog: 'Roof sheeting / panel installation', cnnEligible: false },
+      { id: 'roof_sheeting', label: 'Roof sheeting / panel installation', tagalog: 'Roof sheeting / panel installation', cnnEligible: true },
       { id: 'roof_insulation', label: 'Roof insulation', tagalog: 'Roof insulation', cnnEligible: false },
       { id: 'gutter_downspout', label: 'Gutter and downspout installation', tagalog: 'Gutter and downspout installation', cnnEligible: false },
       { id: 'roof_waterproofing', label: 'Roof waterproofing / sealant', tagalog: 'Roof waterproofing / sealant', cnnEligible: false },
@@ -317,7 +317,7 @@ export default function TasksScreen() {
         await updateTask(selectedTask.id, {
           status: pendingStatusTarget,
           planned_end_date: dateInputEnd,
-          actual_end_date: null, // Clear completion date
+          actual_end_date: undefined, // Clear completion date
         });
         closeDateModal();
         Alert.alert('Success', 'Task moved to In Progress with new end date.');
@@ -348,7 +348,7 @@ export default function TasksScreen() {
         status: pendingStatusTarget,
         planned_start_date: dateInputStart,
         planned_end_date: dateInputEnd,
-        actual_end_date: null,
+        actual_end_date: undefined,
       });
       closeDateModal();
       setShowTaskActionModal(false);
@@ -646,10 +646,10 @@ export default function TasksScreen() {
               </View>
               <View style={styles.taskStatus}>
                 <Ionicons 
-                  name={task.status === 'completed' ? 'check-circle' : 
+                  name={task.status === 'completed' ? 'checkmark-circle' : 
                         task.status === 'in_progress' ? 'time' : 'ellipse-outline'} 
                   size={24} 
-                  color={getStatusColor(task.status)} 
+                  color={getStatusColor(task.status as 'not_started' | 'in_progress' | 'completed')} 
                 />
               </View>
             </View>

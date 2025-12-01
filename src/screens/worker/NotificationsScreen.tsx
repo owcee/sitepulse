@@ -125,7 +125,7 @@ export default function NotificationsScreen() {
       const filteredNotifications = await Promise.all(
         userNotifications.map(async (n) => {
           // Filter out read notifications
-          if (n.isRead) return null;
+          if (n.read) return null;
           
           // For project_assignment notifications, check if assignment has been accepted
           // The assignmentId in notification is the workerId (document ID in worker_assignments)
@@ -134,6 +134,7 @@ export default function NotificationsScreen() {
               const { getDoc, doc } = await import('firebase/firestore');
               const { db } = await import('../../firebaseConfig');
               // Check if this worker's assignment has been accepted
+              if (!auth.currentUser) return null;
               const assignmentRef = doc(db, 'worker_assignments', auth.currentUser.uid);
               const assignmentDoc = await getDoc(assignmentRef);
               
@@ -155,7 +156,7 @@ export default function NotificationsScreen() {
       );
       
       // Remove null values (filtered out notifications)
-      const validNotifications = filteredNotifications.filter(n => n !== null) as Notification[];
+      const validNotifications = filteredNotifications.filter(n => n !== null) as unknown as Notification[];
       setNotifications(validNotifications);
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -252,8 +253,8 @@ export default function NotificationsScreen() {
                 try {
                   await acceptProjectAssignment(
                     notification.id, 
-                    notification.assignmentId, 
-                    notification.projectId
+                    notification.assignmentId || '', 
+                    notification.projectId || ''
                   );
                   
                   // Remove notification from list immediately

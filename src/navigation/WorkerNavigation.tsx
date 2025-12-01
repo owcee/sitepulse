@@ -75,7 +75,20 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
     // Reload the project data
     try {
       const projectData = await getProject(projectId);
-      setCurrentProject(projectData);
+      if (projectData) {
+        // Convert projectService.Project to types/index.Project
+        const convertedProject: Project = {
+          id: projectData.id,
+          name: projectData.name,
+          description: projectData.description,
+          startDate: projectData.startDate || new Date().toISOString().split('T')[0],
+          estimatedEndDate: projectData.estimatedEndDate || new Date().toISOString().split('T')[0],
+          status: projectData.status === 'planning' || projectData.status === 'paused' ? 'paused' : projectData.status === 'completed' ? 'completed' : 'active',
+        };
+        setCurrentProject(convertedProject);
+      } else {
+        setCurrentProject(null);
+      }
     } catch (error) {
       console.error('Error loading project:', error);
     }
@@ -189,7 +202,20 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
     try {
       const { getProject } = await import('../services/projectService');
       const projectData = await getProject(projectId);
-      setCurrentProject(projectData);
+      if (projectData) {
+        // Convert projectService.Project to types/index.Project
+        const convertedProject: Project = {
+          id: projectData.id,
+          name: projectData.name,
+          description: projectData.description,
+          startDate: projectData.startDate || new Date().toISOString().split('T')[0],
+          estimatedEndDate: projectData.estimatedEndDate || new Date().toISOString().split('T')[0],
+          status: projectData.status === 'planning' || projectData.status === 'paused' ? 'paused' : projectData.status === 'completed' ? 'completed' : 'active',
+        };
+        setCurrentProject(convertedProject);
+      } else {
+        setCurrentProject(null);
+      }
       // Refresh the app data
       if (onRefresh) {
         onRefresh();
@@ -203,7 +229,7 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
   if (!user.projectId || user.projectId === 'unassigned') {
     return (
       <View style={{ flex: 1 }}>
-        <WorkerHeader user={user} project={currentProject} onLogout={onLogout} onProjectChange={handleProjectChange} />
+        <WorkerHeader user={user} project={currentProject || undefined} onLogout={onLogout} onProjectChange={handleProjectChange} />
         <Tab.Navigator
           screenOptions={{
             headerShown: false,
@@ -299,7 +325,7 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
                 iconName = focused ? 'settings' : 'settings-outline';
                 break;
               default:
-                iconName = 'circle';
+                iconName = 'ellipse';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;

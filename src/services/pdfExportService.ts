@@ -493,9 +493,9 @@ function generateBudgetHTML(
         <p>
           Current Status: 
           <span class="status-badge ${
-            percentageSpent < 75 ? 'status-good' : percentageSpent < 90 ? 'status-warning' : 'status-danger'
+            Number(percentageSpent) < 75 ? 'status-good' : Number(percentageSpent) < 90 ? 'status-warning' : 'status-danger'
           }">
-            ${percentageSpent < 75 ? '✓ On Track' : percentageSpent < 90 ? '⚠ Needs Attention' : '⚠ Over Budget'}
+            ${Number(percentageSpent) < 75 ? '✓ On Track' : Number(percentageSpent) < 90 ? '⚠ Needs Attention' : '⚠ Over Budget'}
           </span>
         </p>
       </div>

@@ -151,7 +151,7 @@ const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
     </Stack.Screen>
     <Stack.Screen name="Tasks" component={TasksStack} />
     <Stack.Screen name="CreateNewProject" component={CreateNewProjectScreen} />
-    <Stack.Screen name="WorkerAssignment" component={WorkerAssignmentScreen} />
+    <Stack.Screen name="WorkerAssignment" component={WorkerAssignmentScreen as any} />
     <Stack.Screen name="MaterialsManagement" component={MaterialsManagementPage} />
     <Stack.Screen name="WorkersManagement" component={WorkersManagementPage} />
     <Stack.Screen name="EquipmentManagement" component={EquipmentManagementPage} />

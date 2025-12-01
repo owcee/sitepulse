@@ -51,7 +51,7 @@ export default function ResourcesScreen() {
       try {
         const savedBudget = await getBudget(projectId);
         if (isMounted && savedBudget) {
-          setBudget(savedBudget);
+          setBudget(savedBudget as any);
           console.log('✅ Budget loaded in ResourcesScreen');
         }
       } catch (error) {
@@ -657,7 +657,8 @@ export default function ResourcesScreen() {
 
         const projectInfo = {
           name: projectName,
-          description: projectDescription
+          description: projectDescription,
+          totalBudget: budget?.totalBudget || 0
         };
 
         await exportMaterialsToPDF(materials, projectInfo, 10, equipment);
@@ -727,7 +728,7 @@ export default function ResourcesScreen() {
           <Dialog.Actions>
             <Button 
               onPress={() => setShowSuccessDialog(false)}
-              textColor={constructionColors.primary}
+              textColor={theme.colors.primary}
             >
               OK
             </Button>
@@ -1033,7 +1034,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
   },
   successDialogTitle: {
-    color: constructionColors.primary,
+    color: theme.colors.primary,
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
   },

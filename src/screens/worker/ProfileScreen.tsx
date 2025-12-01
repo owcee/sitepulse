@@ -19,15 +19,15 @@ import { User, Worker } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 
 // Mock worker profile data
-const mockWorkerProfile: Worker & User = {
+const mockWorkerProfile: any = {
   id: 'worker-2',
   name: 'Mike Johnson',
   email: 'mike.johnson@sitepulse.com',
   role: 'worker',
   projectId: 'project-1',
-  hourlyRate: 35,
-  hoursWorked: 168,
-  totalPay: 5880,
+  // hourlyRate: 35, // Not in Worker & User type
+  // hoursWorked: 168, // Not in Worker & User type
+  // totalPay: 5880, // Not in Worker & User type
   contactInfo: '+1 (555) 123-4567',
   profileImage: 'https://via.placeholder.com/150',
 };
@@ -157,11 +157,11 @@ export default function ProfileScreen() {
 
             <View style={styles.quickStats}>
               <View style={styles.statItem}>
-                <Paragraph style={styles.statNumber}>{mockWorkerProfile.hoursWorked}</Paragraph>
+                <Paragraph style={styles.statNumber}>168</Paragraph>
                 <Paragraph style={styles.statLabel}>Hours This Month</Paragraph>
               </View>
               <View style={styles.statItem}>
-                <Paragraph style={styles.statNumber}>₱{mockWorkerProfile.hourlyRate}</Paragraph>
+                <Paragraph style={styles.statNumber}>₱35</Paragraph>
                 <Paragraph style={styles.statLabel}>Hourly Rate</Paragraph>
               </View>
               <View style={styles.statItem}>

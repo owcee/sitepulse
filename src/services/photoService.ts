@@ -20,7 +20,6 @@ import {
   UploadResult
 } from 'firebase/storage';
 import { Auth } from 'firebase/auth';
-// @ts-expect-error - auth is imported from JS config file
 import { db, storage, auth } from '../firebaseConfig';
 import { uploadFileToStorage } from './storageUploadHelper';
 import { uploadWithProgress } from './storageUploadHelperV2';
@@ -28,7 +27,6 @@ import { sendNotification } from './notificationService';
 import { getProject } from './projectService';
 
 // Type assertion for auth from JS config file
-// @ts-expect-error - Casting auth from JS import
 const typedAuth = auth as Auth;
 
 export interface TaskPhoto {
@@ -40,6 +38,14 @@ export interface TaskPhoto {
   imageUrl: string;
   cnnClassification?: string;
   confidence?: number;
+  cnnPrediction?: {
+    status: 'not_started' | 'in_progress' | 'completed';
+    confidence: number;
+    progressPercent: number;
+    taskMatch: boolean;
+    predictedTask?: string;
+    timestamp: string;
+  };
   verificationStatus: 'pending' | 'approved' | 'rejected';
   notes?: string;
   rejectionReason?: string;
@@ -61,7 +67,16 @@ export async function uploadTaskPhoto(
   metadata: {
     projectId: string;
     uploaderName: string;
+    uploaderId?: string;
     cnnClassification?: { classification: string; confidence: number } | null;
+    cnnPrediction?: {
+      status: 'not_started' | 'in_progress' | 'completed';
+      confidence: number;
+      progressPercent: number;
+      taskMatch: boolean;
+      predictedTask?: string;
+      timestamp: string;
+    } | null;
     notes?: string;
   }
 ): Promise<TaskPhoto> {
@@ -98,12 +113,13 @@ export async function uploadTaskPhoto(
     const photoDoc = await addDoc(taskPhotosRef, {
       taskId,
       projectId: metadata.projectId,
-      uploaderId: typedAuth.currentUser.uid,
+      uploaderId: metadata.uploaderId || typedAuth.currentUser.uid,
       uploaderName: metadata.uploaderName,
       imageUrl: downloadURL,
       storagePath, // Use the path string directly
       cnnClassification: metadata.cnnClassification?.classification || null,
       confidence: metadata.cnnClassification?.confidence || null,
+      cnnPrediction: metadata.cnnPrediction || null,
       verificationStatus: 'pending',
       notes: metadata.notes || null,
       uploadedAt: serverTimestamp(),
@@ -116,11 +132,12 @@ export async function uploadTaskPhoto(
       id: photoDoc.id,
       taskId,
       projectId: metadata.projectId,
-      uploaderId: typedAuth.currentUser.uid,
+      uploaderId: metadata.uploaderId || typedAuth.currentUser.uid,
       uploaderName: metadata.uploaderName,
       imageUrl: downloadURL,
       cnnClassification: metadata.cnnClassification?.classification,
       confidence: metadata.cnnClassification?.confidence,
+      cnnPrediction: metadata.cnnPrediction || undefined,
       verificationStatus: 'pending',
       notes: metadata.notes,
       uploadedAt: new Date()
@@ -254,6 +271,7 @@ export async function getTaskPhotos(taskId: string): Promise<TaskPhoto[]> {
         imageUrl: data.imageUrl,
         cnnClassification: data.cnnClassification,
         confidence: data.confidence,
+        cnnPrediction: data.cnnPrediction,
         verificationStatus: data.verificationStatus,
         notes: data.notes,
         rejectionReason: data.rejectionReason,
@@ -299,6 +317,7 @@ export async function getPendingPhotos(projectId: string): Promise<TaskPhoto[]> 
         imageUrl: data.imageUrl,
         cnnClassification: data.cnnClassification,
         confidence: data.confidence,
+        cnnPrediction: data.cnnPrediction,
         verificationStatus: data.verificationStatus,
         notes: data.notes,
         uploadedAt: data.uploadedAt?.toDate() || new Date()
@@ -412,7 +431,16 @@ export async function uploadTaskPhotoWithProgress(
   metadata: {
     projectId: string;
     uploaderName: string;
+    uploaderId?: string;
     cnnClassification?: { classification: string; confidence: number } | null;
+    cnnPrediction?: {
+      status: 'not_started' | 'in_progress' | 'completed';
+      confidence: number;
+      progressPercent: number;
+      taskMatch: boolean;
+      predictedTask?: string;
+      timestamp: string;
+    } | null;
     notes?: string;
   },
   onProgress?: (progress: number) => void
@@ -462,6 +490,7 @@ export async function uploadTaskPhotoWithProgress(
             storagePath: uploadTask.snapshot.ref.fullPath,
             cnnClassification: metadata.cnnClassification?.classification || null,
             confidence: metadata.cnnClassification?.confidence || null,
+            cnnPrediction: metadata.cnnPrediction || null,
             verificationStatus: 'pending',
             notes: metadata.notes || null,
             uploadedAt: serverTimestamp(),
@@ -474,11 +503,12 @@ export async function uploadTaskPhotoWithProgress(
             id: photoDoc.id,
             taskId,
             projectId: metadata.projectId,
-            uploaderId: typedAuth.currentUser!.uid,
+            uploaderId: metadata.uploaderId || typedAuth.currentUser!.uid,
             uploaderName: metadata.uploaderName,
             imageUrl: downloadURL,
             cnnClassification: metadata.cnnClassification?.classification,
             confidence: metadata.cnnClassification?.confidence,
+            cnnPrediction: metadata.cnnPrediction || undefined,
             verificationStatus: 'pending',
             notes: metadata.notes,
             uploadedAt: new Date()
