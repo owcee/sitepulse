@@ -49,30 +49,23 @@ export default function WorkerTaskDetailScreen() {
   const [predictingCnn, setPredictingCnn] = useState(false);
   const [latestPhoto, setLatestPhoto] = useState<any>(null);
 
-  // Debug: Log when latestPhoto changes
-  useEffect(() => {
-    console.log('[WorkerTaskDetail] latestPhoto state changed:', {
-      hasPhoto: !!latestPhoto,
-      hasCnnPrediction: !!latestPhoto?.cnnPrediction,
-      photoData: latestPhoto
-    });
-  }, [latestPhoto]);
-
-  // Initialize CNN on mount
-  useEffect(() => {
-    const initCNN = async () => {
-      try {
-        console.log('[CNN Init] Starting CNN initialization...');
-        await cnnStatusPredictor.initialize();
-        console.log('[CNN Init] ✅ CNN initialized successfully');
-        setCnnInitialized(true);
-      } catch (error) {
-        console.error('[CNN Init] ❌ Failed to initialize CNN:', error);
-        // Continue without CNN - it's optional
-      }
-    };
-    initCNN();
-  }, []);
+  // Lazy CNN initialization helper – only runs when we actually need a prediction
+  const ensureCnnInitialized = async (): Promise<boolean> => {
+    if (cnnInitialized) {
+      return true;
+    }
+    try {
+      console.log('[CNN] Lazy init start...');
+      await cnnStatusPredictor.initialize();
+      setCnnInitialized(true);
+      console.log('[CNN] Lazy init success');
+      return true;
+    } catch (error) {
+      console.error('[CNN] Lazy init failed:', error);
+      return false;
+    }
+  };
+  // -----------------------------------------------------------------------------
 
   // Load task from Firestore
   useEffect(() => {
@@ -621,7 +614,8 @@ export default function WorkerTaskDetailScreen() {
                       console.log('[CNN] Is CNN eligible (model check):', task?.subTask ? TaskAwareCNNModel.isCNNEligible(task.subTask) : 'NO SUBTASK');
                       console.log('[CNN] =======================================');
                       
-                      if (task && task.cnnEligible && cnnInitialized && task.subTask && TaskAwareCNNModel.isCNNEligible(task.subTask)) {
+                      const cnnReady = task && task.cnnEligible && task.subTask && TaskAwareCNNModel.isCNNEligible(task.subTask) && await ensureCnnInitialized();
+                      if (cnnReady) {
                         try {
                           setPredictingCnn(true);
                           console.log('[CNN] ✅✅✅ RUNNING CNN PREDICTION for task:', task.subTask);

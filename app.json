@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SitePulse",
-    "slug": "sitepulse01",
+    "slug": "sitepulse02",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/sitepulse-splashscreen.png",
@@ -26,9 +26,8 @@
     },
     "extra": {
       "eas": {
-        "projectId": "7c05ac72-8558-493f-b81a-b46e31ce6442"
+        "projectId": "5aaa869c-df44-4d85-a67b-2e562ef82737"
       }
-    },
-    "owner": "ocdawgsz"
+    }
   }
 }

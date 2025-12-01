@@ -133,14 +133,25 @@ export class TaskAwareCNNModel {
     try {
       const startTime = Date.now();
 
-      // Get ALL 15 predictions to have complete probability distribution
-      // Then we'll filter to only the 3 status classes for the known task
-      const results = await this.tflite.runModelOnImage({
-        path: imageUri,
-        imageMean: 127.5,
-        imageStd: 127.5,
-        numResults: 15,             // Get all 15 classes for complete probability distribution
-        threshold: 0.0,
+      // tflite-react-native uses a callback style API. Promisify it so we can
+      // safely await the results without getting `undefined` (the current bug).
+      const results = await new Promise<any[]>((resolve, reject) => {
+        this.tflite.runModelOnImage(
+          {
+            path: imageUri,
+            imageMean: 127.5,
+            imageStd: 127.5,
+            numResults: 15, // Get all 15 classes for complete probability distribution
+            threshold: 0.0,
+          },
+          (err: any, res: any[]) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(res);
+            }
+          }
+        );
       });
 
       const inferenceTime = Date.now() - startTime;
