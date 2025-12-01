@@ -22,6 +22,8 @@ import {
 } from 'react-native-paper';
 import { PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
@@ -112,8 +114,137 @@ export default function DelayPredictionScreen() {
     loadData(true);
   };
 
-  const handleExportPDF = () => {
-    Alert.alert('Export Report', 'Task delay prediction report exported successfully.', [{ text: 'OK' }]);
+  const handleExportPDF = async () => {
+    try {
+      const currentDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      // Generate prediction rows HTML
+      const predictionRows = predictions.map(p => {
+        const riskColor = p.riskLevel === 'High' ? '#FF6B35' : p.riskLevel === 'Medium' ? '#FFB800' : '#4CAF50';
+        return `
+          <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.taskTitle}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${p.plannedDuration} days</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; font-weight: bold; color: ${riskColor};">${p.predictedDuration} days</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; color: ${riskColor}; font-weight: bold;">+${p.delayDays.toFixed(1)} days</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">
+              <span style="background-color: ${riskColor}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                ${p.riskLevel}
+              </span>
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 12px;">${p.factors?.join(', ') || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Delay Prediction Report</title>
+          <style>
+            body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; color: #333; background: #fff; }
+            .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #FF6B35; }
+            .header h1 { margin: 0; color: #FF6B35; font-size: 28px; }
+            .header p { margin: 5px 0; color: #666; font-size: 14px; }
+            .summary-cards { display: flex; justify-content: space-between; margin-bottom: 30px; gap: 15px; }
+            .summary-card { flex: 1; padding: 20px; border-radius: 8px; text-align: center; color: white; }
+            .summary-card.high { background: linear-gradient(135deg, #FF6B35, #e55d2b); }
+            .summary-card.medium { background: linear-gradient(135deg, #FFB800, #e5a500); }
+            .summary-card.low { background: linear-gradient(135deg, #4CAF50, #43a047); }
+            .summary-card.total { background: linear-gradient(135deg, #2196F3, #1976D2); }
+            .summary-card h3 { margin: 0 0 10px; font-size: 14px; opacity: 0.9; }
+            .summary-card .value { font-size: 32px; font-weight: 700; margin: 0; }
+            .section { margin-bottom: 30px; }
+            .section h2 { color: #FF6B35; font-size: 20px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #e0e0e0; }
+            table { width: 100%; border-collapse: collapse; background: #fff; }
+            thead { background: #FF6B35; color: white; }
+            th { padding: 12px 10px; text-align: left; font-size: 13px; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e0e0e0; text-align: center; font-size: 12px; color: #999; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>📊 Task Delay Prediction Report</h1>
+            <p><strong>SitePulse</strong> AI-Powered Construction Management</p>
+            <p>Generated on: ${currentDate}</p>
+          </div>
+
+          <div class="summary-cards">
+            <div class="summary-card total">
+              <h3>Total Active Tasks</h3>
+              <p class="value">${summary.totalTasks}</p>
+            </div>
+            <div class="summary-card high">
+              <h3>High Risk</h3>
+              <p class="value">${summary.highRiskCount}</p>
+            </div>
+            <div class="summary-card medium">
+              <h3>Medium Risk</h3>
+              <p class="value">${summary.mediumRiskCount}</p>
+            </div>
+            <div class="summary-card low">
+              <h3>Low Risk</h3>
+              <p class="value">${summary.lowRiskCount}</p>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>Task Delay Predictions</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th style="text-align: center;">Planned</th>
+                  <th style="text-align: center;">Predicted</th>
+                  <th style="text-align: center;">Delay</th>
+                  <th style="text-align: center;">Risk Level</th>
+                  <th>Contributing Factors</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${predictionRows || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">No active tasks</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            <p><strong>SitePulse</strong> - AI-Powered Construction Management Platform</p>
+            <p>This report is generated using machine learning predictions based on daily survey data.</p>
+            <p>Report generated on ${currentDate}</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Generate PDF
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false,
+      });
+
+      console.log('Delay Prediction PDF generated:', uri);
+
+      // Share/Save the PDF
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Save Delay Prediction Report',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert('PDF Generated', `PDF saved to: ${uri}`);
+      }
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      Alert.alert('Export Failed', 'Unable to generate PDF report. Please try again.');
+    }
   };
 
   const getStatusColor = (status: string) => {

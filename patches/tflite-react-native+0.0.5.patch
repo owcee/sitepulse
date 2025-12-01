@@ -46,3 +46,40 @@ index c925cf6..acc66b5 100644
 -    implementation 'org.tensorflow:tensorflow-lite:+'
 +    implementation 'org.tensorflow:tensorflow-lite:2.10.0'
  }
+diff --git a/node_modules/tflite-react-native/android/src/main/java/com/reactlibrary/TfliteReactNativeModule.java b/node_modules/tflite-react-native/android/src/main/java/com/reactlibrary/TfliteReactNativeModule.java
+index 1234567..abcdefg 100644
+--- a/node_modules/tflite-react-native/android/src/main/java/com/reactlibrary/TfliteReactNativeModule.java
++++ b/node_modules/tflite-react-native/android/src/main/java/com/reactlibrary/TfliteReactNativeModule.java
+@@ -75,6 +75,7 @@ public class TfliteReactNativeModule extends ReactContextBaseJavaModule {
+   Interpreter tfLite;
+   int inputSize = 0;
+   Vector<String> labels = new Vector<String>();
++  int numLabels = 0;
+ 
+   private Interpreter getTfLite() {
+     return tfLite;
+@@ -102,6 +103,7 @@ public class TfliteReactNativeModule extends ReactContextBaseJavaModule {
+         while ((line = br.readLine()) != null) {
+           labels.add(line);
+         }
++        numLabels = labels.size();
+         br.close();
+       }
+     }
+@@ -168,8 +170,14 @@ public class TfliteReactNativeModule extends ReactContextBaseJavaModule {
+     float threshold = (float) options.getDouble("threshold");
+     int numResults = options.getInt("numResults");
+ 
+-    // Output shape is [1, NUM_CLASSES] where NUM_CLASSES is the number of labels
+-    float[][] labelProbArray = new float[1][labels.size()];
++    // Dynamically get output tensor shape from the model
++    int[] outputShape = tfLite.getOutputTensor(0).shape();
++    int outputSize = outputShape[outputShape.length - 1];
++    
++    // Use the model's actual output size, not the labels size
++    // This fixes the shape mismatch error when model outputs != labels count
++    float[][] labelProbArray = new float[1][outputSize];
++    
+     tfLite.run(imgData, labelProbArray);
+ 
+     PriorityQueue<WritableMap> pq =

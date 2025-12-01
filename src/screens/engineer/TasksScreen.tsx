@@ -614,7 +614,7 @@ export default function TasksScreen() {
         onPress={() => handleTaskPress(task)}
       >
         <Card style={styles.card}>
-          <Card.Content>
+          <Card.Content style={{ overflow: 'visible' }}>
             <View style={styles.taskHeader}>
               <View style={styles.taskInfo}>
                 <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
@@ -1298,6 +1298,8 @@ const styles = StyleSheet.create({
   },
   taskInfo: {
     flex: 1,
+    overflow: 'visible',
+    paddingRight: spacing.sm,
   },
   taskTitle: {
     fontSize: fontSizes.sm,
@@ -1326,6 +1328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -spacing.xs,
+    overflow: 'visible',
   },
   taskMetaChip: {
     marginHorizontal: spacing.xs,
@@ -1333,10 +1336,12 @@ const styles = StyleSheet.create({
   },
   workerChip: {
     backgroundColor: theme.colors.primaryContainer,
-    height: 32,
+    height: 28,
+    maxWidth: 140,
   },
   cnnChip: {
-    height: 32,
+    height: 28,
+    paddingHorizontal: 4,
   },
   taskStatus: {
     marginLeft: spacing.sm,

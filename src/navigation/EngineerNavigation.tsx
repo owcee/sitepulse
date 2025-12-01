@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Appbar, IconButton, Badge, ActivityIndicator, Text } from 'react-native-paper';
+import { Appbar, IconButton, Badge, ActivityIndicator, Text, Snackbar } from 'react-native-paper';
 import { View, Alert } from 'react-native';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
@@ -186,6 +186,10 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
   const [showSurvey, setShowSurvey] = useState(false);
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [surveyChecked, setSurveyChecked] = useState(false);
+  
+  // Success Snackbar State (dark mode styled)
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   useEffect(() => {
     console.log('🔍 Checking if engineer has projects...');
@@ -260,10 +264,13 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
       console.log('[Survey] Submitting survey...');
       await submitSurvey(surveyData);
       await recordSurveySubmission(user.uid, project.id);
-      Alert.alert('Success', 'Daily survey submitted! Delay predictions have been updated.');
+      // Show dark-mode styled snackbar instead of white Alert
+      setSnackbarMessage('✅ Daily survey submitted! Delay predictions updated.');
+      setSnackbarVisible(true);
     } catch (error: any) {
       console.error('[Survey] Submission error:', error);
-      Alert.alert('Error', error.message || 'Failed to submit survey');
+      setSnackbarMessage('❌ ' + (error.message || 'Failed to submit survey'));
+      setSnackbarVisible(true);
       throw error; // Re-throw to keep modal open
     }
   };
@@ -401,6 +408,25 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
           options={{ tabBarLabel: 'Chat' }}
         />
       </Tab.Navigator>
+      
+      {/* Dark Mode Success/Error Snackbar */}
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={4000}
+        style={{
+          backgroundColor: theme.colors.surface,
+          borderWidth: 1,
+          borderColor: constructionColors.complete,
+        }}
+        action={{
+          label: 'OK',
+          textColor: theme.colors.primary,
+          onPress: () => setSnackbarVisible(false),
+        }}
+      >
+        <Text style={{ color: theme.colors.text }}>{snackbarMessage}</Text>
+      </Snackbar>
     </View>
   );
 }

@@ -44,6 +44,36 @@ export interface WorkerVerificationData {
   logs: VerificationLog[];
 }
 
+// Cache for worker names to avoid duplicate queries
+const workerNameCache = new Map<string, string>();
+
+/**
+ * Fetch worker name from worker_accounts collection
+ */
+async function getWorkerName(workerId: string): Promise<string> {
+  if (!workerId) return 'Unknown Worker';
+  
+  // Check cache first
+  if (workerNameCache.has(workerId)) {
+    return workerNameCache.get(workerId)!;
+  }
+  
+  try {
+    const workerDoc = await getDoc(doc(db, 'worker_accounts', workerId));
+    if (workerDoc.exists()) {
+      const data = workerDoc.data();
+      const name = data.name || data.displayName || data.email || 'Worker';
+      workerNameCache.set(workerId, name);
+      return name;
+    }
+  } catch (err) {
+    console.error('Error fetching worker name:', err);
+  }
+  
+  workerNameCache.set(workerId, 'Worker');
+  return 'Worker';
+}
+
 /**
  * Fetch all verification logs (task photos + usage submissions) for a project
  * @param projectId - Project ID
@@ -129,10 +159,13 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         }
       }
       
+      // Fetch real worker name from worker_accounts
+      const workerName = data.uploaderName || await getWorkerName(data.uploaderId);
+      
       logs.push({
         id: docSnapshot.id,
         workerId: data.uploaderId,
-        workerName: data.uploaderName || 'Unknown Worker',
+        workerName: workerName,
         type: 'task',
         photo: data.imageUrl,
         workerNotes: data.notes || 'No notes provided',
@@ -147,18 +180,21 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       });
     }
 
-    // Process Usage
-    usageSnapshot.forEach(doc => {
-      const data = doc.data();
+    // Process Usage - need to use for...of loop for async
+    for (const docItem of usageSnapshot.docs || []) {
+      const data = docItem.data();
       // Map specific usage types
       let type: 'equipment' | 'material' | 'damage' = 'material';
       if (data.type === 'equipment') type = 'equipment';
       if (data.type === 'damage') type = 'damage';
 
+      // Fetch real worker name from worker_accounts
+      const workerName = data.workerName || await getWorkerName(data.workerId);
+
       logs.push({
-        id: doc.id,
+        id: docItem.id,
         workerId: data.workerId,
-        workerName: data.workerName || 'Unknown Worker',
+        workerName: workerName,
         type: type,
         photo: data.photoUrl,
         workerNotes: data.notes || `Used ${data.itemName}`,
@@ -170,11 +206,11 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         rawTimestamp: data.timestamp?.toDate() || new Date(),
         itemName: data.itemName // Store item name for usage submissions
       });
-    });
+    }
 
-    // Process Borrow Requests
-    borrowSnapshot.forEach(doc => {
-      const data = doc.data();
+    // Process Borrow Requests - need to use for...of loop for async
+    for (const docItem of borrowSnapshot.docs || []) {
+      const data = docItem.data();
       // Map status: 'pending' | 'approved' | 'rejected' | 'returned'
       let status: 'pending' | 'approved' | 'rejected' = 'pending';
       if (data.status === 'approved') status = 'approved';
@@ -182,10 +218,13 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       // Skip 'returned' status as they don't need verification
 
       if (data.status !== 'returned') {
+        // Fetch real worker name from worker_accounts
+        const workerName = data.workerName || await getWorkerName(data.workerId);
+
         logs.push({
-          id: doc.id,
+          id: docItem.id,
           workerId: data.workerId,
-          workerName: data.workerName || 'Unknown Worker',
+          workerName: workerName,
           type: 'borrow',
           photo: '', // No photo for borrow requests
           workerNotes: `Request to borrow ${data.equipmentName}`,
@@ -198,7 +237,7 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
           itemName: data.equipmentName
         });
       }
-    });
+    }
 
     // 5. Group by Worker
     const workerMap = new Map<string, WorkerVerificationData>();

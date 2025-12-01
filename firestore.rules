@@ -166,6 +166,23 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
     }
+    
+    // Survey tracking - users can read/write their own survey tracking
+    match /survey_tracking/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Site surveys - engineers can create, read their project's surveys
+    match /site_surveys/{surveyId} {
+      allow create: if isAuthenticated() && isEngineer();
+      allow read: if isAuthenticated();
+    }
+    
+    // Delay predictions - system creates, users can read
+    match /delayPredictions/{predictionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+    }
   }
 }
 
