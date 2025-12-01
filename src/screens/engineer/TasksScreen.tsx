@@ -639,7 +639,7 @@ export default function TasksScreen() {
                   {task.cnnEligible && (
                     <View style={[styles.cnnChipContainer, styles.customBadge, styles.cnnBadge]}>
                       <Ionicons name="sparkles" size={14} color="#FFFFFF" style={styles.badgeIcon} />
-                      <Text style={styles.cnnBadgeText}>AI</Text>
+                      <Text style={styles.cnnBadgeText}>CNN</Text>
                     </View>
                   )}
                 </View>
