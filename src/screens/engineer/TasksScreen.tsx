@@ -899,7 +899,7 @@ export default function TasksScreen() {
                 {(selectedTask?.status === 'not_started' || selectedTask?.status === 'completed') && (
                   <Button
                     mode="contained"
-                    icon="time"
+                    icon="clock-outline"
                     onPress={() => handleChangeStatus('in_progress')}
                     style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
                   >
@@ -1075,7 +1075,7 @@ export default function TasksScreen() {
               {(selectedTask?.status === 'not_started' || selectedTask?.status === 'completed') && (
                 <Button
                   mode="contained"
-                  icon="time"
+                  icon="clock-outline"
                   onPress={() => handleChangeStatus('in_progress')}
                   style={[styles.statusButton, { backgroundColor: constructionColors.inProgress }]}
                 >
