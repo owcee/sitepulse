@@ -251,21 +251,34 @@ export async function acceptAssignment(
     const workerDoc = await getDoc(workerRef);
     const workerData = workerDoc.data();
     
-    // Get existing project IDs array or create new one
-    const existingProjectIds = workerData?.projectIds || (workerData?.projectId ? [workerData.projectId] : []);
-    
-    // Add new project if not already in list
-    if (!existingProjectIds.includes(projectId)) {
-      existingProjectIds.push(projectId);
+    // Get existing project IDs array or create new one from current projectId
+    let existingProjectIds: string[] = [];
+    if (workerData?.projectIds && Array.isArray(workerData.projectIds)) {
+      // Use existing array (preserve all projects)
+      existingProjectIds = [...workerData.projectIds];
+    } else if (workerData?.projectId) {
+      // Create array from single projectId (migration from old format)
+      existingProjectIds = [workerData.projectId];
     }
     
+    // Add new project if not already in list (workers can have multiple projects)
+    if (!existingProjectIds.includes(projectId)) {
+      existingProjectIds.push(projectId);
+      console.log(`[AcceptAssignment] Added project ${projectId} to worker's project list. Total projects: ${existingProjectIds.length}`);
+    } else {
+      console.log(`[AcceptAssignment] Project ${projectId} already in worker's project list`);
+    }
+    
+    // Update worker account - set new project as primary, but keep all projects in array
     await updateDoc(workerRef, {
-      projectId: projectId, // Current/primary project
-      projectIds: existingProjectIds, // All projects worker is assigned to
+      projectId: projectId, // Current/primary project (switches to new project)
+      projectIds: existingProjectIds, // All projects worker is assigned to (preserves all)
       assignedAt: serverTimestamp(),
       previousProjectId: previousProjectId || null, // Store previous project for reference
       projectSwitchedAt: isProjectSwitch ? serverTimestamp() : null
     });
+    
+    console.log(`[AcceptAssignment] Worker ${workerId} now has ${existingProjectIds.length} project(s):`, existingProjectIds);
 
     console.log('Assignment accepted:', workerId, projectId, isProjectSwitch ? '(project switch)' : '');
   } catch (error) {
