@@ -22,6 +22,16 @@ service cloud.firestore {
         get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data.projectId;
     }
     
+    // Helper: check if worker has access to a project (either as primary projectId or in projectIds array)
+    function workerHasProjectAccess(projectId) {
+      if (!isWorker()) return false;
+      let workerData = get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data;
+      // Check if projectId matches primary project
+      if (workerData.projectId == projectId) return true;
+      // Check if projectId is in projectIds array
+      return projectId in (workerData.projectIds || []);
+    }
+    
     function isEngineerForProject(projectId) {
       return isEngineer() && 
         get(/databases/$(database)/documents/engineer_accounts/$(request.auth.uid)).data.activeProjectIds.hasAny([projectId]);
@@ -43,7 +53,7 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow create: if isEngineer();
       allow read: if isAuthenticated() && 
-        (isEngineerForProject(projectId) || getUserProjectId() == projectId);
+        (isEngineerForProject(projectId) || getUserProjectId() == projectId || workerHasProjectAccess(projectId));
       allow list: if isAuthenticated() && isEngineer();
       allow update, delete: if isEngineer() && 
         resource.data.engineerId == request.auth.uid;

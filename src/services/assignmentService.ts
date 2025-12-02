@@ -168,7 +168,7 @@ export async function sendProjectAssignmentNotification(
     const notificationBody = `${projectInfo.name}\n\nEngineer: ${engineerName}\nEmail: ${engineerEmail}\n\nWould you like to accept or reject this assignment?`;
 
     await sendNotification(workerId, {
-      title: hasExistingProject ? 'New Project Invitation (Switch)' : 'New Project Assignment',
+      title: hasExistingProject ? 'New Project Invitation' : 'New Project Assignment',
       body: notificationBody,
       type: 'project_assignment',
       projectId: projectInfo.id,

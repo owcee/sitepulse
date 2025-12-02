@@ -218,6 +218,11 @@ export default function NotificationsScreen({ onAppRefresh, onBadgeUpdate }: Not
       setShowAcceptRejectModal(true);
       return;
     }
+    
+    // Skip navigation for notifications without valid types or that can't be navigated
+    if (!notification.type || notification.type === 'system' || notification.type === 'weather') {
+      return;
+    }
 
     // If notification has a projectId and it's different from current project, switch first
     if (notification.projectId && onAppRefresh) {
