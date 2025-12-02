@@ -173,7 +173,13 @@ export default function NotificationsScreen({ onAppRefresh, onBadgeUpdate }: Not
           assignmentId: n.assignmentId,
           status: n.status || 'pending'
         })) as Notification[];
-      setNotifications(validNotifications);
+      
+      // Filter out any notifications that are null or invalid
+      const finalNotifications = validNotifications.filter(n => 
+        n && n.id && n.title && (n.type !== 'project_assignment' || n.projectId)
+      );
+      
+      setNotifications(finalNotifications);
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {
