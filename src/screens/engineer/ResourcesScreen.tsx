@@ -34,6 +34,7 @@ export default function ResourcesScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showInventoryInfoDialog, setShowInventoryInfoDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const { state, projectId, setBudget, refreshData } = useProjectData();
   
@@ -345,24 +346,13 @@ export default function ResourcesScreen() {
         <Card.Content>
           <View style={styles.inventoryHeader}>
             <Title style={styles.cardTitle}>Inventory Management</Title>
+            <IconButton 
+              icon="plus" 
+              size={24} 
+              iconColor={theme.colors.primary}
+              onPress={() => setShowInventoryInfoDialog(true)}
+            />
           </View>
-          
-          {/* Dark themed info card */}
-          <Card style={styles.inventoryInfoCard}>
-            <Card.Content>
-              <View style={styles.inventoryInfoContent}>
-                <IconButton 
-                  icon="information" 
-                  size={20} 
-                  iconColor={theme.colors.onSurfaceVariant}
-                  style={styles.infoIcon}
-                />
-                <Paragraph style={styles.inventoryInfoText}>
-                  Go to Equipment or Materials Management to manage inventory
-                </Paragraph>
-              </View>
-            </Card.Content>
-          </Card>
 
           <View style={styles.inventorySummary}>
             <View style={styles.summaryItem}>
@@ -781,6 +771,40 @@ export default function ResourcesScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Inventory Info Dialog - Dark Mode */}
+      <Portal>
+        <Dialog 
+          visible={showInventoryInfoDialog} 
+          onDismiss={() => setShowInventoryInfoDialog(false)}
+          style={styles.inventoryInfoDialog}
+        >
+          <Dialog.Title style={styles.inventoryInfoDialogTitle}>
+            Inventory Management
+          </Dialog.Title>
+          <Dialog.Content>
+            <View style={styles.inventoryInfoContent}>
+              <IconButton 
+                icon="information" 
+                size={20} 
+                iconColor={theme.colors.onSurfaceVariant}
+                style={styles.infoIcon}
+              />
+              <Paragraph style={styles.inventoryInfoText}>
+                Go to Equipment or Materials Management to manage inventory
+              </Paragraph>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => setShowInventoryInfoDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       </View>
     </SafeAreaView>
   );
@@ -1070,13 +1094,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     fontStyle: 'italic',
   },
-  inventoryInfoCard: {
-    margin: spacing.md,
-    marginTop: 0,
-    backgroundColor: '#1A1A1A',
-    borderWidth: 1,
-    borderColor: '#333',
-  },
   inventoryInfoContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1103,6 +1120,15 @@ const styles = StyleSheet.create({
   successDialogMessage: {
     color: '#FFFFFF',
     fontSize: fontSizes.md,
+  },
+  inventoryInfoDialog: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: theme.roundness,
+  },
+  inventoryInfoDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
   },
 });
 
