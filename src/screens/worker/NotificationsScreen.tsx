@@ -115,15 +115,37 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
 
   // Load notifications on mount and when screen comes into focus
   useEffect(() => {
-    loadNotifications();
+    // Small delay to ensure auth is ready after login
+    const timer = setTimeout(() => {
+      if (auth.currentUser) {
+        loadNotifications();
+      }
+    }, 300);
+    return () => clearTimeout(timer);
   }, []);
 
   // Reload notifications when screen comes into focus (e.g., after login)
   useFocusEffect(
     useCallback(() => {
-      loadNotifications();
+      if (auth.currentUser) {
+        loadNotifications();
+      }
     }, [])
   );
+
+  // Listen for auth state changes to reload notifications on login
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        // User logged in, load notifications immediately
+        loadNotifications();
+      } else {
+        // User logged out, clear notifications
+        setNotifications([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Update tab badge when unread count changes
   useEffect(() => {
@@ -132,8 +154,6 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
     navigation.setOptions({
       tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
     });
-    // Also update route params for the tab navigator
-    navigation.setParams({ unreadCount });
   }, [notifications, navigation]);
 
   const loadNotifications = async () => {
