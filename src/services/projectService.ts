@@ -183,8 +183,15 @@ export async function getProject(projectId: string): Promise<Project | null> {
       createdAt: data.createdAt?.toDate() || new Date(),
       updatedAt: data.updatedAt?.toDate() || new Date()
     };
-  } catch (error) {
-    console.error('Error getting project:', error);
+  } catch (error: any) {
+    // Log the specific project ID that failed
+    console.error(`Error fetching project ${projectId}:`, error);
+    
+    // If it's a permissions error, provide more context
+    if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+      console.warn(`Permission denied for project ${projectId}. User may not have access to this project.`);
+    }
+    
     throw new Error('Failed to fetch project');
   }
 }

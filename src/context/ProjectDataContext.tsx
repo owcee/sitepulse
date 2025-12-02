@@ -302,7 +302,18 @@ export function ProjectDataProvider({
           'budgetLogs'
         ),
         loadWithFallback(
-          () => getProject(projectId),
+          async () => {
+            try {
+              return await getProject(projectId);
+            } catch (error: any) {
+              // If permission denied, log and return null instead of crashing
+              if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+                console.warn(`[ProjectDataContext] Permission denied for project ${projectId}. User may not have access.`);
+                return null;
+              }
+              throw error; // Re-throw other errors
+            }
+          },
           null,
           'project'
         ),
