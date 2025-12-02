@@ -323,7 +323,8 @@ export default function TasksScreen() {
           actual_end_date: undefined, // Clear completion date
         });
         closeDateModal();
-        Alert.alert('Success', 'Task moved to In Progress with new end date.');
+        setSnackbarMessage('Task moved to In Progress with new end date.');
+        setSnackbarVisible(true);
       } catch (error: any) {
         Alert.alert('Error', error.message || 'Failed to update task');
       }
@@ -355,7 +356,8 @@ export default function TasksScreen() {
       });
       closeDateModal();
       setShowTaskActionModal(false);
-      Alert.alert('Success', `Task moved to ${pendingStatusTarget === 'not_started' ? 'Not Started' : 'In Progress'} with new dates.`);
+      setSnackbarMessage(`Task moved to ${pendingStatusTarget === 'not_started' ? 'Not Started' : 'In Progress'} with new dates.`);
+      setSnackbarVisible(true);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update task');
     }
