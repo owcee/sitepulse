@@ -257,21 +257,29 @@ export const BudgetChart: React.FC<BudgetChartProps> = ({ onPress, budgetData: p
             />
           </View>
 
-          <PieChart
-            data={budgetChartData}
-            width={chartWidth}
-            height={180}
-            chartConfig={{
-              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              strokeWidth: 2,
-            }}
-            accessor="population"
-            backgroundColor={theme.colors.surface}
-            paddingLeft="15"
-            absolute
-            hasLegend={true}
-          />
+          {budgetChartData.length > 0 ? (
+            <PieChart
+              data={budgetChartData}
+              width={chartWidth}
+              height={180}
+              chartConfig={{
+                color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                strokeWidth: 2,
+              }}
+              accessor="population"
+              backgroundColor={theme.colors.surface}
+              paddingLeft="15"
+              absolute
+              hasLegend={true}
+            />
+          ) : (
+            <View style={styles.emptyChartContainer}>
+              <Paragraph style={styles.emptyChartText}>
+                No spending recorded yet
+              </Paragraph>
+            </View>
+          )}
         </Card.Content>
       </Card>
     </TouchableOpacity>

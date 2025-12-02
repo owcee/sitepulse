@@ -449,7 +449,7 @@ export default function WorkerTaskDetailScreen() {
               <View style={styles.cnnPredictionContainer}>
                 <Divider style={{ marginVertical: spacing.md }} />
                 <Title style={styles.cnnPredictionTitle}>
-                  🤖 AI Prediction
+                  🤖 CNN Prediction
                 </Title>
                 
                 {/* Status Prediction */}
@@ -506,7 +506,7 @@ export default function WorkerTaskDetailScreen() {
                   <View style={styles.cnnInfoNote}>
                     <IconButton icon="information" size={16} iconColor={theme.colors.onSurfaceVariant} />
                     <Paragraph style={styles.cnnInfoNoteText}>
-                      AI prediction submitted to engineer for review
+                      CNN prediction submitted to engineer for review
                     </Paragraph>
                   </View>
                 </View>

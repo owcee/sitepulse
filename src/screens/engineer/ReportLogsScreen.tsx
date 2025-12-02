@@ -248,7 +248,7 @@ export default function ReportLogsScreen() {
                 <View style={styles.cnnPredictionHeader}>
                   <Ionicons name="analytics" size={20} color={getConfidenceColor(log.cnnPrediction.confidence)} />
                   <Paragraph style={[styles.cnnPredictionTitle, { color: getConfidenceColor(log.cnnPrediction.confidence) }]}>
-                    AI Prediction
+                    CNN Prediction
                   </Paragraph>
                 </View>
                 <View style={styles.cnnPredictionContent}>
