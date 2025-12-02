@@ -116,6 +116,8 @@ const mockNotifications: Notification[] = [
 interface NotificationsScreenProps {
   visible?: boolean;
   onDismiss?: () => void;
+  onRefresh?: () => Promise<void>;
+  currentProjectId?: string;
 }
 
 export default function NotificationsScreen({ visible, onDismiss, onRefresh, currentProjectId }: NotificationsScreenProps = {}) {
@@ -149,7 +151,7 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
     return () => unsubscribe();
   }, []);
 
-  const onRefresh = async () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
     // Notifications are already real-time, just set refreshing to false after a delay
     setTimeout(() => {
@@ -201,14 +203,17 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
             projectId: notification.projectId, // Legacy support
           });
           
-          // Wait for project switch to complete
+          console.log('[Notification] Switched to project:', notification.projectId);
+          
+          // Wait for project switch to complete - longer delay to ensure data loads
           await onRefresh();
           
-          // Small delay to ensure project data is loaded
-          await new Promise(resolve => setTimeout(resolve, 300));
+          // Wait longer to ensure project data is fully loaded before navigation
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       } catch (error) {
         console.error('Error switching project for notification:', error);
+        // Continue with navigation even if switch fails
       }
     }
     
@@ -371,7 +376,7 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
         {loading ? (

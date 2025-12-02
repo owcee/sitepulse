@@ -48,19 +48,21 @@ export interface SurveySubmissionResponse {
 // ============================================================================
 
 /**
- * Check if the engineer should see the survey today
- * Returns true if the engineer hasn't submitted a survey today
+ * Check if the engineer should see the survey today for a specific project
+ * Returns true if the engineer hasn't submitted a survey today for this project
  * @param userId - Engineer's user ID
+ * @param projectId - Project ID
  * @returns Promise<boolean>
  */
-export async function shouldShowSurvey(userId: string): Promise<boolean> {
+export async function shouldShowSurvey(userId: string, projectId: string): Promise<boolean> {
   try {
-    const surveyTrackingRef = doc(db, 'survey_tracking', userId);
+    // Use composite key: userId_projectId for per-project tracking
+    const surveyTrackingRef = doc(db, 'survey_tracking', `${userId}_${projectId}`);
     const surveyDoc = await getDoc(surveyTrackingRef);
     
     if (!surveyDoc.exists()) {
       // No survey tracking record - show survey
-      console.log('[SurveyService] No survey record found, showing survey');
+      console.log('[SurveyService] No survey record found for project, showing survey');
       return true;
     }
     
@@ -92,7 +94,7 @@ export async function shouldShowSurvey(userId: string): Promise<boolean> {
     }
     
     const shouldShow = todayStr !== lastSurveyStr;
-    console.log('[SurveyService] Last survey:', lastSurveyStr, 'Today:', todayStr, 'Show survey:', shouldShow);
+    console.log('[SurveyService] Last survey:', lastSurveyStr, 'Today:', todayStr, 'Show survey:', shouldShow, 'Project:', projectId);
     
     return shouldShow;
     
@@ -104,21 +106,23 @@ export async function shouldShowSurvey(userId: string): Promise<boolean> {
 }
 
 /**
- * Record that the engineer submitted a survey today
+ * Record that the engineer submitted a survey today for a specific project
  * @param userId - Engineer's user ID
  * @param projectId - The project ID for the survey
  */
 export async function recordSurveySubmission(userId: string, projectId: string): Promise<void> {
   try {
-    const surveyTrackingRef = doc(db, 'survey_tracking', userId);
+    // Use composite key: userId_projectId for per-project tracking
+    const surveyTrackingRef = doc(db, 'survey_tracking', `${userId}_${projectId}`);
     
     await setDoc(surveyTrackingRef, {
+      userId,
+      projectId,
       lastSurveyDate: serverTimestamp(),
-      lastProjectId: projectId,
       updatedAt: serverTimestamp(),
     }, { merge: true });
     
-    console.log('[SurveyService] Survey submission recorded for user:', userId);
+    console.log('[SurveyService] Survey submission recorded for user:', userId, 'project:', projectId);
     
   } catch (error) {
     console.error('[SurveyService] Error recording survey submission:', error);
@@ -160,18 +164,22 @@ export async function submitSurvey(surveyData: SurveyData): Promise<SurveySubmis
  * Skip the survey for today (user chose to dismiss)
  * This still records that we showed the survey, so we don't show it again today
  * @param userId - Engineer's user ID
+ * @param projectId - Project ID
  */
-export async function skipSurveyForToday(userId: string): Promise<void> {
+export async function skipSurveyForToday(userId: string, projectId: string): Promise<void> {
   try {
-    const surveyTrackingRef = doc(db, 'survey_tracking', userId);
+    // Use composite key: userId_projectId for per-project tracking
+    const surveyTrackingRef = doc(db, 'survey_tracking', `${userId}_${projectId}`);
     
     await setDoc(surveyTrackingRef, {
+      userId,
+      projectId,
       lastSurveyDate: serverTimestamp(),
       skipped: true,
       updatedAt: serverTimestamp(),
     }, { merge: true });
     
-    console.log('[SurveyService] Survey skipped for user:', userId);
+    console.log('[SurveyService] Survey skipped for user:', userId, 'project:', projectId);
     
   } catch (error) {
     console.error('[SurveyService] Error skipping survey:', error);

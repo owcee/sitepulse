@@ -43,7 +43,7 @@ interface Props {
 }
 
 // Custom header component with SitePulse branding
-const CustomHeader = ({ user, project, onLogout }: Props) => {
+const CustomHeader = ({ user, project, onLogout, onRefresh }: Props) => {
   const [notificationsVisible, setNotificationsVisible] = React.useState(false);
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -229,7 +229,7 @@ export default function EngineerNavigation({ user, project, onLogout, onRefresh 
       
       try {
         console.log('[Survey] Checking if survey should be shown...');
-        const shouldShow = await shouldShowSurvey(user.uid);
+        const shouldShow = await shouldShowSurvey(user.uid, project.id);
         
         if (shouldShow) {
           // Load active tasks for the survey
@@ -281,8 +281,10 @@ export default function EngineerNavigation({ user, project, onLogout, onRefresh 
   // Handle survey skip
   const handleSurveySkip = async () => {
     try {
-      await skipSurveyForToday(user.uid);
-      console.log('[Survey] Survey skipped for today');
+      if (project?.id) {
+        await skipSurveyForToday(user.uid, project.id);
+        console.log('[Survey] Survey skipped for today');
+      }
     } catch (error) {
       console.error('[Survey] Error skipping survey:', error);
     }
@@ -292,7 +294,7 @@ export default function EngineerNavigation({ user, project, onLogout, onRefresh 
   if (isCheckingProjects) {
     return (
       <View style={{ flex: 1 }}>
-        <CustomHeader user={user} project={project} onLogout={onLogout} />
+        <CustomHeader user={user} project={project} onLogout={onLogout} onRefresh={onRefresh} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={{ marginTop: 16, color: theme.colors.text }}>
@@ -308,7 +310,7 @@ export default function EngineerNavigation({ user, project, onLogout, onRefresh 
     console.log('📝 Engineer has no projects - showing CreateNewProjectScreen');
     return (
       <View style={{ flex: 1 }}>
-        <CustomHeader user={user} project={project} onLogout={onLogout} />
+        <CustomHeader user={user} project={project} onLogout={onLogout} onRefresh={onRefresh} />
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="CreateNewProject">
             {(props) => <CreateNewProjectScreen {...props} />}
@@ -321,7 +323,7 @@ export default function EngineerNavigation({ user, project, onLogout, onRefresh 
   // Engineer has projects - show full navigation
   return (
     <View style={{ flex: 1 }}>
-      <CustomHeader user={user} project={project} onLogout={onLogout} />
+      <CustomHeader user={user} project={project} onLogout={onLogout} onRefresh={onRefresh} />
       
       {/* Daily Site Survey Modal */}
       <DailySiteSurvey
