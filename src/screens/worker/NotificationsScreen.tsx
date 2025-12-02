@@ -32,7 +32,8 @@ import {
   getUserNotifications, 
   markNotificationAsRead, 
   acceptProjectAssignment, 
-  rejectProjectAssignment 
+  rejectProjectAssignment,
+  deleteNotification
 } from '../../services/firebaseService';
 import { auth } from '../../firebaseConfig';
 
@@ -127,6 +128,20 @@ export default function NotificationsScreen({ onAppRefresh, onBadgeUpdate }: Not
         userNotifications.map(async (n) => {
           // Filter out read notifications
           if (n.read) return null;
+          
+          // Delete old buggy notifications with hardcoded "Downtown Office Complex" or "switch" language
+          if (n.body && (
+            (n.body.includes('Downtown Office Complex') && n.body.includes('Accepting will switch')) ||
+            n.body.includes('accepting will switch you from your current project')
+          )) {
+            console.log(`[NotificationsScreen] Deleting old buggy notification: ${n.id}`);
+            try {
+              await deleteNotification(n.id);
+            } catch (error) {
+              console.error('Error deleting buggy notification:', error);
+            }
+            return null;
+          }
           
           // For project_assignment notifications, check if assignment has been accepted
           // The assignmentId in notification is the workerId (document ID in worker_assignments)
