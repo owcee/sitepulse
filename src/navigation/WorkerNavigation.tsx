@@ -244,6 +244,20 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
 
   const handleProjectChange = async (projectId: string) => {
     try {
+      // Update worker's primary projectId in Firestore
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('../firebaseConfig');
+      const { auth } = await import('../firebaseConfig');
+      
+      if (auth.currentUser) {
+        const workerRef = doc(db, 'worker_accounts', auth.currentUser.uid);
+        await updateDoc(workerRef, {
+          projectId: projectId, // Set as primary project
+        });
+        console.log(`[WorkerNavigation] Switched worker's primary project to: ${projectId}`);
+      }
+      
+      // Load the project data
       const { getProject } = await import('../services/projectService');
       const projectData = await getProject(projectId);
       if (projectData) {
@@ -260,9 +274,12 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
       } else {
         setCurrentProject(null);
       }
-      // Refresh the app data
+      
+      // Refresh the app data to load the new project
       if (onRefresh) {
-        onRefresh();
+        console.log('[WorkerNavigation] Calling onRefresh to reload app with new project...');
+        await onRefresh();
+        console.log('[WorkerNavigation] App refreshed with new project');
       }
     } catch (error) {
       console.error('Error changing project:', error);
