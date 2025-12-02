@@ -29,6 +29,8 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [role, setRole] = useState<'engineer' | 'worker'>('worker');
   const [loading, setLoading] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -192,9 +194,15 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
               value={password}
               onChangeText={setPassword}
               mode="outlined"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               style={styles.input}
               placeholder="At least 6 characters"
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
             />
 
             {/* Confirm Password Input */}
@@ -203,9 +211,15 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               mode="outlined"
-              secureTextEntry
+              secureTextEntry={!showConfirmPassword}
               style={styles.input}
               placeholder="Re-enter your password"
+              right={
+                <TextInput.Icon
+                  icon={showConfirmPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                />
+              }
             />
 
             {/* Sign Up Button */}

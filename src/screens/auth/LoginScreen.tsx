@@ -26,6 +26,7 @@ interface Props {
 export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
@@ -141,9 +142,15 @@ export default function LoginScreen({ onLogin, onNavigateToSignUp }: Props) {
               value={password}
               onChangeText={setPassword}
               mode="outlined"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               style={styles.input}
               placeholder="Enter your password"
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
             />
 
             {/* Forgot Password Link */}

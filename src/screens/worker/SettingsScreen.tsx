@@ -63,6 +63,11 @@ export default function SettingsScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPasswordErrorDialog, setShowPasswordErrorDialog] = useState(false);
+  const [passwordErrorMessage, setPasswordErrorMessage] = useState('');
 
   const handleSaveProfile = async () => {
     if (!profileName.trim()) {
@@ -102,17 +107,20 @@ export default function SettingsScreen() {
 
   const handleChangePassword = () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all password fields.');
+      setPasswordErrorMessage('Please fill in all password fields.');
+      setShowPasswordErrorDialog(true);
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match.');
+      setPasswordErrorMessage('New passwords do not match.');
+      setShowPasswordErrorDialog(true);
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long.');
+      setPasswordErrorMessage('Password must be at least 6 characters long.');
+      setShowPasswordErrorDialog(true);
       return;
     }
 
@@ -331,7 +339,12 @@ export default function SettingsScreen() {
       <Portal>
         <Modal
           visible={changePasswordVisible}
-          onDismiss={() => setChangePasswordVisible(false)}
+          onDismiss={() => {
+            setChangePasswordVisible(false);
+            setShowCurrentPassword(false);
+            setShowNewPassword(false);
+            setShowConfirmPassword(false);
+          }}
           contentContainerStyle={styles.innerModalContainer}
         >
           <Surface style={styles.modalSurface}>
@@ -341,33 +354,56 @@ export default function SettingsScreen() {
               label="Current Password *"
               value={currentPassword}
               onChangeText={setCurrentPassword}
-              secureTextEntry
+              secureTextEntry={!showCurrentPassword}
               style={styles.modalInput}
               mode="outlined"
+              right={
+                <TextInput.Icon
+                  icon={showCurrentPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                />
+              }
             />
             
             <TextInput
               label="New Password *"
               value={newPassword}
               onChangeText={setNewPassword}
-              secureTextEntry
+              secureTextEntry={!showNewPassword}
               style={styles.modalInput}
               mode="outlined"
+              right={
+                <TextInput.Icon
+                  icon={showNewPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowNewPassword(!showNewPassword)}
+                />
+              }
             />
             
             <TextInput
               label="Confirm New Password *"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry
+              secureTextEntry={!showConfirmPassword}
               style={styles.modalInput}
               mode="outlined"
+              right={
+                <TextInput.Icon
+                  icon={showConfirmPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                />
+              }
             />
             
             <View style={styles.modalActions}>
               <Button
                 mode="outlined"
-                onPress={() => setChangePasswordVisible(false)}
+                onPress={() => {
+                  setChangePasswordVisible(false);
+                  setShowCurrentPassword(false);
+                  setShowNewPassword(false);
+                  setShowConfirmPassword(false);
+                }}
                 style={styles.modalCancelButton}
               >
                 Cancel
@@ -403,6 +439,32 @@ export default function SettingsScreen() {
           <Dialog.Actions>
             <Button 
               onPress={() => setShowPasswordSuccessDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Password Change Error Dialog - Dark Mode */}
+      <Portal>
+        <Dialog 
+          visible={showPasswordErrorDialog} 
+          onDismiss={() => setShowPasswordErrorDialog(false)}
+          style={styles.passwordErrorDialog}
+        >
+          <Dialog.Title style={styles.passwordErrorDialogTitle}>
+            Error
+          </Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.passwordErrorDialogMessage}>
+              {passwordErrorMessage}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => setShowPasswordErrorDialog(false)}
               textColor={theme.colors.primary}
             >
               OK
@@ -622,6 +684,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   passwordSuccessDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+  },
+  passwordErrorDialog: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: theme.roundness,
+  },
+  passwordErrorDialogTitle: {
+    color: constructionColors.urgent,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  passwordErrorDialogMessage: {
     color: '#FFFFFF',
     fontSize: fontSizes.md,
   },
