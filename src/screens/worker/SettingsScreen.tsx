@@ -63,8 +63,8 @@ export default function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleSaveProfile = async () => {
-    if (!profileName.trim() || !profileEmail.trim()) {
-      Alert.alert('Error', 'Please fill in name and email.');
+    if (!profileName.trim()) {
+      Alert.alert('Error', 'Please fill in name.');
       return;
     }
 
@@ -79,7 +79,7 @@ export default function SettingsScreen() {
       
       await updateDoc(doc(db, collection, userProfile.uid), {
         name: profileName.trim(),
-        email: profileEmail.trim(),
+        // Email cannot be changed - it's tied to Firebase Auth
         updatedAt: new Date().toISOString(),
       });
 
@@ -306,10 +306,11 @@ export default function SettingsScreen() {
             <TextInput
               label="Email *"
               value={profileEmail}
-              onChangeText={setProfileEmail}
+              editable={false}
               keyboardType="email-address"
               style={styles.modalInput}
               mode="outlined"
+              disabled
             />
             
             
