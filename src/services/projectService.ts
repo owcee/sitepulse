@@ -86,6 +86,38 @@ export async function createProject(projectData: {
       updatedAt: serverTimestamp()
     });
 
+    // Create initial budget document in budgets collection with the same structure as BudgetLogsManagementPage
+    const { saveBudget } = await import('./firebaseDataService');
+    const initialBudget = {
+      totalBudget: projectData.budget, // Use the budget from project creation
+      totalSpent: 0,
+      contingencyPercentage: 10,
+      lastUpdated: new Date(),
+      categories: [
+        {
+          id: 'equipment',
+          name: 'Equipment',
+          allocatedAmount: 50000,
+          spentAmount: 0,
+          description: 'Equipment rental and purchases (Auto-calculated)',
+          lastUpdated: new Date(),
+          isPrimary: true,
+        },
+        {
+          id: 'materials',
+          name: 'Materials',
+          allocatedAmount: 150000,
+          spentAmount: 0,
+          description: 'Construction materials and supplies (Auto-calculated)',
+          lastUpdated: new Date(),
+          isPrimary: true,
+        },
+      ],
+    };
+    
+    await saveBudget(projectDoc.id, initialBudget);
+    console.log('✅ Initial budget document created for project:', projectDoc.id);
+
     // Update engineer's project lists (Phase 3: multi-project support)
     const currentActiveProjects = engineerData.activeProjectIds || [];
     await updateDoc(engineerRef, {
