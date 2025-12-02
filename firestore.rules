@@ -24,12 +24,10 @@ service cloud.firestore {
     
     // Helper: check if worker has access to a project (either as primary projectId or in projectIds array)
     function workerHasProjectAccess(projectId) {
-      if (!isWorker()) return false;
-      let workerData = get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data;
-      // Check if projectId matches primary project
-      if (workerData.projectId == projectId) return true;
-      // Check if projectIds array exists and contains the projectId
-      return workerData.projectIds != null && projectId in workerData.projectIds;
+      return isWorker() && (
+        get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data.projectId == projectId ||
+        get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data.projectIds != null
+      );
     }
     
     function isEngineerForProject(projectId) {
