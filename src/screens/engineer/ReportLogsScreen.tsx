@@ -188,7 +188,7 @@ export default function ReportLogsScreen() {
       onPress={() => setSelectedWorker(item)}
     >
       <View style={styles.folderIconContainer}>
-        <Ionicons name="folder" size={64} color="#4A90E2" />
+        <Ionicons name="folder" size={64} color="#FFB800" />
         {item.pendingCount > 0 && (
           <Badge 
             style={[styles.pendingBadge, { backgroundColor: constructionColors.urgent }]}
