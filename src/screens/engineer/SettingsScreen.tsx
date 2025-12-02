@@ -13,7 +13,8 @@ import {
   Switch,
   Modal,
   Portal,
-  Surface
+  Surface,
+  Dialog
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -35,6 +36,7 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
   const [isLoading, setIsLoading] = useState(true);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [changePasswordVisible, setChangePasswordVisible] = useState(false);
+  const [showPasswordSuccessDialog, setShowPasswordSuccessDialog] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
   // Edit Profile Form
@@ -121,11 +123,11 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
 
     // Simulate API call
     setTimeout(() => {
-      Alert.alert('Success', 'Password changed successfully!');
       setChangePasswordVisible(false);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setShowPasswordSuccessDialog(true);
     }, 1000);
   };
 
@@ -386,6 +388,32 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
         </Modal>
       </Portal>
 
+      {/* Password Change Success Dialog - Dark Mode */}
+      <Portal>
+        <Dialog 
+          visible={showPasswordSuccessDialog} 
+          onDismiss={() => setShowPasswordSuccessDialog(false)}
+          style={styles.passwordSuccessDialog}
+        >
+          <Dialog.Title style={styles.passwordSuccessDialogTitle}>
+            Success
+          </Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.passwordSuccessDialogMessage}>
+              Password changed successfully!
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => setShowPasswordSuccessDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       {/* Logout Confirmation Modal */}
       <Portal>
         <Modal
@@ -605,5 +633,18 @@ const styles = StyleSheet.create({
   },
   logoutConfirmButton: {
     backgroundColor: constructionColors.urgent,
+  },
+  passwordSuccessDialog: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: theme.roundness,
+  },
+  passwordSuccessDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  passwordSuccessDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
   },
 });
