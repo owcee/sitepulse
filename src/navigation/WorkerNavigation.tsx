@@ -226,13 +226,65 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
       where('read', '==', false)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Filter out deleted notifications
-      const unreadCount = snapshot.docs.filter(doc => {
-        const data = doc.data();
-        return !data.deleted; // Exclude deleted notifications
-      }).length;
-      console.log('Tab bar badge - Unread notifications count:', unreadCount);
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      // Filter out deleted notifications and invalid ones
+      const validNotifications = await Promise.all(
+        snapshot.docs.map(async (doc) => {
+          const data = doc.data();
+          
+          // Exclude deleted notifications
+          if (data.deleted) return null;
+          
+          // Exclude buggy notifications with hardcoded "Downtown Office Complex" or "switch" language
+          if (data.body && (
+            (data.body.includes('Downtown Office Complex') && data.body.includes('Accepting will switch')) ||
+            data.body.includes('accepting will switch you from your current project')
+          )) {
+            // Try to delete it
+            try {
+              const { updateDoc, serverTimestamp } = await import('firebase/firestore');
+              await updateDoc(doc.ref, {
+                deleted: true,
+                deletedAt: serverTimestamp()
+              });
+            } catch (error) {
+              console.error('Error deleting buggy notification:', error);
+            }
+            return null;
+          }
+          
+          // For project_assignment notifications, check if assignment has been accepted/rejected
+          if (data.type === 'project_assignment') {
+            try {
+              const { getDoc, doc: docFn } = await import('firebase/firestore');
+              if (!user.uid) return null;
+              const assignmentRef = docFn(db, 'worker_assignments', user.uid);
+              const assignmentDoc = await getDoc(assignmentRef);
+              
+              if (assignmentDoc.exists()) {
+                const assignmentData = assignmentDoc.data();
+                // If assignment is accepted or rejected, exclude the notification
+                if (assignmentData.status === 'accepted' || assignmentData.status === 'rejected') {
+                  return null;
+                }
+              }
+            } catch (error) {
+              // If we can't check, keep the notification to be safe
+              console.error('Error checking assignment status for badge:', error);
+            }
+          }
+          
+          // Exclude invalid notifications
+          if (!data.title || (data.type === 'project_assignment' && !data.projectId)) {
+            return null;
+          }
+          
+          return doc;
+        })
+      );
+      
+      const unreadCount = validNotifications.filter(n => n !== null).length;
+      console.log('Tab bar badge - Unread notifications count (filtered):', unreadCount);
       setNotificationBadgeCount(unreadCount > 0 ? unreadCount : undefined);
     }, (error) => {
       console.error('Error subscribing to notifications for tab badge:', error);
