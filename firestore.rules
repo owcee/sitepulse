@@ -132,10 +132,31 @@ service cloud.firestore {
     
     // Budgets - document ID is projectId, users can access budgets for their project
     match /budgets/{projectId} {
+      // Helper: check if user is engineer for this project (by checking project's engineerId)
+      function isEngineerForBudgetProject() {
+        return isEngineer() && 
+          exists(/databases/$(database)/documents/projects/$(projectId)) &&
+          get(/databases/$(database)/documents/projects/$(projectId)).data.engineerId == request.auth.uid;
+      }
+      
       // Read: allow if user is authenticated and their projectId matches the document ID
-      allow read: if isAuthenticated() && getUserProjectId() == projectId;
+      // OR if they are the engineer for this project
+      allow read: if isAuthenticated() && 
+        (getUserProjectId() == projectId || isEngineerForBudgetProject());
+      
       // Create/Update: allow engineers for their current project, workers for their assigned project
-      allow create, update: if isAuthenticated() && getUserProjectId() == projectId;
+      // OR if they are the engineer for this project (needed when creating new projects)
+      // For create: check request.resource.data doesn't exist yet, so check project's engineerId
+      allow create: if isAuthenticated() && 
+        (getUserProjectId() == projectId || 
+         (isEngineer() && 
+          exists(/databases/$(database)/documents/projects/$(projectId)) &&
+          get(/databases/$(database)/documents/projects/$(projectId)).data.engineerId == request.auth.uid));
+      
+      // Update: same conditions as create
+      allow update: if isAuthenticated() && 
+        (getUserProjectId() == projectId || isEngineerForBudgetProject());
+      
       // Prevent deletion of budgets
       allow delete: if false;
     }
