@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, Alert, RefreshControl } from 'react-native';
 import {
   Card, 
   Title, 
@@ -32,9 +32,10 @@ type TabType = 'budget' | 'inventory';
 export default function ResourcesScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('budget');
   const [isExporting, setIsExporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const { state, projectId, setBudget } = useProjectData();
+  const { state, projectId, setBudget, refreshData } = useProjectData();
   
   // Load budget from Firebase on mount if not in shared state
   // This ensures budget is available even if ProjectDataContext hasn't loaded it yet
@@ -157,7 +158,17 @@ export default function ResourcesScreen() {
   };
 
   const renderBudgetTab = () => (
-    <ScrollView showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={[theme.colors.primary]}
+          tintColor={theme.colors.primary}
+        />
+      }
+    >
       {/* Budget Overview */}
       <Card style={styles.card}>
         <Card.Content>
@@ -271,7 +282,17 @@ export default function ResourcesScreen() {
 
 
   const renderInventoryTab = () => (
-    <ScrollView showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={[theme.colors.primary]}
+          tintColor={theme.colors.primary}
+        />
+      }
+    >
       {/* Inventory Alerts */}
       {(lowStockMaterials.length > 0 || lowStockEquipment.length > 0) && (
         <Card style={[styles.card, styles.alertCard]}>
@@ -324,13 +345,24 @@ export default function ResourcesScreen() {
         <Card.Content>
           <View style={styles.inventoryHeader}>
             <Title style={styles.cardTitle}>Inventory Management</Title>
-            <IconButton 
-              icon="plus" 
-              size={24} 
-              iconColor={theme.colors.primary}
-              onPress={() => Alert.alert('Add Materials', 'Use the Project Tools page to manage materials inventory.', [{ text: 'OK' }])}
-            />
           </View>
+          
+          {/* Dark themed info card */}
+          <Card style={styles.inventoryInfoCard}>
+            <Card.Content>
+              <View style={styles.inventoryInfoContent}>
+                <IconButton 
+                  icon="information" 
+                  size={20} 
+                  iconColor={theme.colors.onSurfaceVariant}
+                  style={styles.infoIcon}
+                />
+                <Paragraph style={styles.inventoryInfoText}>
+                  Go to Equipment or Materials Management to manage inventory
+                </Paragraph>
+              </View>
+            </Card.Content>
+          </Card>
 
           <View style={styles.inventorySummary}>
             <View style={styles.summaryItem}>
@@ -461,6 +493,17 @@ export default function ResourcesScreen() {
         return renderInventoryTab();
       default:
         return renderBudgetTab();
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -677,20 +720,23 @@ export default function ResourcesScreen() {
     <SafeAreaView style={styles.container} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Title style={styles.screenTitle}>Resource Management</Title>
+        <Title style={styles.screenTitle}>Resource Management</Title>
+        <View style={styles.headerActions}>
+          <IconButton
+            icon="refresh"
+            size={24}
+            iconColor={theme.colors.primary}
+            onPress={handleRefresh}
+            disabled={refreshing}
+          />
+          <IconButton
+            icon="file-pdf-box"
+            size={24}
+            iconColor={theme.colors.primary}
+            onPress={handleExportPDF}
+            disabled={isExporting}
+          />
         </View>
-        <Button
-          mode="contained"
-          icon="file-pdf-box"
-          onPress={handleExportPDF}
-          loading={isExporting}
-          disabled={isExporting}
-          style={styles.exportButton}
-          labelStyle={{ fontSize: 13 }}
-        >
-          Export PDF
-        </Button>
       </View>
 
       {/* Tab Navigation */}
@@ -747,25 +793,20 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     backgroundColor: theme.colors.background,
-    elevation: 0,
-  },
-  headerLeft: {
-    flex: 1,
   },
   screenTitle: {
-    fontSize: fontSizes.xxl,
+    fontSize: fontSizes.xl,
     fontWeight: 'bold',
     color: theme.colors.text,
   },
-  exportButton: {
-    marginLeft: spacing.sm,
-    backgroundColor: theme.colors.primary,
+  headerActions: {
+    flexDirection: 'row',
   },
   tabContainer: {
     paddingHorizontal: spacing.md,
@@ -1028,6 +1069,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.lg,
     fontStyle: 'italic',
+  },
+  inventoryInfoCard: {
+    margin: spacing.md,
+    marginTop: 0,
+    backgroundColor: '#1A1A1A',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  inventoryInfoContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoIcon: {
+    margin: 0,
+    marginRight: spacing.xs,
+  },
+  inventoryInfoText: {
+    flex: 1,
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    lineHeight: 20,
   },
   successDialog: {
     backgroundColor: '#000000',
