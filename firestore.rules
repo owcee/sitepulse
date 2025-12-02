@@ -28,8 +28,8 @@ service cloud.firestore {
       let workerData = get(/databases/$(database)/documents/worker_accounts/$(request.auth.uid)).data;
       // Check if projectId matches primary project
       if (workerData.projectId == projectId) return true;
-      // Check if projectId is in projectIds array
-      return projectId in (workerData.projectIds || []);
+      // Check if projectIds array exists and contains the projectId
+      return workerData.projectIds != null && projectId in workerData.projectIds;
     }
     
     function isEngineerForProject(projectId) {
