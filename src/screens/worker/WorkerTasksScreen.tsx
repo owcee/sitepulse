@@ -196,7 +196,7 @@ export default function WorkerTasksScreen() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'checkmark-circle';
+        return 'check-circle';
       case 'in_progress':
         return 'clock';
       case 'not_started':
