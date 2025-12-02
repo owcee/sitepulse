@@ -197,6 +197,7 @@ const SettingsStack = () => (
 
 export default function WorkerNavigation({ user, project, onLogout, onRefresh }: Props) {
   const [currentProject, setCurrentProject] = useState<Project | null>(project || null);
+  const [notificationBadgeCount, setNotificationBadgeCount] = useState<number | undefined>(undefined);
 
   const handleProjectChange = async (projectId: string) => {
     try {
@@ -365,10 +366,10 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
           name="Notifications" 
           options={{
             tabBarLabel: 'Notifications',
-            // Badge will be updated by NotificationsScreen via navigation.setOptions
+            tabBarBadge: notificationBadgeCount && notificationBadgeCount > 0 ? notificationBadgeCount : undefined,
           }}
         >
-          {() => <NotificationsScreen onAppRefresh={onRefresh} />}
+          {() => <NotificationsScreen onAppRefresh={onRefresh} onBadgeUpdate={setNotificationBadgeCount} />}
         </Tab.Screen>
         <Tab.Screen 
           name="Settings" 

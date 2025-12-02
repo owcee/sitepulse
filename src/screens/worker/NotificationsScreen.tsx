@@ -101,9 +101,10 @@ const mockNotifications: Notification[] = [
 
 interface NotificationsScreenProps {
   onAppRefresh?: () => void;
+  onBadgeUpdate?: (count: number | undefined) => void;
 }
 
-export default function NotificationsScreen({ onAppRefresh }: NotificationsScreenProps) {
+export default function NotificationsScreen({ onAppRefresh, onBadgeUpdate }: NotificationsScreenProps) {
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,11 +151,15 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
   // Update tab badge when unread count changes
   useEffect(() => {
     const unreadCount = notifications.filter(n => !n.isRead).length;
-    // Update the tab bar badge
+    // Update the tab bar badge via navigation options
     navigation.setOptions({
       tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
     });
-  }, [notifications, navigation]);
+    // Also update parent navigation badge state (works even when screen not focused)
+    if (onBadgeUpdate) {
+      onBadgeUpdate(unreadCount > 0 ? unreadCount : undefined);
+    }
+  }, [notifications, navigation, onBadgeUpdate]);
 
   const loadNotifications = async () => {
     try {
