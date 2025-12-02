@@ -522,14 +522,6 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
                 <Paragraph style={styles.acceptRejectDialogMessage}>
                   {selectedNotification.message}
                 </Paragraph>
-                {selectedNotification.projectId && (
-                  <Paragraph style={styles.acceptRejectDialogSubtext}>
-                    Project ID: {selectedNotification.projectId}
-                  </Paragraph>
-                )}
-                <Paragraph style={styles.acceptRejectDialogQuestion}>
-                  Would you like to accept or reject this project assignment?
-                </Paragraph>
               </>
             )}
           </Dialog.Content>

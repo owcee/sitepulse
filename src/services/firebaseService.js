@@ -111,11 +111,11 @@ export async function rejectProjectAssignment(notificationId, assignmentId, proj
     throw new Error('User not authenticated');
   }
   
-  // Reject the assignment
+  // Reject the assignment - assignmentId is the workerId (document ID in worker_assignments)
   await assignmentService.rejectAssignment(auth.currentUser.uid);
   
-  // Mark notification as read
-  await notificationService.markAsRead(notificationId);
+  // Delete the notification after rejection
+  await notificationService.deleteNotification(notificationId);
 }
 
 // ============================================================================

@@ -148,9 +148,17 @@ export default function WorkersManagementPage() {
           // Create assignment
           const assignment = await assignWorkerToProject(workerId, currentProjectId);
           
-          // Send notification
-          const projectData = { id: currentProjectId, name: 'Downtown Office Complex' };
-          await sendProjectAssignmentNotification(workerId, projectData, (assignment as any).id);
+          // Get project data for notification
+          const { getProject } = await import('../../services/projectService');
+          const project = await getProject(currentProjectId);
+          const projectData = { 
+            id: currentProjectId, 
+            name: project?.name || 'Project',
+            description: project?.description 
+          };
+          
+          // Send notification - assignmentId is the workerId (document ID in worker_assignments)
+          await sendProjectAssignmentNotification(workerId, projectData, workerId);
           
           successCount++;
         } catch (error) {

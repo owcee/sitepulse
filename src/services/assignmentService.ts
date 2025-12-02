@@ -146,21 +146,33 @@ export async function sendProjectAssignmentNotification(
   assignmentId: string
 ): Promise<void> {
   try {
+    if (!auth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    // Get engineer info for the notification
+    const engineerDoc = await getDoc(doc(db, 'engineer_accounts', auth.currentUser.uid));
+    if (!engineerDoc.exists()) {
+      throw new Error('Engineer account not found');
+    }
+    const engineerData = engineerDoc.data();
+    const engineerName = engineerData.name || 'Engineer';
+    const engineerEmail = engineerData.email || '';
+
     // Check if worker already has a project
     const workerDoc = await getDoc(doc(db, 'worker_accounts', workerId));
     const workerData = workerDoc.data();
     const hasExistingProject = workerData?.projectId && workerData.projectId !== null;
 
-    const notificationBody = hasExistingProject
-      ? `You have been invited to join "${projectInfo.name}". Accepting will switch you from your current project.`
-      : `You have been invited to join "${projectInfo.name}". Please review and accept or reject this assignment.`;
+    // Format notification message: Project name, Engineer name and email, then question
+    const notificationBody = `${projectInfo.name}\n\nEngineer: ${engineerName}\nEmail: ${engineerEmail}\n\nWould you like to accept or reject this assignment?`;
 
     await sendNotification(workerId, {
       title: hasExistingProject ? 'New Project Invitation (Switch)' : 'New Project Assignment',
       body: notificationBody,
       type: 'project_assignment',
       projectId: projectInfo.id,
-      assignmentId: assignmentId,
+      assignmentId: assignmentId, // This is the workerId (document ID in worker_assignments)
       status: 'pending'
     });
 
