@@ -153,7 +153,7 @@ export default function ReportLogsScreen() {
     setIsProcessing(true);
     try {
       if (selectedLog.type === 'task') {
-        await rejectPhoto(selectedLog.id, rejectionNotes);
+        await rejectPhoto(selectedLog.id, rejectionNotes, selectedLog.taskTitle);
       } else if (selectedLog.type === 'borrow') {
         await rejectBorrowRequest(selectedLog.id, rejectionNotes);
       } else {

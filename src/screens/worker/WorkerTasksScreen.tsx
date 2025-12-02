@@ -26,6 +26,7 @@ import { db } from '../../firebaseConfig';
 import { Task } from '../../types';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { getWorkerTasks, Task as FirebaseTask } from '../../services/taskService';
+import { getBatchSubmissionStatus } from '../../services/photoService';
 import { useProjectData } from '../../context/ProjectDataContext';
 
 export default function WorkerTasksScreen() {
@@ -38,6 +39,7 @@ export default function WorkerTasksScreen() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [taskPhotos, setTaskPhotos] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [submissionStatuses, setSubmissionStatuses] = useState<Map<string, {submittedToday: boolean, status?: 'pending' | 'approved' | 'rejected'}>>(new Map());
 
   // Load worker's tasks from Firestore
   useEffect(() => {
@@ -65,6 +67,13 @@ export default function WorkerTasksScreen() {
         : workerTasks;
       
       setTasks(filteredByProject);
+      
+      // Load submission statuses for all tasks
+      if (filteredByProject.length > 0) {
+        const taskIds = filteredByProject.map(t => t.id);
+        const statuses = await getBatchSubmissionStatus(taskIds, currentUser.uid);
+        setSubmissionStatuses(statuses);
+      }
     } catch (error: any) {
       console.error('Error loading worker tasks:', error);
       Alert.alert('Error', `Failed to load tasks: ${error.message}`);
@@ -296,6 +305,39 @@ export default function WorkerTasksScreen() {
                 </View>
               </View>
             </View>
+
+            {/* Today's Submission Status Badge */}
+            {(() => {
+              const submissionStatus = submissionStatuses.get(task.id);
+              if (submissionStatus?.submittedToday) {
+                const badgeColor = submissionStatus.status === 'approved' 
+                  ? constructionColors.complete 
+                  : submissionStatus.status === 'rejected'
+                  ? constructionColors.urgent
+                  : constructionColors.warning;
+                const badgeText = submissionStatus.status === 'approved'
+                  ? '✓ Submitted & Approved'
+                  : submissionStatus.status === 'rejected'
+                  ? '✗ Rejected - Resubmit'
+                  : '⏳ Submitted - Pending';
+                return (
+                  <View style={[styles.submissionBadge, { backgroundColor: badgeColor + '20', borderColor: badgeColor }]}>
+                    <Text style={[styles.submissionBadgeText, { color: badgeColor }]}>
+                      {badgeText}
+                    </Text>
+                  </View>
+                );
+              } else if (task.status === 'in_progress') {
+                return (
+                  <View style={[styles.submissionBadge, { backgroundColor: '#666' + '20', borderColor: '#666' }]}>
+                    <Text style={[styles.submissionBadgeText, { color: '#999' }]}>
+                      📷 Not submitted today
+                    </Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
 
             {/* Description */}
             <Paragraph style={styles.taskDescription} numberOfLines={3} ellipsizeMode="tail">
@@ -901,5 +943,19 @@ const styles = StyleSheet.create({
   historyEmptyText: {
     color: theme.colors.onSurfaceVariant,
     fontSize: fontSizes.sm,
+  },
+  submissionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  submissionBadgeText: {
+    fontSize: fontSizes.xs,
+    fontWeight: '600',
   },
 });

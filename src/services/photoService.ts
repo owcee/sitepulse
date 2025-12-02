@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   getDocs,
+  getDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import {
@@ -244,6 +245,138 @@ export async function canWorkerSubmitToday(taskId: string, workerId: string): Pr
 }
 
 /**
+ * Get worker's submission status for today for a specific task
+ * Used for displaying badges on task list
+ * @param taskId - Task ID
+ * @param workerId - Worker ID
+ * @returns Promise<{submittedToday: boolean, status?: string}> - Submission status
+ */
+export async function getWorkerTodaySubmissionStatus(
+  taskId: string, 
+  workerId: string
+): Promise<{submittedToday: boolean, status?: 'pending' | 'approved' | 'rejected'}> {
+  try {
+    const photosRef = collection(db, 'task_photos');
+    
+    // Get today's start and end timestamps
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    const q = query(
+      photosRef,
+      where('taskId', '==', taskId),
+      where('uploaderId', '==', workerId),
+      where('uploadedAt', '>=', todayStart),
+      where('uploadedAt', '<=', todayEnd)
+    );
+
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return { submittedToday: false };
+    }
+
+    // Get the most recent submission status
+    const submissions = snapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    })) as any[];
+    
+    // Sort by upload time, most recent first
+    submissions.sort((a, b) => {
+      const aTime = a.uploadedAt?.toDate?.()?.getTime() || 0;
+      const bTime = b.uploadedAt?.toDate?.()?.getTime() || 0;
+      return bTime - aTime;
+    });
+    
+    const latestSubmission = submissions[0];
+    
+    return { 
+      submittedToday: true, 
+      status: latestSubmission.verificationStatus 
+    };
+    
+  } catch (error) {
+    console.error('Error checking today submission status:', error);
+    return { submittedToday: false };
+  }
+}
+
+/**
+ * Get submission status for multiple tasks at once (batch)
+ * @param taskIds - Array of task IDs
+ * @param workerId - Worker ID
+ * @returns Promise<Map<string, {submittedToday: boolean, status?: string}>>
+ */
+export async function getBatchSubmissionStatus(
+  taskIds: string[], 
+  workerId: string
+): Promise<Map<string, {submittedToday: boolean, status?: 'pending' | 'approved' | 'rejected'}>> {
+  const results = new Map<string, {submittedToday: boolean, status?: 'pending' | 'approved' | 'rejected'}>();
+  
+  // Initialize all tasks as not submitted
+  taskIds.forEach(id => results.set(id, { submittedToday: false }));
+  
+  if (taskIds.length === 0) return results;
+  
+  try {
+    const photosRef = collection(db, 'task_photos');
+    
+    // Get today's start and end timestamps
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // Query all photos by this worker today
+    const q = query(
+      photosRef,
+      where('uploaderId', '==', workerId),
+      where('uploadedAt', '>=', todayStart),
+      where('uploadedAt', '<=', todayEnd)
+    );
+
+    const snapshot = await getDocs(q);
+    
+    // Group by taskId and find latest for each
+    const taskSubmissions = new Map<string, any[]>();
+    
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (taskIds.includes(data.taskId)) {
+        if (!taskSubmissions.has(data.taskId)) {
+          taskSubmissions.set(data.taskId, []);
+        }
+        taskSubmissions.get(data.taskId)!.push({
+          ...data,
+          uploadedAt: data.uploadedAt?.toDate?.() || new Date()
+        });
+      }
+    });
+    
+    // For each task, get the latest submission status
+    taskSubmissions.forEach((submissions, taskId) => {
+      submissions.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+      const latest = submissions[0];
+      results.set(taskId, {
+        submittedToday: true,
+        status: latest.verificationStatus
+      });
+    });
+    
+    return results;
+    
+  } catch (error) {
+    console.error('Error getting batch submission status:', error);
+    return results;
+  }
+}
+
+/**
  * Get all photos for a task
  * @param taskId - Task ID
  * @returns Promise<TaskPhoto[]> - Array of task photos
@@ -360,15 +493,21 @@ export async function approvePhoto(photoId: string): Promise<void> {
  * Reject a task photo (engineer action)
  * @param photoId - Photo ID
  * @param reason - Rejection reason
+ * @param taskTitle - Optional task title for notification
  * @returns Promise<void>
  */
-export async function rejectPhoto(photoId: string, reason: string): Promise<void> {
+export async function rejectPhoto(photoId: string, reason: string, taskTitle?: string): Promise<void> {
   try {
     if (!typedAuth.currentUser) {
       throw new Error('User not authenticated');
     }
 
     const photoRef = doc(db, 'task_photos', photoId);
+    
+    // Get the photo data first to get the uploader ID
+    const photoSnap = await getDoc(photoRef);
+    const photoData = photoSnap.data();
+    
     await updateDoc(photoRef, {
       verificationStatus: 'rejected',
       rejectionReason: reason,
@@ -377,6 +516,24 @@ export async function rejectPhoto(photoId: string, reason: string): Promise<void
     });
 
     console.log('Photo rejected:', photoId);
+    
+    // Send notification to the worker
+    if (photoData?.uploaderId) {
+      try {
+        await sendNotification(photoData.uploaderId, {
+          title: 'Photo Rejected',
+          body: `Your photo for "${taskTitle || 'a task'}" was rejected. Reason: ${reason}. Please upload a new photo.`,
+          type: 'task_rejected',
+          relatedId: photoId,
+          projectId: photoData.projectId,
+          status: 'warning'
+        });
+        console.log('Rejection notification sent to worker:', photoData.uploaderId);
+      } catch (notifError) {
+        console.error('Failed to send rejection notification:', notifError);
+        // Don't fail the whole operation if notification fails
+      }
+    }
   } catch (error) {
     console.error('Error rejecting photo:', error);
     throw new Error('Failed to reject photo');
