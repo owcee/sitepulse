@@ -319,23 +319,23 @@ export default function WorkerTasksScreen() {
                           : submissionStatus.status === 'rejected'
                           ? constructionColors.urgent
                           : constructionColors.warning;
-                        const badgeIcon = submissionStatus.status === 'approved'
-                          ? '✓'
+                        const badgeText = submissionStatus.status === 'approved'
+                          ? '✓ Submitted'
                           : submissionStatus.status === 'rejected'
-                          ? '✗'
-                          : '⏳';
+                          ? '✗ Rejected'
+                          : '⏳ Pending';
                         return (
                           <View style={[styles.submissionBadgeInline, { backgroundColor: badgeColor }]}>
                             <Text style={styles.submissionBadgeTextInline}>
-                              {badgeIcon}
+                              {badgeText}
                             </Text>
                           </View>
                         );
                       } else if (task.status === 'in_progress') {
                         return (
-                          <View style={[styles.submissionBadgeInline, { backgroundColor: '#666' }]}>
-                            <Text style={styles.submissionBadgeTextInline}>
-                              📷
+                          <View style={[styles.submissionBadgeInline, { backgroundColor: '#333', borderWidth: 1, borderColor: '#555' }]}>
+                            <Text style={[styles.submissionBadgeTextInline, { color: '#888' }]}>
+                              Not submitted
                             </Text>
                           </View>
                         );
@@ -978,18 +978,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   submissionBadgeInline: {
-    width: 24,
-    height: 24,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: spacing.xs,
   },
   submissionBadgeTextInline: {
-    fontSize: 12,
+    fontSize: 10,
     color: 'white',
-    textAlign: 'center',
+    fontWeight: '600',
   },
 });
