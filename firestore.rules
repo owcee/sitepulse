@@ -168,8 +168,18 @@ service cloud.firestore {
     }
     
     // Survey tracking - users can read/write their own survey tracking
-    match /survey_tracking/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    // Document ID format: userId_projectId (composite key for per-project tracking)
+    match /survey_tracking/{trackingId} {
+      // Allow if authenticated and:
+      // 1. Document exists and userId field matches, OR
+      // 2. Creating new document and userId in request matches
+      allow read: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
     }
     
     // Site surveys - engineers can create, read their project's surveys
