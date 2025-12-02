@@ -332,7 +332,13 @@ export async function getWorkerProjects(workerId: string): Promise<Array<{projec
             };
           }
           return null;
-        } catch (error) {
+        } catch (error: any) {
+          // If permission denied, worker doesn't have access to this project yet
+          // This can happen if they have a pending assignment notification
+          if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+            console.warn(`Worker doesn't have access to project ${projectId} yet (may be pending assignment)`);
+            return null;
+          }
           console.error(`Error fetching project ${projectId}:`, error);
           return null;
         }

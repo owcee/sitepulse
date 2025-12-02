@@ -57,14 +57,24 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
       const projects = await getWorkerProjects(auth.currentUser.uid);
       const projectDetails = await Promise.all(
         projects.map(async (p) => {
-          const projectData = await getProject(p.projectId);
-          return {
-            projectId: p.projectId,
-            projectName: projectData?.name || p.projectName
-          };
+          try {
+            const projectData = await getProject(p.projectId);
+            return {
+              projectId: p.projectId,
+              projectName: projectData?.name || p.projectName
+            };
+          } catch (error: any) {
+            // If permission denied, skip this project (worker doesn't have access yet)
+            if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+              console.warn(`Skipping project ${p.projectId} - worker doesn't have access yet`);
+              return null;
+            }
+            throw error;
+          }
         })
       );
-      setWorkerProjects(projectDetails);
+      // Filter out null values (projects worker can't access)
+      setWorkerProjects(projectDetails.filter(p => p !== null) as Array<{projectId: string, projectName: string}>);
     } catch (error) {
       console.error('Error loading worker projects:', error);
     }
