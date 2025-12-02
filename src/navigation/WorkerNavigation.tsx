@@ -56,7 +56,10 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
 
   // Subscribe to unread notifications
   useEffect(() => {
-    if (!user.uid) return;
+    if (!user.uid) {
+      setUnreadNotifications(0);
+      return;
+    }
 
     const notificationsRef = collection(db, 'notifications');
     const q = query(
@@ -71,7 +74,11 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
         const data = doc.data();
         return !data.deleted; // Exclude deleted notifications
       }).length;
+      console.log('Header badge - Unread notifications count:', unreadCount);
       setUnreadNotifications(unreadCount);
+    }, (error) => {
+      console.error('Error subscribing to notifications in header:', error);
+      setUnreadNotifications(0);
     });
 
     return () => unsubscribe();
