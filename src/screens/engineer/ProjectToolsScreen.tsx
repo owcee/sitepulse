@@ -24,6 +24,7 @@ import { TaskManagementChart, DelayPredictionChart, BudgetChart } from '../../co
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { getEngineerProjects } from '../../services/projectService';
+import { getProjectTasks } from '../../services/taskService';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { getAuth } from 'firebase/auth';
@@ -94,12 +95,72 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
   const [projectMenuVisible, setProjectMenuVisible] = useState(false);
   const [engineerProjects, setEngineerProjects] = useState<any[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [delayData, setDelayData] = useState({
+    onSchedule: 0,
+    atRisk: 0,
+    delayed: 0,
+    total: 0,
+  });
 
   // Use passed props or fallback to mock data
   const currentProject = project || {
     name: 'Downtown Office Complex',
     description: 'Construction of 12-story office building'
   };
+
+  // Load task delay data
+  useEffect(() => {
+    if (!projectId) return;
+    
+    let isMounted = true;
+    const loadTaskDelayData = async () => {
+      try {
+        const tasks = await getProjectTasks(projectId);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let onSchedule = 0;
+        let atRisk = 0;
+        let delayed = 0;
+        
+        // Only count active tasks (not completed, cancelled, or blocked)
+        const activeTasks = tasks.filter(t => 
+          t.status === 'not_started' || t.status === 'in_progress'
+        );
+        
+        activeTasks.forEach(task => {
+          const dueDate = new Date(task.planned_end_date);
+          dueDate.setHours(0, 0, 0, 0);
+          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysUntilDue < 0) {
+            // Overdue
+            delayed++;
+          } else if (daysUntilDue <= 3) {
+            // Due within 3 days - at risk
+            atRisk++;
+          } else {
+            // On schedule
+            onSchedule++;
+          }
+        });
+        
+        if (isMounted) {
+          setDelayData({
+            onSchedule,
+            atRisk,
+            delayed,
+            total: activeTasks.length,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading task delay data:', error);
+      }
+    };
+    
+    loadTaskDelayData();
+    return () => { isMounted = false; };
+  }, [projectId]);
 
   // Load engineer's projects when menu opens
   useEffect(() => {
@@ -190,6 +251,7 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
       component: (
         <DelayPredictionChart 
           onPress={() => navigation.navigate('Delay Prediction')}
+          delayData={delayData}
         />
       ),
     },

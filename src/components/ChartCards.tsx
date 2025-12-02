@@ -94,13 +94,22 @@ export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
 };
 
 // Task Delay Summary Chart Card
-export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
-  // This would come from actual task data in real implementation
-  const taskDelayData = {
-    onSchedule: 2,
-    atRisk: 1,
-    delayed: 1,
-    total: 4,
+interface DelayChartProps extends ChartCardProps {
+  delayData?: {
+    onSchedule: number;
+    atRisk: number;
+    delayed: number;
+    total: number;
+  };
+}
+
+export const DelayPredictionChart: React.FC<DelayChartProps> = ({ onPress, delayData }) => {
+  // Use provided data or fallback to zeros
+  const taskDelayData = delayData || {
+    onSchedule: 0,
+    atRisk: 0,
+    delayed: 0,
+    total: 0,
   };
 
   const tasksWithDelays = taskDelayData.atRisk + taskDelayData.delayed;
@@ -152,7 +161,7 @@ export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
               Tasks on schedule: {taskDelayData.onSchedule} of {taskDelayData.total}
             </Paragraph>
             <ProgressBar 
-              progress={taskDelayData.onSchedule / taskDelayData.total} 
+              progress={taskDelayData.total > 0 ? taskDelayData.onSchedule / taskDelayData.total : 0} 
               color={constructionColors.complete}
               style={styles.progressBar}
             />
@@ -162,18 +171,26 @@ export const DelayPredictionChart: React.FC<ChartCardProps> = ({ onPress }) => {
             Current task delay status breakdown
           </Paragraph>
 
-          <PieChart
-            data={taskStatusData}
-            width={chartWidth}
-            height={180}
-            chartConfig={{
-              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-            }}
-            accessor="population"
-            backgroundColor={theme.colors.surface}
-            paddingLeft="15"
-            absolute
-          />
+          {taskStatusData.length > 0 ? (
+            <PieChart
+              data={taskStatusData}
+              width={chartWidth}
+              height={180}
+              chartConfig={{
+                color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+              }}
+              accessor="population"
+              backgroundColor={theme.colors.surface}
+              paddingLeft="15"
+              absolute
+            />
+          ) : (
+            <View style={styles.emptyChartContainer}>
+              <Paragraph style={styles.emptyChartText}>
+                No active tasks to display
+              </Paragraph>
+            </View>
+          )}
         </Card.Content>
       </Card>
     </TouchableOpacity>
@@ -318,6 +335,16 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
     marginBottom: spacing.xs,
+  },
+  emptyChartContainer: {
+    height: 180,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyChartText: {
+    fontSize: fontSizes.md,
+    color: theme.colors.onSurfaceVariant,
+    textAlign: 'center',
   },
 });
 
