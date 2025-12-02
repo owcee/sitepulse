@@ -290,7 +290,7 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
       title: 'Manage Workers',
       icon: 'people',
       color: constructionColors.complete,
-      description: 'Workers',
+      description: 'Workers & Project Team',
       onPress: () => navigation.navigate('WorkersManagement'),
     },
     {
