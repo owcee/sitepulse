@@ -10,6 +10,10 @@ import { theme, softDarkOrange } from '../utils/theme';
 import { getWorkerProjects } from '../services/assignmentService';
 import { getProject } from '../services/projectService';
 import { auth } from '../firebaseConfig';
+import { subscribeToNotifications } from '../services/notificationService';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
+import { useNavigation } from '@react-navigation/native';
 
 // Worker Screens
 import WorkerTasksScreen from '../screens/worker/WorkerTasksScreen';
@@ -34,9 +38,11 @@ interface Props {
 
 // Custom header component for workers
 const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { onProjectChange?: (projectId: string) => void }) => {
+  const navigation = useNavigation<any>();
   const [projectMenuVisible, setProjectMenuVisible] = useState(false);
   const [workerProjects, setWorkerProjects] = useState<Array<{projectId: string, projectName: string}>>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(project || null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     loadWorkerProjects();
@@ -47,6 +53,29 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
       setCurrentProject(project);
     }
   }, [project]);
+
+  // Subscribe to unread notifications
+  useEffect(() => {
+    if (!user.uid) return;
+
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(
+      notificationsRef,
+      where('userId', '==', user.uid),
+      where('read', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Filter out deleted notifications
+      const unreadCount = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return !data.deleted; // Exclude deleted notifications
+      }).length;
+      setUnreadNotifications(unreadCount);
+    });
+
+    return () => unsubscribe();
+  }, [user.uid]);
 
   const loadWorkerProjects = async () => {
     try {
@@ -153,6 +182,29 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
           ))}
         </Menu>
       )}
+
+      {/* Notifications Icon with Badge */}
+      <View style={{ position: 'relative', marginRight: 0 }}>
+        <IconButton
+          icon="bell"
+          iconColor="white"
+          size={24}
+          onPress={() => navigation.navigate('Notifications')}
+        />
+        {unreadNotifications > 0 && (
+          <Badge 
+            size={16} 
+            style={{ 
+              position: 'absolute', 
+              top: 8, 
+              right: 8,
+              backgroundColor: '#FF3B30' // Red badge color
+            }}
+          >
+            {unreadNotifications}
+          </Badge>
+        )}
+      </View>
 
     </Appbar.Header>
   );
