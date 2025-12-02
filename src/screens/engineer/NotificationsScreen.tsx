@@ -121,6 +121,7 @@ interface NotificationsScreenProps {
 }
 
 export default function NotificationsScreen({ visible, onDismiss, onRefresh, currentProjectId }: NotificationsScreenProps = {}) {
+  // Get navigation - it may not be ready during initial render
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -236,6 +237,21 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
 
   const navigateToScreen = (notificationType: Notification['type']) => {
     try {
+      // Double-check navigation is ready before navigating
+      if (!navigation || typeof navigation.navigate !== 'function') {
+        console.warn('[Notification] Navigation not available, cannot navigate');
+        return;
+      }
+
+      // Check if navigation is ready (if the method exists)
+      // Some navigation objects have isReady(), others don't
+      const isReady = navigation.isReady ? navigation.isReady() : true;
+      if (!isReady) {
+        console.warn('[Notification] Navigation not ready yet, retrying...');
+        setTimeout(() => navigateToScreen(notificationType), 300);
+        return;
+      }
+
       // Navigate to source based on notification type
       if (notificationType === 'task_approval' || notificationType === 'task_rejection') {
         // Navigate to Report Logs (verification logs)
@@ -264,6 +280,7 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
       }
     } catch (error) {
       console.error('[Notification] Error navigating:', error);
+      // If navigation fails, it's likely not ready - don't crash the app
     }
   };
 
