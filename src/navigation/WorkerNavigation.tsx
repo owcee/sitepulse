@@ -202,6 +202,36 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
   const [currentProject, setCurrentProject] = useState<Project | null>(project || null);
   const [notificationBadgeCount, setNotificationBadgeCount] = useState<number | undefined>(undefined);
 
+  // Subscribe to unread notifications immediately on mount/login to update badge
+  useEffect(() => {
+    if (!user.uid) {
+      setNotificationBadgeCount(undefined);
+      return;
+    }
+
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(
+      notificationsRef,
+      where('userId', '==', user.uid),
+      where('read', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Filter out deleted notifications
+      const unreadCount = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return !data.deleted; // Exclude deleted notifications
+      }).length;
+      console.log('Tab bar badge - Unread notifications count:', unreadCount);
+      setNotificationBadgeCount(unreadCount > 0 ? unreadCount : undefined);
+    }, (error) => {
+      console.error('Error subscribing to notifications for tab badge:', error);
+      setNotificationBadgeCount(undefined);
+    });
+
+    return () => unsubscribe();
+  }, [user.uid]);
+
   const handleProjectChange = async (projectId: string) => {
     try {
       const { getProject } = await import('../services/projectService');
