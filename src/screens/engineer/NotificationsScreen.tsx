@@ -219,28 +219,24 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
       }
     }
     
-    // Check if navigation is ready before navigating
-    if (!navigation || !navigation.navigate) {
-      console.warn('[Notification] Navigation not ready, delaying navigation...');
-      // Retry after a short delay
-      setTimeout(() => {
-        if (navigation && navigation.navigate) {
-          navigateToScreen(notification.type);
-        } else {
-          console.error('[Notification] Navigation still not available after delay');
-        }
-      }, 500);
-      return;
-    }
-    
-    navigateToScreen(notification.type);
+    // Navigate to the screen (navigateToScreen will handle retries internally)
+    navigateToScreen(notification.type, 0);
   };
 
-  const navigateToScreen = (notificationType: Notification['type']) => {
+  // Track retry attempts to prevent infinite loops
+  const retryCountRef = React.useRef(0);
+  const MAX_RETRIES = 5;
+
+  const navigateToScreen = (notificationType: Notification['type'], retryCount = 0) => {
     try {
       // Double-check navigation is ready before navigating
       if (!navigation || typeof navigation.navigate !== 'function') {
-        console.warn('[Notification] Navigation not available, cannot navigate');
+        if (retryCount < MAX_RETRIES) {
+          console.warn(`[Notification] Navigation not available, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+          setTimeout(() => navigateToScreen(notificationType, retryCount + 1), 500);
+        } else {
+          console.error('[Notification] Navigation not available after max retries, giving up');
+        }
         return;
       }
 
@@ -248,10 +244,17 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
       // Some navigation objects have isReady(), others don't
       const isReady = navigation.isReady ? navigation.isReady() : true;
       if (!isReady) {
-        console.warn('[Notification] Navigation not ready yet, retrying...');
-        setTimeout(() => navigateToScreen(notificationType), 300);
+        if (retryCount < MAX_RETRIES) {
+          console.warn(`[Notification] Navigation not ready yet, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+          setTimeout(() => navigateToScreen(notificationType, retryCount + 1), 500);
+        } else {
+          console.error('[Notification] Navigation not ready after max retries, giving up');
+        }
         return;
       }
+
+      // Reset retry count on success
+      retryCountRef.current = 0;
 
       // Navigate to source based on notification type
       if (notificationType === 'task_approval' || notificationType === 'task_rejection') {
