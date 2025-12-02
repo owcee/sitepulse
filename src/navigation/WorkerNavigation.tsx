@@ -226,21 +226,22 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
       where('read', '==', false)
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      // Filter out deleted notifications and invalid ones
-      const validNotifications = await Promise.all(
-        snapshot.docs.map(async (doc) => {
-          const data = doc.data();
-          
-          // Exclude deleted notifications
-          if (data.deleted) return null;
-          
-          // Exclude buggy notifications with hardcoded "Downtown Office Complex" or "switch" language
-          if (data.body && (
-            (data.body.includes('Downtown Office Complex') && data.body.includes('Accepting will switch')) ||
-            data.body.includes('accepting will switch you from your current project')
-          )) {
-            // Try to delete it
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Filter out deleted notifications and invalid ones synchronously
+      // For async checks (like assignment status), we'll do a quick filter first
+      const validDocs = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        
+        // Exclude deleted notifications
+        if (data.deleted) return false;
+        
+        // Exclude buggy notifications with hardcoded "Downtown Office Complex" or "switch" language
+        if (data.body && (
+          (data.body.includes('Downtown Office Complex') && data.body.includes('Accepting will switch')) ||
+          data.body.includes('accepting will switch you from your current project')
+        )) {
+          // Mark for deletion (async, won't block badge count)
+          (async () => {
             try {
               const { updateDoc, serverTimestamp } = await import('firebase/firestore');
               await updateDoc(doc.ref, {
@@ -250,42 +251,65 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
             } catch (error) {
               console.error('Error deleting buggy notification:', error);
             }
-            return null;
-          }
-          
-          // For project_assignment notifications, check if assignment has been accepted/rejected
-          if (data.type === 'project_assignment') {
-            try {
-              const { getDoc, doc: docFn } = await import('firebase/firestore');
-              if (!user.uid) return null;
-              const assignmentRef = docFn(db, 'worker_assignments', user.uid);
-              const assignmentDoc = await getDoc(assignmentRef);
-              
-              if (assignmentDoc.exists()) {
-                const assignmentData = assignmentDoc.data();
-                // If assignment is accepted or rejected, exclude the notification
-                if (assignmentData.status === 'accepted' || assignmentData.status === 'rejected') {
-                  return null;
+          })();
+          return false;
+        }
+        
+        // Exclude invalid notifications
+        if (!data.title || (data.type === 'project_assignment' && !data.projectId)) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      // For project_assignment notifications, check assignment status asynchronously
+      // but don't block the badge count update - we'll update it after checking
+      (async () => {
+        try {
+          const assignmentChecks = await Promise.all(
+            validDocs.map(async (doc) => {
+              const data = doc.data();
+              if (data.type === 'project_assignment') {
+                try {
+                  const { getDoc, doc: docFn } = await import('firebase/firestore');
+                  if (!user.uid) return { doc, valid: true };
+                  const assignmentRef = docFn(db, 'worker_assignments', user.uid);
+                  const assignmentDoc = await getDoc(assignmentRef);
+                  
+                  if (assignmentDoc.exists()) {
+                    const assignmentData = assignmentDoc.data();
+                    // If assignment is accepted or rejected, exclude the notification
+                    if (assignmentData.status === 'accepted' || assignmentData.status === 'rejected') {
+                      return { doc, valid: false };
+                    }
+                  }
+                } catch (error) {
+                  // If we can't check, keep the notification to be safe
+                  console.error('Error checking assignment status for badge:', error);
                 }
               }
-            } catch (error) {
-              // If we can't check, keep the notification to be safe
-              console.error('Error checking assignment status for badge:', error);
-            }
-          }
+              return { doc, valid: true };
+            })
+          );
           
-          // Exclude invalid notifications
-          if (!data.title || (data.type === 'project_assignment' && !data.projectId)) {
-            return null;
-          }
-          
-          return doc;
-        })
-      );
+          const finalValidDocs = assignmentChecks.filter(check => check.valid).map(check => check.doc);
+          const unreadCount = finalValidDocs.length;
+          console.log('Tab bar badge - Unread notifications count (filtered):', unreadCount);
+          setNotificationBadgeCount(unreadCount > 0 ? unreadCount : undefined);
+        } catch (error) {
+          console.error('Error filtering notifications for badge:', error);
+          // Fallback to simple count if async check fails
+          const unreadCount = validDocs.length;
+          setNotificationBadgeCount(unreadCount > 0 ? unreadCount : undefined);
+        }
+      })();
       
-      const unreadCount = validNotifications.filter(n => n !== null).length;
-      console.log('Tab bar badge - Unread notifications count (filtered):', unreadCount);
-      setNotificationBadgeCount(unreadCount > 0 ? unreadCount : undefined);
+      // Set initial count immediately (before async assignment checks)
+      const initialCount = validDocs.length;
+      if (initialCount === 0) {
+        setNotificationBadgeCount(undefined);
+      }
     }, (error) => {
       console.error('Error subscribing to notifications for tab badge:', error);
       setNotificationBadgeCount(undefined);
