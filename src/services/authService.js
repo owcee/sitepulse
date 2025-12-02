@@ -49,17 +49,18 @@ export async function signIn(email, password) {
     
     // Provide user-friendly error messages
     if (error.code === 'auth/user-not-found') {
-      throw new Error('No account found with this email address.');
+      throw new Error('Email incorrect');
     } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
       throw new Error('Wrong password');
     } else if (error.code === 'auth/invalid-email') {
-      throw new Error('Invalid email address format.');
+      throw new Error('Email incorrect');
     } else if (error.code === 'auth/user-disabled') {
       throw new Error('This account has been disabled.');
     } else if (error.code === 'auth/too-many-requests') {
       throw new Error('Too many failed attempts. Please try again later.');
     } else {
-      throw new Error(error.message || 'Failed to sign in. Please try again.');
+      // For any other Firebase errors, show a generic message instead of the Firebase error
+      throw new Error('Failed to sign in. Please check your email and password.');
     }
   }
 }

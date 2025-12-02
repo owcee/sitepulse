@@ -184,7 +184,7 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
       )}
 
       {/* Notifications Icon with Badge */}
-      <View style={{ position: 'relative', marginRight: 0 }}>
+      <View style={{ position: 'relative', marginRight: 8 }}>
         <IconButton
           icon="bell"
           iconColor="white"
@@ -193,15 +193,18 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
         />
         {unreadNotifications > 0 && (
           <Badge 
-            size={16} 
+            size={18} 
             style={{ 
               position: 'absolute', 
-              top: 8, 
-              right: 8,
-              backgroundColor: '#FF3B30' // Red badge color
+              top: 4, 
+              right: 4,
+              backgroundColor: '#FF3B30', // Red badge color
+              minWidth: 18,
+              height: 18,
             }}
+            visible={true}
           >
-            {unreadNotifications}
+            {unreadNotifications > 99 ? '99+' : unreadNotifications}
           </Badge>
         )}
       </View>
