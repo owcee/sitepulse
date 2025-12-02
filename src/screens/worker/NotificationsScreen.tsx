@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -24,7 +24,7 @@ import {
   Title,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
@@ -113,9 +113,17 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [processingAction, setProcessingAction] = useState(false);
 
+  // Load notifications on mount and when screen comes into focus
   useEffect(() => {
     loadNotifications();
   }, []);
+
+  // Reload notifications when screen comes into focus (e.g., after login)
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [])
+  );
 
   // Update tab badge when unread count changes
   useEffect(() => {
@@ -166,8 +174,23 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
         })
       );
       
-      // Remove null values (filtered out notifications)
-      const validNotifications = filteredNotifications.filter(n => n !== null) as unknown as Notification[];
+      // Remove null values (filtered out notifications) and convert to Notification format
+      const validNotifications = filteredNotifications
+        .filter(n => n !== null)
+        .map(n => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          message: n.body || n.message || '', // Convert body to message
+          timestamp: n.timestamp?.toDate ? n.timestamp.toDate() : (n.timestamp || new Date()),
+          createdAt: n.timestamp?.toDate ? n.timestamp.toDate() : (n.timestamp || new Date()),
+          isRead: n.read || false,
+          priority: n.status === 'pending' ? 'urgent' : (n.status === 'accepted' || n.status === 'completed' ? 'low' : 'medium'),
+          actionUrl: n.relatedId,
+          projectId: n.projectId,
+          assignmentId: n.assignmentId,
+          status: n.status || 'pending'
+        })) as Notification[];
       setNotifications(validNotifications);
     } catch (error) {
       console.error('Error loading notifications:', error);

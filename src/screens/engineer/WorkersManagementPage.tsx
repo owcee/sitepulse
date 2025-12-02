@@ -322,7 +322,7 @@ export default function WorkersManagementPage() {
           />
           <View style={styles.headerText}>
             <Text style={styles.title}>Workers Management</Text>
-            <Text style={styles.subtitle}>Manage your project team</Text>
+            <Text style={styles.subtitle}>Project Team</Text>
           </View>
         </View>
       </View>

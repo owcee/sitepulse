@@ -50,8 +50,8 @@ export async function signIn(email, password) {
     // Provide user-friendly error messages
     if (error.code === 'auth/user-not-found') {
       throw new Error('No account found with this email address.');
-    } else if (error.code === 'auth/wrong-password') {
-      throw new Error('Incorrect password. Please try again.');
+    } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      throw new Error('Wrong password');
     } else if (error.code === 'auth/invalid-email') {
       throw new Error('Invalid email address format.');
     } else if (error.code === 'auth/user-disabled') {
