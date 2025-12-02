@@ -128,9 +128,12 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
   // Update tab badge when unread count changes
   useEffect(() => {
     const unreadCount = notifications.filter(n => !n.isRead).length;
+    // Update the tab bar badge
     navigation.setOptions({
       tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
     });
+    // Also update route params for the tab navigator
+    navigation.setParams({ unreadCount });
   }, [notifications, navigation]);
 
   const loadNotifications = async () => {

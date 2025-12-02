@@ -363,13 +363,9 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
         />
         <Tab.Screen 
           name="Notifications" 
-          options={({ route }) => {
-            // Get unread count from route params if available
-            const unreadCount = (route.params as any)?.unreadCount;
-            return {
-              tabBarLabel: 'Notifications',
-              tabBarBadge: unreadCount && unreadCount > 0 ? unreadCount : undefined,
-            };
+          options={{
+            tabBarLabel: 'Notifications',
+            // Badge will be updated by NotificationsScreen via navigation.setOptions
           }}
         >
           {() => <NotificationsScreen onAppRefresh={onRefresh} />}
