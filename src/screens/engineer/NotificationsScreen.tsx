@@ -122,6 +122,7 @@ interface NotificationsScreenProps {
 
 export default function NotificationsScreen({ visible, onDismiss, onRefresh, currentProjectId }: NotificationsScreenProps = {}) {
   // Get navigation - it may not be ready during initial render
+  // useNavigation() must be called unconditionally (React hook rules)
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
