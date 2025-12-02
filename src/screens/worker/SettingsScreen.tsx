@@ -303,16 +303,6 @@ export default function SettingsScreen() {
               mode="outlined"
             />
             
-            <TextInput
-              label="Email *"
-              value={profileEmail}
-              editable={false}
-              keyboardType="email-address"
-              style={styles.modalInput}
-              mode="outlined"
-              disabled
-            />
-            
             
             <View style={styles.modalActions}>
               <Button

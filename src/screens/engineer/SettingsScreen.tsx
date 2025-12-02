@@ -325,16 +325,6 @@ export default function SettingsScreen({ visible, onDismiss }: SettingsScreenPro
               style={styles.modalInput}
             />
             
-            <TextInput
-              mode="outlined"
-              label="Email"
-              value={profileEmail}
-              editable={false}
-              keyboardType="email-address"
-              style={styles.modalInput}
-              disabled
-            />
-            
             <View style={styles.modalActions}>
               <Button onPress={() => setEditProfileVisible(false)}>
                 Cancel
