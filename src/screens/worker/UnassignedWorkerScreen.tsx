@@ -93,8 +93,8 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
     setAccepting(true);
     try {
       await acceptAssignment(user.uid, pendingInvite.projectId);
-      setDialogTitle('Project Switched! 🎉');
-      setDialogMessage(`You've joined ${pendingInvite.projectName}. Refreshing...`);
+      setDialogTitle('Project Added! 🎉');
+      setDialogMessage(`You've been added to ${pendingInvite.projectName}. You can switch between projects using the dropdown menu. Refreshing...`);
       setShowSuccessDialog(true);
     } catch (error: any) {
       setDialogTitle('Error');
@@ -345,10 +345,10 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
           }}
           style={styles.dialog}
         >
-          <Dialog.Title style={styles.dialogTitle}>Switch Project?</Dialog.Title>
+          <Dialog.Title style={styles.dialogTitle}>Add Project?</Dialog.Title>
           <Dialog.Content>
             <Paragraph style={styles.dialogMessage}>
-              You are currently assigned to another project. Accepting this invitation will switch you to "{pendingInvite?.projectName}".{'\n\n'}Do you want to continue?
+              You are currently assigned to another project. Accepting this invitation will add "{pendingInvite?.projectName}" to your projects list. You can switch between projects using the dropdown menu.{'\n\n'}Do you want to continue?
             </Paragraph>
           </Dialog.Content>
           <Dialog.Actions>
@@ -366,7 +366,7 @@ export default function UnassignedWorkerScreen({ user, onRefresh }: UnassignedWo
               textColor={theme.colors.primary}
               labelStyle={styles.dialogButtonText}
             >
-              Switch Project
+              Add Project
             </Button>
           </Dialog.Actions>
         </Dialog>

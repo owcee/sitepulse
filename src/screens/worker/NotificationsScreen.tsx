@@ -569,8 +569,15 @@ export default function NotificationsScreen({ onAppRefresh, onBadgeUpdate }: Not
             {selectedNotification && (
               <>
                 <Paragraph style={styles.acceptRejectDialogMessage}>
-                  {selectedNotification.message}
+                  {selectedNotification.message && !selectedNotification.message.includes('Accepting will switch') 
+                    ? selectedNotification.message 
+                    : `You have been invited to join a new project.\n\n${selectedNotification.message?.split('\n\n').slice(1).join('\n\n') || 'Would you like to accept or reject this assignment?'}`}
                 </Paragraph>
+                {selectedNotification.message && selectedNotification.message.includes('Accepting will switch') && (
+                  <Paragraph style={[styles.acceptRejectDialogMessage, { marginTop: 8, fontStyle: 'italic', color: theme.colors.onSurfaceVariant }]}>
+                    Note: Accepting will add this project to your projects list. You can switch between projects using the dropdown menu.
+                  </Paragraph>
+                )}
               </>
             )}
           </Dialog.Content>
