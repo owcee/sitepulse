@@ -534,7 +534,12 @@ export default function WorkersManagementPage() {
                 <View key={worker.id}>
                   <List.Item
                     title={worker.name}
-                    description={worker.email}
+                    description={
+                      worker.hasProject 
+                        ? `${worker.email}\nAlready assigned to a project (can still be assigned to this one)`
+                        : worker.email
+                    }
+                    descriptionNumberOfLines={2}
                     left={(props) => (
                       <Avatar.Text
                         {...props}

@@ -18,6 +18,10 @@ import {
   Divider,
   Button,
   ActivityIndicator,
+  Portal,
+  Dialog,
+  Paragraph,
+  Title,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -105,6 +109,9 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread' | 'urgent'>('all');
+  const [showAcceptRejectModal, setShowAcceptRejectModal] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [processingAction, setProcessingAction] = useState(false);
 
   useEffect(() => {
     loadNotifications();
@@ -200,7 +207,14 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
   };
 
   const handleNotificationPress = async (notification: Notification) => {
-    // Mark notification as read
+    // For project_assignment notifications, show accept/reject modal
+    if (notification.type === 'project_assignment' && notification.status === 'pending') {
+      setSelectedNotification(notification);
+      setShowAcceptRejectModal(true);
+      return;
+    }
+
+    // Mark notification as read for other types
     try {
       if (!notification.isRead) {
         await markNotificationAsRead(notification.id);
@@ -218,9 +232,6 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
     } else if (notification.type === 'message') {
       // @ts-ignore
       navigation.navigate('Chat');
-    } else if (notification.type === 'project_assignment') {
-      // Could navigate to project details or do nothing
-      return;
     } else {
       // Default: navigate to Tasks for other notification types
       // @ts-ignore
@@ -231,105 +242,55 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
   const handleAcceptAssignment = async (notification: Notification) => {
     if (!notification.assignmentId || !notification.projectId) return;
     
-    // Check if worker already has a project (get from auth user)
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
+    setProcessingAction(true);
     
     try {
-      // Get worker's current project status
-      const { getCurrentUser } = await import('../../services/authService');
-      const user = await getCurrentUser();
-      const hasExistingProject = user?.projectId && user.projectId !== null;
+      await acceptProjectAssignment(
+        notification.id, 
+        notification.assignmentId, 
+        notification.projectId
+      );
       
-      if (hasExistingProject) {
-        // Show warning for project switch
-        Alert.alert(
-          'Switch Project?',
-          `You are currently assigned to another project. Accepting this invitation will switch you to the new project.\n\nDo you want to continue?`,
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
-            {
-              text: 'Switch Project',
-              onPress: async () => {
-                try {
-                  await acceptProjectAssignment(
-                    notification.id, 
-                    notification.assignmentId || '', 
-                    notification.projectId || ''
-                  );
-                  
-                  // Remove notification from list immediately
-                  setNotifications(prev => prev.filter(n => n.id !== notification.id));
-                  
-                  // Auto-refresh the app to load the new project
-                  if (onAppRefresh) {
-                    onAppRefresh();
-                  }
-                } catch (error: any) {
-                  Alert.alert('Error', `Failed to accept assignment: ${error.message}`);
-                }
-              }
-            }
-          ]
-        );
-      } else {
-        // Regular acceptance
-        await acceptProjectAssignment(
-          notification.id, 
-          notification.assignmentId, 
-          notification.projectId
-        );
-        
-        // Remove notification from list immediately
-        setNotifications(prev => prev.filter(n => n.id !== notification.id));
-        
-        // Auto-refresh the app to load the new project
-        if (onAppRefresh) {
-          onAppRefresh();
-        }
+      // Remove notification from list after successful acceptance
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      setShowAcceptRejectModal(false);
+      setSelectedNotification(null);
+      
+      // Auto-refresh the app to load the new project
+      if (onAppRefresh) {
+        onAppRefresh();
       }
     } catch (error: any) {
       Alert.alert('Error', `Failed to accept assignment: ${error.message}`);
+    } finally {
+      setProcessingAction(false);
     }
   };
 
   const handleRejectAssignment = async (notification: Notification) => {
     if (!notification.assignmentId || !notification.projectId) return;
     
-    Alert.alert(
-      'Reject Assignment',
-      'Are you sure you want to reject this project assignment?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await rejectProjectAssignment(
-                notification.id,
-                notification.assignmentId!,
-                notification.projectId!
-              );
-              
-              // Refresh notifications to show updated status
-              await loadNotifications();
-              
-              Alert.alert(
-                'Assignment Rejected',
-                'You have declined the project assignment.',
-                [{ text: 'OK' }]
-              );
-            } catch (error: any) {
-              Alert.alert('Error', `Failed to reject assignment: ${error.message}`);
-            }
-          }
-        }
-      ]
-    );
+    setProcessingAction(true);
+    
+    try {
+      await rejectProjectAssignment(
+        notification.id,
+        notification.assignmentId!,
+        notification.projectId!
+      );
+      
+      // Remove notification from list after successful rejection
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      setShowAcceptRejectModal(false);
+      setSelectedNotification(null);
+      
+      // Refresh notifications to show updated status
+      await loadNotifications();
+    } catch (error: any) {
+      Alert.alert('Error', `Failed to reject assignment: ${error.message}`);
+    } finally {
+      setProcessingAction(false);
+    }
   };
 
   const getNotificationIcon = (type: Notification['type']) => {
@@ -508,14 +469,12 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
                       {formatTimestamp(notification)}
                     </Text>
                     {notification.type === 'project_assignment' && notification.status === 'pending' ? (
-                      <View style={styles.notificationActions}>
-                        <IconButton
-                          icon="check"
-                          size={20}
-                          onPress={() => handleAcceptAssignment(notification)}
-                          iconColor={constructionColors.complete}
-                        />
-                      </View>
+                      <Chip 
+                        style={[styles.pendingChip, { backgroundColor: constructionColors.warning }]}
+                        textStyle={{ color: 'white', fontSize: 10 }}
+                      >
+                        Pending
+                      </Chip>
                     ) : (
                       <View style={styles.notificationActions}>
                         <IconButton
@@ -534,18 +493,76 @@ export default function NotificationsScreen({ onAppRefresh }: NotificationsScree
                   !notification.isRead && styles.unreadTitle
                 ]}
                 descriptionStyle={styles.notificationDescription}
-                onPress={() => {
-                  if (notification.type === 'project_assignment') {
-                    return;
-                  }
-                  handleNotificationPress(notification);
-                }}
+                onPress={() => handleNotificationPress(notification)}
               />
               {index < filteredNotifications.length - 1 && <Divider />}
             </Card>
           ))
         )}
       </ScrollView>
+
+      {/* Accept/Reject Project Assignment Modal - Dark Mode */}
+      <Portal>
+        <Dialog
+          visible={showAcceptRejectModal}
+          onDismiss={() => {
+            if (!processingAction) {
+              setShowAcceptRejectModal(false);
+              setSelectedNotification(null);
+            }
+          }}
+          style={styles.acceptRejectDialog}
+        >
+          <Dialog.Title style={styles.acceptRejectDialogTitle}>
+            Project Assignment
+          </Dialog.Title>
+          <Dialog.Content>
+            {selectedNotification && (
+              <>
+                <Paragraph style={styles.acceptRejectDialogMessage}>
+                  {selectedNotification.message}
+                </Paragraph>
+                {selectedNotification.projectId && (
+                  <Paragraph style={styles.acceptRejectDialogSubtext}>
+                    Project ID: {selectedNotification.projectId}
+                  </Paragraph>
+                )}
+                <Paragraph style={styles.acceptRejectDialogQuestion}>
+                  Would you like to accept or reject this project assignment?
+                </Paragraph>
+              </>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions style={styles.acceptRejectDialogActions}>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                if (!processingAction && selectedNotification) {
+                  handleRejectAssignment(selectedNotification);
+                }
+              }}
+              disabled={processingAction}
+              textColor={constructionColors.urgent}
+              style={styles.rejectButton}
+            >
+              Reject
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => {
+                if (!processingAction && selectedNotification) {
+                  handleAcceptAssignment(selectedNotification);
+                }
+              }}
+              disabled={processingAction}
+              loading={processingAction}
+              style={styles.acceptButton}
+            >
+              Accept
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -682,8 +699,43 @@ const styles = StyleSheet.create({
   acceptButton: {
     margin: 0,
     marginRight: spacing.xs,
+    backgroundColor: constructionColors.complete,
   },
   rejectButton: {
     margin: 0,
+    borderColor: constructionColors.urgent,
+  },
+  acceptRejectDialog: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: theme.roundness,
+  },
+  acceptRejectDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  acceptRejectDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    marginBottom: spacing.sm,
+  },
+  acceptRejectDialogSubtext: {
+    color: theme.colors.onSurfaceVariant,
+    fontSize: fontSizes.sm,
+    marginBottom: spacing.md,
+  },
+  acceptRejectDialogQuestion: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    fontWeight: '500',
+    marginTop: spacing.sm,
+  },
+  acceptRejectDialogActions: {
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  pendingChip: {
+    marginTop: spacing.xs,
   },
 });

@@ -36,10 +36,10 @@ export interface WorkerAssignment {
  */
 export async function getAvailableWorkers(): Promise<any[]> {
   try {
+    // Get all workers regardless of project assignment
+    // Workers can now be assigned to multiple projects
     const workersRef = collection(db, 'worker_accounts');
-    const q = query(workersRef, where('projectId', '==', null));
-    
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(workersRef);
     const workers: any[] = [];
 
     snapshot.forEach((doc) => {
@@ -49,7 +49,9 @@ export async function getAvailableWorkers(): Promise<any[]> {
         name: data.name,
         email: data.email,
         role: data.role || 'worker',
-        profileImage: data.profileImage
+        profileImage: data.profileImage,
+        projectId: data.projectId || null, // Include current project info
+        hasProject: data.projectId !== null && data.projectId !== undefined
       });
     });
 
