@@ -289,6 +289,7 @@ export default function App() {
                   user={user} 
                   project={currentProject} 
                   onLogout={handleLogout}
+                  onRefresh={handleRefresh}
                 />
               ) : (
                 <WorkerNavigation 

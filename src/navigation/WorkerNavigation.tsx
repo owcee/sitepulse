@@ -363,7 +363,6 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
         />
         <Tab.Screen 
           name="Notifications" 
-          component={NotificationsScreen}
           options={({ route }) => {
             // Get unread count from route params if available
             const unreadCount = (route.params as any)?.unreadCount;
@@ -372,7 +371,9 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
               tabBarBadge: unreadCount && unreadCount > 0 ? unreadCount : undefined,
             };
           }}
-        />
+        >
+          {() => <NotificationsScreen onAppRefresh={onRefresh} />}
+        </Tab.Screen>
         <Tab.Screen 
           name="Settings" 
           options={{ tabBarLabel: 'Settings' }}

@@ -39,6 +39,7 @@ interface Props {
   user: User;
   project: Project;
   onLogout?: () => void;
+  onRefresh?: () => Promise<void>;
 }
 
 // Custom header component with SitePulse branding
@@ -141,7 +142,7 @@ const TasksStack = () => (
 );
 
 // Stack navigator for Project Tools and related screens
-const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
+const ProjectToolsStack = ({ user, project, onLogout, onRefresh }: Props) => (
   <Stack.Navigator 
     screenOptions={{ 
       headerShown: false,
@@ -150,7 +151,7 @@ const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
     }}
   >
     <Stack.Screen name="ProjectToolsMain">
-      {(props) => <ProjectToolsScreen {...props} user={user} project={project} onLogout={onLogout} />}
+      {(props) => <ProjectToolsScreen {...props} user={user} project={project} onLogout={onLogout} onRefresh={onRefresh} />}
     </Stack.Screen>
     <Stack.Screen name="Tasks" component={TasksStack} />
     <Stack.Screen name="CreateNewProject" component={CreateNewProjectScreen} />
@@ -178,7 +179,7 @@ const ProjectToolsStack = ({ user, project, onLogout }: Props) => (
   </Stack.Navigator>
 );
 
-export default function EngineerNavigation({ user, project, onLogout }: Props) {
+export default function EngineerNavigation({ user, project, onLogout, onRefresh }: Props) {
   const [hasProjects, setHasProjects] = useState<boolean | null>(null);
   const [isCheckingProjects, setIsCheckingProjects] = useState(true);
   
@@ -385,7 +386,7 @@ export default function EngineerNavigation({ user, project, onLogout }: Props) {
           name="Project Tools" 
           options={{ tabBarLabel: 'Tools' }}
         >
-          {(props) => <ProjectToolsStack {...props} user={user} project={project} onLogout={onLogout} />}
+          {(props) => <ProjectToolsStack {...props} user={user} project={project} onLogout={onLogout} onRefresh={onRefresh} />}
         </Tab.Screen>
         <Tab.Screen 
           name="Report Logs" 

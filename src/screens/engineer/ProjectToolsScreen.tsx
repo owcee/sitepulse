@@ -57,9 +57,10 @@ interface ProjectToolsScreenProps {
   user?: any;
   project?: any;
   onLogout?: () => void;
+  onRefresh?: () => Promise<void>;
 }
 
-export default function ProjectToolsScreen({ user, project, onLogout }: ProjectToolsScreenProps) {
+export default function ProjectToolsScreen({ user, project, onLogout, onRefresh }: ProjectToolsScreenProps) {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { state, projectId, setBudget } = useProjectData();
   
@@ -140,11 +141,10 @@ export default function ProjectToolsScreen({ user, project, onLogout }: ProjectT
           projectId: selectedProject.id, // Legacy support
         });
         
-        Alert.alert(
-          'Project Switched',
-          `Switched to "${selectedProject.name}". Please refresh the app to see the changes.`,
-          [{ text: 'OK' }]
-        );
+        // Auto-refresh the app to load the new project
+        if (onRefresh) {
+          await onRefresh();
+        }
       }
     } catch (error) {
       console.error('Error switching project:', error);

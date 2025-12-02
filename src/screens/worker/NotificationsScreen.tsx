@@ -95,7 +95,11 @@ const mockNotifications: Notification[] = [
   },
 ];
 
-export default function NotificationsScreen() {
+interface NotificationsScreenProps {
+  onAppRefresh?: () => void;
+}
+
+export default function NotificationsScreen({ onAppRefresh }: NotificationsScreenProps) {
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -260,11 +264,10 @@ export default function NotificationsScreen() {
                   // Remove notification from list immediately
                   setNotifications(prev => prev.filter(n => n.id !== notification.id));
                   
-                  Alert.alert(
-                    'Project Switched!',
-                    'You have successfully switched to the new project. Welcome to the team!',
-                    [{ text: 'OK' }]
-                  );
+                  // Auto-refresh the app to load the new project
+                  if (onAppRefresh) {
+                    onAppRefresh();
+                  }
                 } catch (error: any) {
                   Alert.alert('Error', `Failed to accept assignment: ${error.message}`);
                 }
@@ -283,11 +286,10 @@ export default function NotificationsScreen() {
         // Remove notification from list immediately
         setNotifications(prev => prev.filter(n => n.id !== notification.id));
         
-        Alert.alert(
-          'Assignment Accepted!',
-          'You have successfully joined the project. Welcome to the team!',
-          [{ text: 'OK' }]
-        );
+        // Auto-refresh the app to load the new project
+        if (onAppRefresh) {
+          onAppRefresh();
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', `Failed to accept assignment: ${error.message}`);

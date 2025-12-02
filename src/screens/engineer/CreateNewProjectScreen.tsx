@@ -9,7 +9,9 @@ import {
   Surface,
   Divider,
   Chip,
-  IconButton
+  IconButton,
+  Portal,
+  Dialog
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -36,56 +38,63 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
   const [duration, setDuration] = useState('');
   const [clientName, setClientName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleCreateProject = async () => {
     if (!projectName.trim()) {
-      Alert.alert('Missing Information', 'Please enter a project name.');
+      setErrorMessage('Please enter a project name.');
+      setShowErrorDialog(true);
       return;
     }
 
     if (!budget.trim()) {
-      Alert.alert('Missing Information', 'Please enter a project budget.');
+      setErrorMessage('Please enter a project budget.');
+      setShowErrorDialog(true);
       return;
     }
 
     if (!duration.trim()) {
-      Alert.alert('Missing Information', 'Please enter project duration.');
+      setErrorMessage('Please enter project duration.');
+      setShowErrorDialog(true);
       return;
     }
 
     setIsCreating(true);
 
     try {
+      // Convert months to days (approximately 30 days per month)
+      const durationMonths = parseInt(duration) || 0;
+      const durationDays = durationMonths * 30;
+      
       const projectData = {
         name: projectName.trim(),
         description: description.trim(),
         location: location.trim(),
         clientName: clientName.trim(),
         budget: parseFloat(budget) || 0,
-        duration: parseInt(duration) || 0,
+        duration: durationDays,
+        durationMonths: durationMonths, // Store original months value too
       };
 
       const createdProject = await createProject(projectData);
       console.log('✅ Project created:', createdProject.id);
       
-      // Refresh immediately without waiting for user to press OK
-      // This ensures the project data loads as soon as possible
+      // Show success dialog
+      setShowSuccessDialog(true);
+      
+      // Refresh in background
       if (onProjectCreated) {
-        // Longer delay to ensure Firestore updates fully propagate
         console.log('⏳ Waiting for Firestore to propagate updates...');
         await new Promise(resolve => setTimeout(resolve, 1500));
         console.log('🔄 Calling onProjectCreated to refresh...');
         await onProjectCreated();
         console.log('✅ Refresh complete');
       }
-      
-      Alert.alert(
-        'Project Created!',
-        `Project "${projectName}" has been created successfully. Loading dashboard...`,
-        [{ text: 'OK' }]
-      );
     } catch (error: any) {
-      Alert.alert('Error', `Failed to create project: ${error.message}`);
+      setErrorMessage(`Failed to create project: ${error.message}`);
+      setShowErrorDialog(true);
     } finally {
       setIsCreating(false);
     }
@@ -175,12 +184,12 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
             />
 
             <TextInput
-              label="Duration (days) *"
+              label="Duration (months) *"
               value={duration}
               onChangeText={setDuration}
               keyboardType="numeric"
               style={styles.input}
-              placeholder="Estimated project duration"
+              placeholder="Estimated project duration in months"
               left={<TextInput.Icon icon="calendar" />}
             />
 
@@ -240,6 +249,52 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
           </Button>
         </View>
       </ScrollView>
+
+      {/* Success Dialog - Dark Mode */}
+      <Portal>
+        <Dialog
+          visible={showSuccessDialog}
+          onDismiss={() => setShowSuccessDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitle}>Project Created! 🎉</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogText}>
+              Project "{projectName}" has been created successfully. Loading dashboard...
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => setShowSuccessDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Error Dialog - Dark Mode */}
+      <Portal>
+        <Dialog
+          visible={showErrorDialog}
+          onDismiss={() => setShowErrorDialog(false)}
+          style={styles.dialog}
+        >
+          <Dialog.Title style={styles.dialogTitleError}>Missing Information</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.dialogText}>{errorMessage}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button 
+              onPress={() => setShowErrorDialog(false)}
+              textColor={theme.colors.primary}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -330,6 +385,21 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
+  },
+  dialog: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: theme.roundness,
+  },
+  dialogTitle: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
+  },
+  dialogTitleError: {
+    color: constructionColors.warning,
+    fontWeight: 'bold',
+  },
+  dialogText: {
+    color: theme.colors.text,
   },
 });
 
