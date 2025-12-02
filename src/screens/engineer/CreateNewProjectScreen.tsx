@@ -81,16 +81,32 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
       const createdProject = await createProject(projectData);
       console.log('✅ Project created:', createdProject.id);
       
-      // Show success dialog
+      // Show success dialog briefly, then redirect
       setShowSuccessDialog(true);
       
-      // Refresh in background
+      // Refresh and redirect to the new project
       if (onProjectCreated) {
         console.log('⏳ Waiting for Firestore to propagate updates...');
         await new Promise(resolve => setTimeout(resolve, 1500));
-        console.log('🔄 Calling onProjectCreated to refresh...');
+        console.log('🔄 Calling onProjectCreated to refresh and redirect...');
         await onProjectCreated();
-        console.log('✅ Refresh complete');
+        console.log('✅ Refresh complete, redirecting to new project...');
+        
+        // Close success dialog and navigate back to dashboard
+        setShowSuccessDialog(false);
+        
+        // Navigate back to dashboard (the refresh will have loaded the new project)
+        if (navigation && navigation.canGoBack && navigation.canGoBack()) {
+          navigation.goBack();
+        }
+      } else {
+        // If no onProjectCreated callback, just navigate back after a delay
+        setTimeout(() => {
+          setShowSuccessDialog(false);
+          if (navigation && navigation.canGoBack && navigation.canGoBack()) {
+            navigation.goBack();
+          }
+        }, 2000);
       }
     } catch (error: any) {
       setErrorMessage(`Failed to create project: ${error.message}`);
