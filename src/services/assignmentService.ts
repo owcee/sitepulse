@@ -99,7 +99,7 @@ export async function inviteWorker(
 
     // Create assignment document
     const assignmentRef = doc(db, 'worker_assignments', workerId);
-    const assignmentData = {
+    const assignmentData: any = {
       workerId,
       workerName: workerData.name,
       workerEmail: workerData.email,
@@ -109,10 +109,12 @@ export async function inviteWorker(
       invitedBy: auth.currentUser.uid,
       invitedByName: engineerData.name,
       invitedAt: serverTimestamp(),
-      decidedAt: undefined,
       previousProjectId: hasExistingProject ? currentProjectId : null, // Store previous project if exists
       isProjectSwitch: hasExistingProject // Flag to indicate this is a project switch
     };
+    
+    // Only add decidedAt if it's not undefined (Firestore doesn't allow undefined)
+    // decidedAt will be set when the worker accepts/rejects
 
     await setDoc(assignmentRef, assignmentData);
 
