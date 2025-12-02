@@ -123,6 +123,8 @@ const CustomHeader = ({ user, project, onLogout }: Props) => {
       <NotificationsScreen 
         visible={notificationsVisible}
         onDismiss={() => setNotificationsVisible(false)}
+        onRefresh={onRefresh}
+        currentProjectId={project?.id}
       />
 
       {/* Settings Modal */}

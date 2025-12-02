@@ -118,7 +118,7 @@ interface NotificationsScreenProps {
   onDismiss?: () => void;
 }
 
-export default function NotificationsScreen({ visible, onDismiss }: NotificationsScreenProps = {}) {
+export default function NotificationsScreen({ visible, onDismiss, onRefresh, currentProjectId }: NotificationsScreenProps = {}) {
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,6 +137,7 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
           title: notif.title,
           message: notif.body,
           timestamp: notif.timestamp,
+          projectId: notif.projectId, // Include projectId
           isRead: notif.read,
           priority: notif.status === 'pending' ? 'high' : 'medium',
           relatedId: notif.relatedId,
@@ -178,10 +179,37 @@ export default function NotificationsScreen({ visible, onDismiss }: Notification
     }
   };
 
-  const handleNotificationPress = (notification: Notification) => {
+  const handleNotificationPress = async (notification: Notification) => {
     // Close the modal first
     if (onDismiss) {
       onDismiss();
+    }
+    
+    // If notification has a projectId and it's different from current project, switch first
+    if (notification.projectId && notification.projectId !== currentProjectId && onRefresh) {
+      try {
+        const { getAuth } = await import('firebase/auth');
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('../../firebaseConfig');
+        
+        const firebaseAuth = getAuth();
+        const currentUser = firebaseAuth.currentUser;
+        if (currentUser) {
+          const engineerRef = doc(db, 'engineer_accounts', currentUser.uid);
+          await updateDoc(engineerRef, {
+            currentProjectId: notification.projectId,
+            projectId: notification.projectId, // Legacy support
+          });
+          
+          // Wait for project switch to complete
+          await onRefresh();
+          
+          // Small delay to ensure project data is loaded
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (error) {
+        console.error('Error switching project for notification:', error);
+      }
     }
     
     // Navigate to source based on notification type

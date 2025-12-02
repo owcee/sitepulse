@@ -265,6 +265,39 @@ export default function NotificationsScreen({ onAppRefresh, onBadgeUpdate }: Not
       return;
     }
 
+    // If notification has a projectId and it's different from current project, switch first
+    if (notification.projectId && onAppRefresh) {
+      try {
+        const { doc, updateDoc, getDoc } = await import('firebase/firestore');
+        const { db } = await import('../../firebaseConfig');
+        
+        // Check current project from user data
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const workerRef = doc(db, 'worker_accounts', currentUser.uid);
+          const workerDoc = await getDoc(workerRef);
+          const currentProjectId = workerDoc.data()?.projectId;
+          
+          // If notification is for a different project, switch to it
+          if (notification.projectId !== currentProjectId) {
+            await updateDoc(workerRef, {
+              projectId: notification.projectId,
+            });
+            
+            // Wait for project switch to complete
+            if (onAppRefresh) {
+              await onAppRefresh();
+            }
+            
+            // Small delay to ensure project data is loaded
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        }
+      } catch (error) {
+        console.error('Error switching project for notification:', error);
+      }
+    }
+
     // Mark notification as read for other types
     try {
       if (!notification.isRead) {
