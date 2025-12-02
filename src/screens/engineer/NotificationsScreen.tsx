@@ -217,31 +217,53 @@ export default function NotificationsScreen({ visible, onDismiss, onRefresh, cur
       }
     }
     
-    // Navigate to source based on notification type
-    if (notification.type === 'task_approval' || notification.type === 'task_rejection') {
-      // Navigate to Report Logs (verification logs)
-      // @ts-ignore - Navigation typing would be properly configured in production
-      navigation.navigate('Report Logs');
-    } else if (notification.type === 'delay_warning') {
-      // Navigate to delay prediction screen
-      // @ts-ignore
-      navigation.navigate('Delay Prediction');
-    } else if (notification.type === 'resource_alert') {
-      // Navigate to resources screen
-      // @ts-ignore
-      navigation.navigate('Resources');
-    } else if (notification.type === 'chat_message') {
-      // Navigate to chat screen
-      // @ts-ignore
-      navigation.navigate('Chat');
-    } else if (notification.type === 'worker_request') {
-      // Navigate to workers management
-      // @ts-ignore
-      navigation.navigate('WorkersManagement');
-    } else {
-      // Default: navigate to Report Logs for other notification types
-      // @ts-ignore
-      navigation.navigate('Report Logs');
+    // Check if navigation is ready before navigating
+    if (!navigation || !navigation.navigate) {
+      console.warn('[Notification] Navigation not ready, delaying navigation...');
+      // Retry after a short delay
+      setTimeout(() => {
+        if (navigation && navigation.navigate) {
+          navigateToScreen(notification.type);
+        } else {
+          console.error('[Notification] Navigation still not available after delay');
+        }
+      }, 500);
+      return;
+    }
+    
+    navigateToScreen(notification.type);
+  };
+
+  const navigateToScreen = (notificationType: Notification['type']) => {
+    try {
+      // Navigate to source based on notification type
+      if (notificationType === 'task_approval' || notificationType === 'task_rejection') {
+        // Navigate to Report Logs (verification logs)
+        // @ts-ignore - Navigation typing would be properly configured in production
+        navigation.navigate('Report Logs');
+      } else if (notificationType === 'delay_warning') {
+        // Navigate to delay prediction screen
+        // @ts-ignore
+        navigation.navigate('Delay Prediction');
+      } else if (notificationType === 'resource_alert') {
+        // Navigate to resources screen
+        // @ts-ignore
+        navigation.navigate('Resources');
+      } else if (notificationType === 'chat_message') {
+        // Navigate to chat screen
+        // @ts-ignore
+        navigation.navigate('Chat');
+      } else if (notificationType === 'worker_request') {
+        // Navigate to workers management
+        // @ts-ignore
+        navigation.navigate('WorkersManagement');
+      } else {
+        // Default: navigate to Report Logs for other notification types
+        // @ts-ignore
+        navigation.navigate('Report Logs');
+      }
+    } catch (error) {
+      console.error('[Notification] Error navigating:', error);
     }
   };
 
