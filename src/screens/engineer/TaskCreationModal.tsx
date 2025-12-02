@@ -295,7 +295,8 @@ export default function TaskCreationModal({ visible, onDismiss, onTaskCreated }:
       onTaskCreated(createdTask);
       resetForm();
       onDismiss();
-      setSuccessTaskName(subtask?.label || 'Task');
+      // Use the actual created task title (may include number suffix like "Concrete pouring 2")
+      setSuccessTaskName(createdTask.title);
       setShowSuccessDialog(true);
     } catch (error: any) {
       setIsCreating(false);

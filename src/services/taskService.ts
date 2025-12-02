@@ -51,6 +51,44 @@ export interface Task {
 }
 
 /**
+ * Generate a unique task title by checking existing tasks
+ * If "Concrete pouring" exists, returns "Concrete pouring 2", etc.
+ * @param projectId - Project ID to check against
+ * @param baseTitle - The base title (e.g., "Concrete pouring")
+ * @returns Promise<string> - Unique title
+ */
+async function generateUniqueTaskTitle(projectId: string, baseTitle: string): Promise<string> {
+  try {
+    const tasksRef = collection(db, 'tasks');
+    const q = query(tasksRef, where('projectId', '==', projectId));
+    const snapshot = await getDocs(q);
+
+    // Collect all existing titles
+    const existingTitles: string[] = [];
+    snapshot.forEach((doc) => {
+      existingTitles.push(doc.data().title);
+    });
+
+    // If base title doesn't exist, use it
+    if (!existingTitles.includes(baseTitle)) {
+      return baseTitle;
+    }
+
+    // Find the next available number
+    let counter = 2;
+    while (existingTitles.includes(`${baseTitle} ${counter}`)) {
+      counter++;
+    }
+
+    return `${baseTitle} ${counter}`;
+  } catch (error) {
+    console.error('Error generating unique task title:', error);
+    // Fallback to base title if there's an error
+    return baseTitle;
+  }
+}
+
+/**
  * Create a new task
  * @param taskData - Task information
  * @returns Promise<Task> - Created task
@@ -73,10 +111,13 @@ export async function createTask(taskData: {
       throw new Error('User not authenticated');
     }
 
+    // Generate unique title if task with same name exists
+    const uniqueTitle = await generateUniqueTaskTitle(taskData.projectId, taskData.title);
+
     const tasksRef = collection(db, 'tasks');
     const taskDoc = await addDoc(tasksRef, {
       projectId: taskData.projectId,
-      title: taskData.title,
+      title: uniqueTitle,
       category: taskData.category,
       subTask: taskData.subTask,
       tagalogLabel: taskData.tagalogLabel,
@@ -98,7 +139,7 @@ export async function createTask(taskData: {
     const createdTask: Task = {
       id: taskDoc.id,
       projectId: taskData.projectId,
-      title: taskData.title,
+      title: uniqueTitle,
       category: taskData.category,
       subTask: taskData.subTask,
       tagalogLabel: taskData.tagalogLabel,
@@ -114,7 +155,7 @@ export async function createTask(taskData: {
       createdBy: auth.currentUser.uid
     };
 
-    console.log('Task created successfully:', taskDoc.id);
+    console.log('Task created successfully:', taskDoc.id, 'with title:', uniqueTitle);
     return createdTask;
   } catch (error) {
     console.error('Error creating task:', error);
