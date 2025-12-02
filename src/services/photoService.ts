@@ -188,19 +188,16 @@ export async function canWorkerSubmitToday(taskId: string, workerId: string): Pr
   try {
     const photosRef = collection(db, 'task_photos');
     
-    // Get today's start and end timestamps
+    // Get today's start timestamp
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    
+    // Simpler query: just get photos for this task by this worker
+    // Filter by date in JavaScript to avoid index requirement
     const q = query(
       photosRef,
       where('taskId', '==', taskId),
-      where('uploaderId', '==', workerId),
-      where('uploadedAt', '>=', todayStart),
-      where('uploadedAt', '<=', todayEnd)
+      where('uploaderId', '==', workerId)
     );
 
     const snapshot = await getDocs(q);
@@ -209,20 +206,29 @@ export async function canWorkerSubmitToday(taskId: string, workerId: string): Pr
       return { canSubmit: true };
     }
 
-    // Check if the most recent submission was rejected
-    const submissions = snapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    })) as any[]; // Type assertion for Firestore data
+    // Filter to today's submissions in JavaScript
+    const todaySubmissions = snapshot.docs
+      .map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      }))
+      .filter((sub: any) => {
+        const uploadedAt = sub.uploadedAt?.toDate?.() || new Date(0);
+        return uploadedAt >= todayStart;
+      }) as any[];
+    
+    if (todaySubmissions.length === 0) {
+      return { canSubmit: true };
+    }
     
     // Sort by upload time, most recent first
-    submissions.sort((a, b) => {
+    todaySubmissions.sort((a, b) => {
       const aTime = a.uploadedAt?.toDate?.()?.getTime() || 0;
       const bTime = b.uploadedAt?.toDate?.()?.getTime() || 0;
       return bTime - aTime;
     });
     
-    const latestSubmission = submissions[0];
+    const latestSubmission = todaySubmissions[0];
     
     // If the latest submission was rejected, allow resubmission
     if (latestSubmission.verificationStatus === 'rejected') {
@@ -239,8 +245,8 @@ export async function canWorkerSubmitToday(taskId: string, workerId: string): Pr
     
   } catch (error) {
     console.error('Error checking submission eligibility:', error);
-    // On error, allow submission (fail open)
-    return { canSubmit: true };
+    // On error, DON'T allow submission (fail closed for safety)
+    return { canSubmit: false, reason: 'Unable to verify submission status. Please try again.' };
   }
 }
 
@@ -325,35 +331,34 @@ export async function getBatchSubmissionStatus(
   try {
     const photosRef = collection(db, 'task_photos');
     
-    // Get today's start and end timestamps
+    // Get today's start timestamp
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    
-    // Query all photos by this worker today
+    // Simpler query: just get all photos by this worker
+    // Filter by date in JavaScript to avoid index requirement
     const q = query(
       photosRef,
-      where('uploaderId', '==', workerId),
-      where('uploadedAt', '>=', todayStart),
-      where('uploadedAt', '<=', todayEnd)
+      where('uploaderId', '==', workerId)
     );
 
     const snapshot = await getDocs(q);
     
-    // Group by taskId and find latest for each
+    // Group by taskId and find latest for each (only today's submissions)
     const taskSubmissions = new Map<string, any[]>();
     
     snapshot.forEach((doc) => {
       const data = doc.data();
-      if (taskIds.includes(data.taskId)) {
+      const uploadedAt = data.uploadedAt?.toDate?.() || new Date(0);
+      
+      // Only include today's submissions for tasks we care about
+      if (taskIds.includes(data.taskId) && uploadedAt >= todayStart) {
         if (!taskSubmissions.has(data.taskId)) {
           taskSubmissions.set(data.taskId, []);
         }
         taskSubmissions.get(data.taskId)!.push({
           ...data,
-          uploadedAt: data.uploadedAt?.toDate?.() || new Date()
+          uploadedAt: uploadedAt
         });
       }
     });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { 
   Card, 
@@ -18,7 +18,7 @@ import {
   List
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { auth } from '../../firebaseConfig';
 import { collection, query, where, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -45,6 +45,20 @@ export default function WorkerTasksScreen() {
   useEffect(() => {
     loadWorkerTasks();
   }, [projectId]);
+
+  // Refresh submission statuses when screen comes into focus (after photo upload)
+  useFocusEffect(
+    useCallback(() => {
+      const refreshSubmissionStatuses = async () => {
+        if (tasks.length > 0 && auth.currentUser) {
+          const taskIds = tasks.map(t => t.id);
+          const statuses = await getBatchSubmissionStatus(taskIds, auth.currentUser.uid);
+          setSubmissionStatuses(statuses);
+        }
+      };
+      refreshSubmissionStatuses();
+    }, [tasks])
+  );
 
   const loadWorkerTasks = async () => {
     try {
@@ -291,9 +305,44 @@ export default function WorkerTasksScreen() {
         style={styles.statusIcon}
       />
                 <View style={[styles.titleContainer, { overflow: 'visible' }]}>
-                  <Title style={styles.taskTitle} numberOfLines={2} ellipsizeMode="tail">
-                    {task.title}
-                  </Title>
+                  {/* Title Row with Badge */}
+                  <View style={styles.titleWithBadgeRow}>
+                    <Title style={[styles.taskTitle, { flex: 1 }]} numberOfLines={2} ellipsizeMode="tail">
+                      {task.title}
+                    </Title>
+                    {/* Today's Submission Status Badge - Next to Title */}
+                    {(() => {
+                      const submissionStatus = submissionStatuses.get(task.id);
+                      if (submissionStatus?.submittedToday) {
+                        const badgeColor = submissionStatus.status === 'approved' 
+                          ? constructionColors.complete 
+                          : submissionStatus.status === 'rejected'
+                          ? constructionColors.urgent
+                          : constructionColors.warning;
+                        const badgeIcon = submissionStatus.status === 'approved'
+                          ? '✓'
+                          : submissionStatus.status === 'rejected'
+                          ? '✗'
+                          : '⏳';
+                        return (
+                          <View style={[styles.submissionBadgeInline, { backgroundColor: badgeColor }]}>
+                            <Text style={styles.submissionBadgeTextInline}>
+                              {badgeIcon}
+                            </Text>
+                          </View>
+                        );
+                      } else if (task.status === 'in_progress') {
+                        return (
+                          <View style={[styles.submissionBadgeInline, { backgroundColor: '#666' }]}>
+                            <Text style={styles.submissionBadgeTextInline}>
+                              📷
+                            </Text>
+                          </View>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </View>
                   <View style={[styles.taskMeta, { overflow: 'visible' }]}>
                     <Chip 
                       style={[styles.statusChip, styles.taskMetaChip, { backgroundColor: getTaskStatusColor(task.status as 'not_started' | 'in_progress' | 'completed') }]}
@@ -305,39 +354,6 @@ export default function WorkerTasksScreen() {
                 </View>
               </View>
             </View>
-
-            {/* Today's Submission Status Badge */}
-            {(() => {
-              const submissionStatus = submissionStatuses.get(task.id);
-              if (submissionStatus?.submittedToday) {
-                const badgeColor = submissionStatus.status === 'approved' 
-                  ? constructionColors.complete 
-                  : submissionStatus.status === 'rejected'
-                  ? constructionColors.urgent
-                  : constructionColors.warning;
-                const badgeText = submissionStatus.status === 'approved'
-                  ? '✓ Submitted & Approved'
-                  : submissionStatus.status === 'rejected'
-                  ? '✗ Rejected - Resubmit'
-                  : '⏳ Submitted - Pending';
-                return (
-                  <View style={[styles.submissionBadge, { backgroundColor: badgeColor + '20', borderColor: badgeColor }]}>
-                    <Text style={[styles.submissionBadgeText, { color: badgeColor }]}>
-                      {badgeText}
-                    </Text>
-                  </View>
-                );
-              } else if (task.status === 'in_progress') {
-                return (
-                  <View style={[styles.submissionBadge, { backgroundColor: '#666' + '20', borderColor: '#666' }]}>
-                    <Text style={[styles.submissionBadgeText, { color: '#999' }]}>
-                      📷 Not submitted today
-                    </Text>
-                  </View>
-                );
-              }
-              return null;
-            })()}
 
             {/* Description */}
             <Paragraph style={styles.taskDescription} numberOfLines={3} ellipsizeMode="tail">
@@ -957,5 +973,23 @@ const styles = StyleSheet.create({
   submissionBadgeText: {
     fontSize: fontSizes.xs,
     fontWeight: '600',
+  },
+  titleWithBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  submissionBadgeInline: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.xs,
+  },
+  submissionBadgeTextInline: {
+    fontSize: 12,
+    color: 'white',
+    textAlign: 'center',
   },
 });
