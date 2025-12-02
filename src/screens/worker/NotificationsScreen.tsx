@@ -51,53 +51,7 @@ interface Notification {
   status?: 'pending' | 'accepted' | 'rejected' | 'completed' | 'info';
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'task',
-    title: 'New Task Assigned',
-    message: 'Foundation Pour - Section A has been assigned to you',
-    timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 min ago
-    isRead: false,
-    priority: 'high',
-  },
-  {
-    id: '2',
-    type: 'safety',
-    title: 'Safety Alert',
-    message: 'High wind warning in effect. Secure all loose materials.',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-    isRead: false,
-    priority: 'urgent',
-  },
-  {
-    id: '3',
-    type: 'weather',
-    title: 'Weather Update',
-    message: 'Rain expected at 3 PM. Plan indoor activities.',
-    timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
-    isRead: true,
-    priority: 'medium',
-  },
-  {
-    id: '4',
-    type: 'message',
-    title: 'Message from Engineer',
-    message: 'Please update progress on concrete curing process',
-    timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6 hours ago
-    isRead: true,
-    priority: 'medium',
-  },
-  {
-    id: '5',
-    type: 'system',
-    title: 'System Maintenance',
-    message: 'Scheduled maintenance tonight from 11 PM to 1 AM',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-    isRead: true,
-    priority: 'low',
-  },
-];
+// Mock notifications removed - using real notifications from Firestore
 
 interface NotificationsScreenProps {
   onAppRefresh?: () => void;
