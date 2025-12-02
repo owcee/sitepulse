@@ -15,7 +15,8 @@ import {
   serverTimestamp,
   onSnapshot,
   Timestamp,
-  Unsubscribe
+  Unsubscribe,
+  deleteField
 } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 
@@ -369,7 +370,7 @@ export async function updateTask(
     planned_start_date: string;
     planned_end_date: string;
     actual_start_date: string;
-    actual_end_date: string;
+    actual_end_date: string | null | undefined;
     assigned_worker_ids: string[];
     assigned_worker_names: string[];
     notes: string;
@@ -378,10 +379,21 @@ export async function updateTask(
 ): Promise<void> {
   try {
     const taskRef = doc(db, 'tasks', taskId);
-    await updateDoc(taskRef, {
+    
+    // Prepare updates, converting undefined to deleteField() for Firestore
+    const firestoreUpdates: any = {
       ...updates,
       updatedAt: serverTimestamp()
-    });
+    };
+    
+    // If actual_end_date is undefined, use deleteField() to remove it
+    if ('actual_end_date' in updates && updates.actual_end_date === undefined) {
+      firestoreUpdates.actual_end_date = deleteField();
+    } else if ('actual_end_date' in updates && updates.actual_end_date === null) {
+      firestoreUpdates.actual_end_date = null;
+    }
+    
+    await updateDoc(taskRef, firestoreUpdates);
 
     console.log('Task updated:', taskId);
   } catch (error) {

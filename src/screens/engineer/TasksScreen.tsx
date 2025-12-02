@@ -736,7 +736,8 @@ export default function TasksScreen() {
           actual_end_date: today,
         });
         setShowTaskActionModal(false);
-        Alert.alert('Success', `Task completed on ${today}!`);
+        setSnackbarMessage(`Task completed on ${today}!`);
+        setSnackbarVisible(true);
       } catch (error: any) {
         Alert.alert('Error', error.message || 'Failed to update task status');
       }
