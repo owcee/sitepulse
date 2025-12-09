@@ -35,11 +35,11 @@ import {
   getRiskLevelColor,
   formatDelayDays,
 } from '../../services/delayPredictionService';
-import { getProjectTasks, Task } from '../../services/taskService';
+import { getProjectTasks, Task, updateTaskStatus } from '../../services/taskService';
 
 const screenWidth = Dimensions.get('window').width;
 
-type ViewMode = 'in_progress' | 'completed';
+type ViewMode = 'active' | 'delayed' | 'completed';
 
 export default function DelayPredictionScreen() {
   const { projectId } = useProjectData();
@@ -47,10 +47,12 @@ export default function DelayPredictionScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('in_progress');
+  const [viewMode, setViewMode] = useState<ViewMode>('active');
   
   // Data from cloud function
   const [predictions, setPredictions] = useState<DelayPrediction[]>([]);
+  const [activeTasks, setActiveTasks] = useState<DelayPrediction[]>([]);
+  const [delayedTasks, setDelayedTasks] = useState<DelayPrediction[]>([]);
   const [summary, setSummary] = useState({
     totalTasks: 0,
     highRiskCount: 0,
@@ -84,9 +86,31 @@ export default function DelayPredictionScreen() {
       // Filter out not_started tasks - they haven't started yet so no delay prediction needed
       const filteredPredictions = result.predictions.filter(p => p.status !== 'not_started');
       
-      setPredictions(filteredPredictions);
+      // Calculate days overdue for each task
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       
-      // Recalculate summary based on filtered predictions (excluding not_started)
+      const tasksWithOverdue = filteredPredictions.map(p => {
+        if (!p.plannedEndDate) return { ...p, daysOverdue: 0 };
+        
+        const dueDate = new Date(p.plannedEndDate);
+        dueDate.setHours(0, 0, 0, 0);
+        const diffTime = today.getTime() - dueDate.getTime();
+        const daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return { ...p, daysOverdue: Math.max(0, daysOverdue) };
+      });
+      
+      // Separate into active (< 2 days overdue) and delayed (>= 2 days overdue)
+      // 1 day overdue = still on time, 2+ days = delayed
+      const active = tasksWithOverdue.filter(p => (p.daysOverdue || 0) < 2);
+      const delayed = tasksWithOverdue.filter(p => (p.daysOverdue || 0) >= 2);
+      
+      setPredictions(filteredPredictions);
+      setActiveTasks(active);
+      setDelayedTasks(delayed);
+      
+      // Recalculate summary based on all in-progress predictions
       const filteredHighRisk = filteredPredictions.filter(p => p.riskLevel === 'High').length;
       const filteredMediumRisk = filteredPredictions.filter(p => p.riskLevel === 'Medium').length;
       const filteredLowRisk = filteredPredictions.filter(p => p.riskLevel === 'Low').length;
@@ -124,6 +148,34 @@ export default function DelayPredictionScreen() {
     loadData(true);
   };
 
+  // Handle marking task as finished
+  const handleTaskFinished = async (taskId: string, taskTitle: string) => {
+    try {
+      Alert.alert(
+        'Mark Task as Finished',
+        `Are you sure you want to mark "${taskTitle}" as completed?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Mark Finished',
+            style: 'default',
+            onPress: async () => {
+              try {
+                await updateTaskStatus(taskId, 'completed');
+                Alert.alert('Success', 'Task marked as completed');
+                loadData(true); // Reload data
+              } catch (error: any) {
+                Alert.alert('Error', error.message || 'Failed to update task');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in handleTaskFinished:', error);
+    }
+  };
+
   const handleExportPDF = async () => {
     try {
       const currentDate = new Date().toLocaleDateString('en-US', {
@@ -132,8 +184,8 @@ export default function DelayPredictionScreen() {
         day: 'numeric',
       });
 
-      // Generate prediction rows HTML
-      const predictionRows = predictions.map(p => {
+      // Generate prediction rows HTML for active and delayed tasks
+      const activeRows = activeTasks.map(p => {
         const riskColor = p.riskLevel === 'High' ? '#FF6B35' : p.riskLevel === 'Medium' ? '#FFB800' : '#4CAF50';
         return `
           <tr>
@@ -150,6 +202,26 @@ export default function DelayPredictionScreen() {
           </tr>
         `;
       }).join('');
+
+      const delayedRows = delayedTasks.map(p => {
+        const riskColor = p.riskLevel === 'High' ? '#FF6B35' : p.riskLevel === 'Medium' ? '#FFB800' : '#4CAF50';
+        return `
+          <tr style="background-color: #FFF3E0;">
+            <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.taskTitle}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${p.plannedDuration} days</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; font-weight: bold; color: ${riskColor};">${p.predictedDuration} days</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center; color: ${riskColor}; font-weight: bold;">+${p.delayDays.toFixed(1)} days</td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">
+              <span style="background-color: ${riskColor}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                ${p.riskLevel}
+              </span>
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; font-size: 12px;">${p.factors?.join(', ') || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const predictionRows = activeRows + delayedRows;
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -205,7 +277,7 @@ export default function DelayPredictionScreen() {
           </div>
 
           <div class="section">
-            <h2>Task Delay Predictions</h2>
+            <h2>Active Tasks</h2>
             <table>
               <thead>
                 <tr>
@@ -218,10 +290,31 @@ export default function DelayPredictionScreen() {
                 </tr>
               </thead>
               <tbody>
-                ${predictionRows || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">No active tasks</td></tr>'}
+                ${activeRows || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">No active tasks</td></tr>'}
               </tbody>
             </table>
           </div>
+
+          ${delayedTasks.length > 0 ? `
+          <div class="section" style="margin-top: 30px;">
+            <h2 style="color: #FF6B35;">Delayed Tasks (2+ Days Overdue)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th style="text-align: center;">Planned</th>
+                  <th style="text-align: center;">Predicted</th>
+                  <th style="text-align: center;">Delay</th>
+                  <th style="text-align: center;">Risk Level</th>
+                  <th>Contributing Factors</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${delayedRows}
+              </tbody>
+            </table>
+          </div>
+          ` : ''}
 
           <div class="footer">
             <p><strong>SitePulse</strong> - AI-Powered Construction Management Platform</p>
@@ -270,7 +363,7 @@ export default function DelayPredictionScreen() {
     }
   };
 
-  const renderTaskPrediction = (prediction: DelayPrediction) => {
+  const renderTaskPrediction = (prediction: DelayPrediction, showFinishButton: boolean = false) => {
     const riskColor = getRiskLevelColor(prediction.riskLevel);
     
     // Calculate estimated completion date
@@ -391,6 +484,18 @@ export default function DelayPredictionScreen() {
                 ))}
               </View>
             </View>
+          )}
+
+          {/* Task Finished Button - Only show for delayed tasks */}
+          {showFinishButton && (
+            <Button
+              mode="contained"
+              onPress={() => handleTaskFinished(prediction.taskId, prediction.taskTitle)}
+              style={styles.finishButton}
+              icon="check-circle"
+            >
+              Task Finished
+            </Button>
           )}
         </Card.Content>
       </Card>
@@ -535,10 +640,12 @@ export default function DelayPredictionScreen() {
           value={viewMode}
           onValueChange={(value) => setViewMode(value as ViewMode)}
           buttons={[
-            { value: 'in_progress', label: 'Active Tasks', icon: 'clock' },
+            { value: 'active', label: `Active (${activeTasks.length})`, icon: 'clock' },
+            { value: 'delayed', label: `Delayed (${delayedTasks.length})`, icon: 'alert' },
             { value: 'completed', label: 'Completed', icon: 'check-circle' },
           ]}
           style={styles.segmentedButtons}
+          density="small"
         />
       </View>
 
@@ -554,10 +661,10 @@ export default function DelayPredictionScreen() {
           />
         }
       >
-        {viewMode === 'in_progress' ? (
+        {viewMode === 'active' ? (
           <>
             {/* Risk Distribution Chart */}
-            {predictions.length > 0 && (
+            {activeTasks.length > 0 && (
               <Card style={styles.chartCard}>
                 <Card.Content>
                   <Title style={styles.chartTitle}>Risk Distribution</Title>
@@ -618,15 +725,32 @@ export default function DelayPredictionScreen() {
             )}
 
             {/* Active Tasks with Predictions */}
-            {predictions.length > 0 ? (
-              predictions.map(renderTaskPrediction)
+            {activeTasks.length > 0 ? (
+              activeTasks.map(p => renderTaskPrediction(p, false))
             ) : (
               <Card style={styles.emptyCard}>
                 <Card.Content style={styles.emptyContent}>
                   <IconButton icon="clock-check" size={48} iconColor={theme.colors.disabled} />
                   <Title style={styles.emptyTitle}>No Active Tasks</Title>
                   <Paragraph style={styles.emptyText}>
-                    All tasks are either completed or not started yet.
+                    All tasks are either delayed, completed, or not started yet.
+                  </Paragraph>
+                </Card.Content>
+              </Card>
+            )}
+          </>
+        ) : viewMode === 'delayed' ? (
+          <>
+            {/* Delayed Tasks */}
+            {delayedTasks.length > 0 ? (
+              delayedTasks.map(p => renderTaskPrediction(p, true))
+            ) : (
+              <Card style={styles.emptyCard}>
+                <Card.Content style={styles.emptyContent}>
+                  <IconButton icon="check-all" size={48} iconColor={constructionColors.complete} />
+                  <Title style={styles.emptyTitle}>All Tasks Are Good! 🎉</Title>
+                  <Paragraph style={styles.emptyText}>
+                    No tasks are currently delayed by 2 or more days.
                   </Paragraph>
                 </Card.Content>
               </Card>
@@ -874,6 +998,10 @@ const styles = StyleSheet.create({
   factorChipText: {
     fontSize: fontSizes.xs,
     color: theme.colors.onSurfaceVariant,
+  },
+  finishButton: {
+    marginTop: spacing.md,
+    backgroundColor: constructionColors.complete,
   },
   completedTaskCard: {
     margin: spacing.md,

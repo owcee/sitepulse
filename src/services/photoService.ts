@@ -79,6 +79,7 @@ export async function uploadTaskPhoto(
       timestamp: string;
     } | null;
     notes?: string;
+    autoApproved?: boolean; // For CNN autonomous completion
   }
 ): Promise<TaskPhoto> {
   try {
@@ -111,6 +112,12 @@ export async function uploadTaskPhoto(
 
     // Create Firestore metadata document
     const taskPhotosRef = collection(db, 'task_photos');
+    
+    // Set verification status based on whether it's CNN auto-approved
+    const verificationStatus = metadata.autoApproved ? 'approved' : 'pending';
+    const verifiedBy = metadata.autoApproved ? 'CNN_AUTO' : null;
+    const verifiedAt = metadata.autoApproved ? serverTimestamp() : null;
+    
     const photoDoc = await addDoc(taskPhotosRef, {
       taskId,
       projectId: metadata.projectId,
@@ -121,11 +128,11 @@ export async function uploadTaskPhoto(
       cnnClassification: metadata.cnnClassification?.classification || null,
       confidence: metadata.cnnClassification?.confidence || null,
       cnnPrediction: metadata.cnnPrediction || null,
-      verificationStatus: 'pending',
+      verificationStatus: verificationStatus,
       notes: metadata.notes || null,
       uploadedAt: serverTimestamp(),
-      verifiedAt: null,
-      verifiedBy: null,
+      verifiedAt: verifiedAt,
+      verifiedBy: verifiedBy,
       rejectionReason: null
     });
 
@@ -139,7 +146,7 @@ export async function uploadTaskPhoto(
       cnnClassification: metadata.cnnClassification?.classification,
       confidence: metadata.cnnClassification?.confidence,
       cnnPrediction: metadata.cnnPrediction || undefined,
-      verificationStatus: 'pending',
+      verificationStatus: metadata.autoApproved ? 'approved' : 'pending',
       notes: metadata.notes,
       uploadedAt: new Date()
     };
@@ -150,15 +157,28 @@ export async function uploadTaskPhoto(
     try {
       const project = await getProject(metadata.projectId);
       if (project && project.engineerId) {
-        await sendNotification(project.engineerId, {
-          title: 'New Task Photo',
-          body: `${metadata.uploaderName} uploaded a photo for a task`,
-          type: 'task_approval',
-          relatedId: photoDoc.id,
-          projectId: metadata.projectId,
-          status: 'info'
-        });
-        console.log('Notification sent to engineer');
+        // Different notification for CNN auto-completed tasks
+        if (metadata.autoApproved && metadata.cnnPrediction) {
+          await sendNotification(project.engineerId, {
+            title: 'CNN Task Completed',
+            body: `${metadata.uploaderName} completed a CNN task (${Math.round(metadata.cnnPrediction.confidence * 100)}% confidence). View in history.`,
+            type: 'system',
+            relatedId: photoDoc.id,
+            projectId: metadata.projectId,
+            status: 'completed'
+          });
+          console.log('CNN completion notification sent to engineer');
+        } else {
+          await sendNotification(project.engineerId, {
+            title: 'New Task Photo',
+            body: `${metadata.uploaderName} uploaded a photo for a task`,
+            type: 'task_approval',
+            relatedId: photoDoc.id,
+            projectId: metadata.projectId,
+            status: 'info'
+          });
+          console.log('Notification sent to engineer');
+        }
       }
     } catch (notifError) {
       console.error('Failed to send notification:', notifError);

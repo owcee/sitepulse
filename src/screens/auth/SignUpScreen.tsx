@@ -38,35 +38,60 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
   const [showValidationDialog, setShowValidationDialog] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
   const [successUserName, setSuccessUserName] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({
+    name: false,
+    email: false,
+    password: false,
+    confirmPassword: false
+  });
 
   const validateForm = () => {
+    const errors = {
+      name: false,
+      email: false,
+      password: false,
+      confirmPassword: false
+    };
+
     if (!name.trim()) {
+      errors.name = true;
       setDialogMessage('Please enter your full name');
+      setFieldErrors(errors);
       setShowValidationDialog(true);
       return false;
     }
     if (!email.trim()) {
+      errors.email = true;
       setDialogMessage('Please enter your email address');
+      setFieldErrors(errors);
       setShowValidationDialog(true);
       return false;
     }
     // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      errors.email = true;
       setDialogMessage('Please enter a valid email address');
+      setFieldErrors(errors);
       setShowValidationDialog(true);
       return false;
     }
     if (password.length < 6) {
+      errors.password = true;
       setDialogMessage('Password must be at least 6 characters long');
+      setFieldErrors(errors);
       setShowValidationDialog(true);
       return false;
     }
     if (password !== confirmPassword) {
+      errors.confirmPassword = true;
       setDialogMessage('Passwords do not match');
+      setFieldErrors(errors);
       setShowValidationDialog(true);
       return false;
     }
+
+    setFieldErrors(errors);
     return true;
   };
 
@@ -168,35 +193,53 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
             <TextInput
               label="Full Name"
               value={name}
-              onChangeText={setName}
+              onChangeText={(text) => {
+                setName(text);
+                if (text.trim()) {
+                  setFieldErrors(prev => ({ ...prev, name: false }));
+                }
+              }}
               mode="outlined"
               autoCapitalize="words"
               style={styles.input}
               placeholder="Enter your full name"
+              error={fieldErrors.name}
             />
 
             {/* Email Input */}
             <TextInput
               label="Email Address"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (text.trim()) {
+                  setFieldErrors(prev => ({ ...prev, email: false }));
+                }
+              }}
               mode="outlined"
               keyboardType="email-address"
               autoCapitalize="none"
               style={styles.input}
               placeholder="your.email@example.com"
               right={<TextInput.Icon icon="email" />}
+              error={fieldErrors.email}
             />
 
             {/* Password Input */}
             <TextInput
               label="Password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (text.length >= 6) {
+                  setFieldErrors(prev => ({ ...prev, password: false }));
+                }
+              }}
               mode="outlined"
               secureTextEntry={!showPassword}
               style={styles.input}
               placeholder="At least 6 characters"
+              error={fieldErrors.password}
               right={
                 <TextInput.Icon
                   icon={showPassword ? 'eye-off' : 'eye'}
@@ -209,11 +252,17 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
             <TextInput
               label="Confirm Password"
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                if (text === password) {
+                  setFieldErrors(prev => ({ ...prev, confirmPassword: false }));
+                }
+              }}
               mode="outlined"
               secureTextEntry={!showConfirmPassword}
               style={styles.input}
               placeholder="Re-enter your password"
+              error={fieldErrors.confirmPassword}
               right={
                 <TextInput.Icon
                   icon={showConfirmPassword ? 'eye-off' : 'eye'}
@@ -258,14 +307,20 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
           style={styles.dialog}
         >
           <Dialog.Title style={styles.dialogTitle}>
-            Account Created Successfully! 🎉
+            {role === 'engineer' ? 'Welcome to SitePulse! 🎉' : 'Account Created Successfully! 🎉'}
           </Dialog.Title>
           <Dialog.Content>
             <Paragraph style={styles.dialogMessage}>
-              Welcome to SitePulse, {successUserName}!
+              {role === 'engineer' 
+                ? `Welcome to SitePulse, ${successUserName}! Your engineer account has been created.`
+                : `Welcome to SitePulse, ${successUserName}!`
+              }
             </Paragraph>
             <Paragraph style={styles.dialogMessage}>
-              Your account has been created. Please sign in with your new credentials to continue.
+              {role === 'engineer'
+                ? 'Please log in to your new account to get started.'
+                : 'Your account has been created. Please sign in with your new credentials to continue.'
+              }
             </Paragraph>
           </Dialog.Content>
           <Dialog.Actions>
@@ -277,7 +332,7 @@ export default function SignUpScreen({ onSignUp, onBackToLogin, onSignUpStart, o
               textColor={theme.colors.primary}
               labelStyle={styles.dialogButtonText}
             >
-              Sign In Now
+              {role === 'engineer' ? 'Login Now' : 'Sign In Now'}
             </Button>
           </Dialog.Actions>
         </Dialog>

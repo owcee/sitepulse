@@ -21,9 +21,10 @@ import { createProject } from '../../services/firebaseService';
 interface CreateNewProjectScreenProps {
   navigation?: any;
   onProjectCreated?: () => void;
+  isFirstProject?: boolean; // Hide back/cancel buttons for first-time setup
 }
 
-export default function CreateNewProjectScreen({ navigation: propNavigation, onProjectCreated }: CreateNewProjectScreenProps = {}) {
+export default function CreateNewProjectScreen({ navigation: propNavigation, onProjectCreated, isFirstProject = false }: CreateNewProjectScreenProps = {}) {
   let navigation: any = null;
   try {
     navigation = useNavigation();
@@ -41,26 +42,44 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({
+    projectName: false,
+    budget: false,
+    duration: false
+  });
 
   const handleCreateProject = async () => {
+    const errors = {
+      projectName: false,
+      budget: false,
+      duration: false
+    };
+
     if (!projectName.trim()) {
+      errors.projectName = true;
+      setFieldErrors(errors);
       setErrorMessage('Please enter a project name.');
       setShowErrorDialog(true);
       return;
     }
 
     if (!budget.trim()) {
+      errors.budget = true;
+      setFieldErrors(errors);
       setErrorMessage('Please enter a project budget.');
       setShowErrorDialog(true);
       return;
     }
 
     if (!duration.trim()) {
+      errors.duration = true;
+      setFieldErrors(errors);
       setErrorMessage('Please enter project duration.');
       setShowErrorDialog(true);
       return;
     }
 
+    setFieldErrors(errors);
     setIsCreating(true);
 
     try {
@@ -151,9 +170,15 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
             <TextInput
               label="Project Name *"
               value={projectName}
-              onChangeText={setProjectName}
+              onChangeText={(text) => {
+                setProjectName(text);
+                if (text.trim()) {
+                  setFieldErrors(prev => ({ ...prev, projectName: false }));
+                }
+              }}
               style={styles.input}
               placeholder="Enter project name"
+              error={fieldErrors.projectName}
             />
 
             <TextInput
@@ -192,21 +217,33 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
             <TextInput
               label="Total Budget (₱) *"
               value={budget}
-              onChangeText={setBudget}
+              onChangeText={(text) => {
+                setBudget(text);
+                if (text.trim()) {
+                  setFieldErrors(prev => ({ ...prev, budget: false }));
+                }
+              }}
               keyboardType="numeric"
               style={styles.input}
               placeholder="e.g., 250000"
+              error={fieldErrors.budget}
               left={<TextInput.Icon icon="cash" />}
             />
 
             <TextInput
               label="Duration (months) *"
               value={duration}
-              onChangeText={setDuration}
+              onChangeText={(text) => {
+                setDuration(text);
+                if (text.trim()) {
+                  setFieldErrors(prev => ({ ...prev, duration: false }));
+                }
+              }}
               keyboardType="numeric"
               style={styles.input}
               placeholder="Estimated project duration in months"
               left={<TextInput.Icon icon="calendar" />}
+              error={fieldErrors.duration}
             />
 
             <Surface style={styles.infoBox}>
@@ -244,19 +281,21 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <Button
-            mode="outlined"
-            onPress={() => navigation?.goBack()}
-            style={styles.cancelButton}
-            disabled={isCreating}
-          >
-            Cancel
-          </Button>
+          {!isFirstProject && (
+            <Button
+              mode="outlined"
+              onPress={() => navigation?.goBack()}
+              style={styles.cancelButton}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+          )}
           
           <Button
             mode="contained"
             onPress={handleCreateProject}
-            style={styles.createButton}
+            style={[styles.createButton, isFirstProject && styles.createButtonFull]}
             loading={isCreating}
             disabled={isCreating}
             icon="plus"
@@ -401,6 +440,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.sm,
     backgroundColor: theme.colors.primary,
+  },
+  createButtonFull: {
+    marginLeft: 0,
   },
   dialog: {
     backgroundColor: '#1A1A1A',

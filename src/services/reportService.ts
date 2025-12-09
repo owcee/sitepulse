@@ -78,6 +78,10 @@ async function getWorkerName(workerId: string): Promise<string> {
  * Fetch all verification logs (task photos + usage submissions) for a project
  * @param projectId - Project ID
  * @returns Promise<WorkerVerificationData[]> - Aggregated data per worker
+ * 
+ * Note: Worker names are fetched from stored document fields (uploaderName/workerName) first,
+ * falling back to worker_accounts lookup only if the stored name is missing or generic.
+ * This ensures real worker names are displayed instead of generic "Worker" labels.
  */
 export async function getProjectVerificationLogs(projectId: string): Promise<WorkerVerificationData[]> {
   try {
@@ -159,8 +163,11 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
         }
       }
       
-      // Fetch real worker name from worker_accounts - prioritize getWorkerName to avoid hardcoded "Worker"
-      const workerName = await getWorkerName(data.uploaderId);
+      // Use uploaderName from document if available, otherwise fetch from worker_accounts
+      let workerName = data.uploaderName;
+      if (!workerName || workerName === 'Worker') {
+        workerName = await getWorkerName(data.uploaderId);
+      }
       
       logs.push({
         id: docSnapshot.id,
@@ -188,8 +195,11 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       if (data.type === 'equipment') type = 'equipment';
       if (data.type === 'damage') type = 'damage';
 
-      // Fetch real worker name from worker_accounts - prioritize getWorkerName to avoid hardcoded "Worker"
-      const workerName = await getWorkerName(data.workerId);
+      // Use workerName from document if available, otherwise fetch from worker_accounts
+      let workerName = data.workerName;
+      if (!workerName || workerName === 'Worker' || workerName === 'Unknown Worker') {
+        workerName = await getWorkerName(data.workerId);
+      }
 
       logs.push({
         id: docItem.id,
@@ -218,8 +228,11 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       // Skip 'returned' status as they don't need verification
 
       if (data.status !== 'returned') {
-        // Fetch real worker name from worker_accounts
-        const workerName = data.workerName || await getWorkerName(data.workerId);
+        // Use workerName from document if available, otherwise fetch from worker_accounts
+        let workerName = data.workerName;
+        if (!workerName || workerName === 'Worker' || workerName === 'Unknown Worker') {
+          workerName = await getWorkerName(data.workerId);
+        }
 
         logs.push({
           id: docItem.id,

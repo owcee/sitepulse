@@ -76,6 +76,12 @@ export default function InventoryUseScreen() {
   const [dialogMessage, setDialogMessage] = useState('');
   const [showReportUsageRequiredModal, setShowReportUsageRequiredModal] = useState(false);
   const [showFillRequiredFieldsModal, setShowFillRequiredFieldsModal] = useState(false);
+  const [missingFieldsList, setMissingFieldsList] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState({
+    quantity: false,
+    notes: false,
+    photo: false
+  });
 
   // Load usage history when history tab is active
   useEffect(() => {
@@ -229,6 +235,7 @@ export default function InventoryUseScreen() {
           base64: false,
         });
         setCapturedImage(photo.uri);
+        setFieldErrors(prev => ({ ...prev, photo: false }));
         setShowCamera(false);
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture. Please try again.');
@@ -290,23 +297,36 @@ export default function InventoryUseScreen() {
 
     // Check for required fields and show modal if missing
     const missingFields: string[] = [];
+    const errors = {
+      quantity: false,
+      notes: false,
+      photo: false
+    };
     
     if (!capturedImage) {
-      missingFields.push('photo');
+      missingFields.push('Photo');
+      errors.photo = true;
     }
     
     if (submissionType === 'material' && !quantity) {
-      missingFields.push('quantity');
+      missingFields.push('Quantity Used');
+      errors.quantity = true;
     }
     
     if (!notes.trim()) {
-      missingFields.push('notes');
+      missingFields.push('Usage Notes');
+      errors.notes = true;
     }
 
     if (missingFields.length > 0) {
+      setFieldErrors(errors);
+      setMissingFieldsList(missingFields);
       setShowFillRequiredFieldsModal(true);
       return;
     }
+
+    // Clear errors if all fields are valid
+    setFieldErrors({ quantity: false, notes: false, photo: false });
 
     // Check for duplicate submissions on same task and pending usage limits
     if (submissionType === 'material' && quantity) {
@@ -923,7 +943,7 @@ export default function InventoryUseScreen() {
 
               {/* Quantity Selector with Plus/Minus */}
               <View style={styles.quantitySection}>
-                <Paragraph style={styles.quantityLabel}>Quantity Used:</Paragraph>
+                <Paragraph style={[styles.quantityLabel, fieldErrors.quantity && styles.errorLabel]}>Quantity Used: *</Paragraph>
                 <View style={styles.quantitySelector}>
                   <IconButton
                     icon="minus"
@@ -934,6 +954,7 @@ export default function InventoryUseScreen() {
                       const current = parseInt(quantity) || 1;
                       if (current > 1) {
                         setQuantity((current - 1).toString());
+                        setFieldErrors(prev => ({ ...prev, quantity: false }));
                       }
                     }}
                     disabled={parseInt(quantity) <= 1}
@@ -946,11 +967,13 @@ export default function InventoryUseScreen() {
                       const item = getSelectedItemInfo() as any;
                       if (num > 0 && num <= (item?.quantity || 0)) {
                         setQuantity(text);
+                        setFieldErrors(prev => ({ ...prev, quantity: false }));
                       }
                     }}
                     keyboardType="numeric"
-                    style={styles.quantityInput}
+                    style={[styles.quantityInput, fieldErrors.quantity && styles.errorInput]}
                     textAlign="center"
+                    error={fieldErrors.quantity}
                   />
                   
                   <Text style={styles.unitText}>
@@ -968,24 +991,37 @@ export default function InventoryUseScreen() {
                       const available = item?.quantity || 0;
                       if (current < available) {
                         setQuantity((current + 1).toString());
+                        setFieldErrors(prev => ({ ...prev, quantity: false }));
                       }
                     }}
                     disabled={parseInt(quantity) >= ((getSelectedItemInfo() as any)?.quantity || 0)}
                   />
                 </View>
+                {fieldErrors.quantity && (
+                  <Text style={styles.errorText}>Quantity is required</Text>
+                )}
               </View>
 
               {/* Notes Input */}
               <TextInput
                 label="Usage Notes *"
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={(text) => {
+                  setNotes(text);
+                  if (text.trim()) {
+                    setFieldErrors(prev => ({ ...prev, notes: false }));
+                  }
+                }}
                 multiline
                 numberOfLines={3}
                 style={styles.notesInput}
                 placeholder="Describe how the material was used, location, purpose, etc..."
                 textColor={theme.colors.text}
+                error={fieldErrors.notes}
               />
+              {fieldErrors.notes && (
+                <Text style={styles.errorText}>Usage Notes is required</Text>
+              )}
 
               {/* Photo Section */}
               <View style={[styles.photoSection, { backgroundColor: theme.colors.background }]}>
@@ -1012,6 +1048,9 @@ export default function InventoryUseScreen() {
                   >
                     Take Photo Evidence
                   </Button>
+                )}
+                {fieldErrors.photo && (
+                  <Text style={styles.errorText}>Photo is required</Text>
                 )}
               </View>
 
@@ -1067,7 +1106,12 @@ export default function InventoryUseScreen() {
               <TextInput
                 label={submissionType === 'damage' ? 'Damage Description *' : 'Usage Notes *'}
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={(text) => {
+                  setNotes(text);
+                  if (text.trim()) {
+                    setFieldErrors(prev => ({ ...prev, notes: false }));
+                  }
+                }}
                 multiline
                 numberOfLines={4}
                 style={styles.notesInput}
@@ -1076,6 +1120,11 @@ export default function InventoryUseScreen() {
                     ? "Describe the damage, how it occurred, location, severity, etc..."
                     : "Describe how the equipment was used, location, purpose, etc..."
                 }
+                error={fieldErrors.notes}
+              />
+              {fieldErrors.notes && (
+                <Text style={styles.errorText}>{submissionType === 'damage' ? 'Damage Description' : 'Usage Notes'} is required</Text>
+              )}
                 textColor={theme.colors.text}
               />
 
@@ -1104,6 +1153,9 @@ export default function InventoryUseScreen() {
                   >
                     Take Photo Evidence
                   </Button>
+                )}
+                {fieldErrors.photo && (
+                  <Text style={styles.errorText}>Photo is required</Text>
                 )}
               </View>
 
@@ -1172,15 +1224,26 @@ export default function InventoryUseScreen() {
 
               {/* Quantity Input - Only for materials */}
               {submissionType === 'material' && (
-                <TextInput
-                  label="Quantity Used *"
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  keyboardType="numeric"
-                  style={styles.textInput}
-                  textColor={theme.colors.text}
-                  right={<TextInput.Affix text={(getSelectedItemInfo() as any)?.unit || ''} />}
-                />
+                <>
+                  <TextInput
+                    label="Quantity Used *"
+                    value={quantity}
+                    onChangeText={(text) => {
+                      setQuantity(text);
+                      if (text) {
+                        setFieldErrors(prev => ({ ...prev, quantity: false }));
+                      }
+                    }}
+                    keyboardType="numeric"
+                    style={styles.textInput}
+                    textColor={theme.colors.text}
+                    right={<TextInput.Affix text={(getSelectedItemInfo() as any)?.unit || ''} />}
+                    error={fieldErrors.quantity}
+                  />
+                  {fieldErrors.quantity && (
+                    <Text style={styles.errorText}>Quantity is required</Text>
+                  )}
+                </>
               )}
 
               {/* Notes Input */}
@@ -1188,7 +1251,12 @@ export default function InventoryUseScreen() {
                 label={submissionType === 'damage' ? 'Damage Description *' : 
                        submissionType === 'equipment' ? 'Usage Notes *' : 'Usage Notes *'}
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={(text) => {
+                  setNotes(text);
+                  if (text.trim()) {
+                    setFieldErrors(prev => ({ ...prev, notes: false }));
+                  }
+                }}
                 multiline
                 numberOfLines={4}
                 style={styles.textInput}
@@ -1200,7 +1268,11 @@ export default function InventoryUseScreen() {
                     ? 'Describe how the equipment was used...'
                     : 'Describe how the material was used...'
                 }
+                error={fieldErrors.notes}
               />
+              {fieldErrors.notes && (
+                <Text style={styles.errorText}>{submissionType === 'damage' ? 'Damage Description' : 'Usage Notes'} is required</Text>
+              )}
 
               {/* Photo Section */}
               <Surface style={styles.photoSection}>
@@ -1240,6 +1312,9 @@ export default function InventoryUseScreen() {
                   >
                     Upload Photo Here
                   </Button>
+                )}
+                {fieldErrors.photo && (
+                  <Text style={styles.errorText}>Photo is required</Text>
                 )}
               </Surface>
 
@@ -1419,8 +1494,16 @@ export default function InventoryUseScreen() {
           <Surface style={styles.blackModalContent}>
             <Title style={styles.blackModalTitle}>Required Fields Missing</Title>
             <Paragraph style={styles.blackModalMessage}>
-              Fill up the required text before submitting.
+              Please fill in the following required fields:
             </Paragraph>
+            <View style={styles.missingFieldsList}>
+              {missingFieldsList.map((field, index) => (
+                <View key={index} style={styles.missingFieldItem}>
+                  <Text style={styles.missingFieldBullet}>•</Text>
+                  <Text style={styles.missingFieldText}>{field}</Text>
+                </View>
+              ))}
+            </View>
             <Button
               mode="contained"
               onPress={() => setShowFillRequiredFieldsModal(false)}
@@ -1991,5 +2074,38 @@ const styles = StyleSheet.create({
   blackModalButtonLabel: {
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  errorText: {
+    color: '#FF5252',
+    fontSize: fontSizes.xs,
+    marginTop: spacing.xs,
+    marginLeft: spacing.sm,
+  },
+  errorLabel: {
+    color: '#FF5252',
+  },
+  errorInput: {
+    borderColor: '#FF5252',
+    borderWidth: 1,
+  },
+  missingFieldsList: {
+    marginVertical: spacing.md,
+    paddingLeft: spacing.md,
+  },
+  missingFieldItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  missingFieldBullet: {
+    color: '#FF5252',
+    fontSize: fontSizes.lg,
+    marginRight: spacing.sm,
+    fontWeight: 'bold',
+  },
+  missingFieldText: {
+    color: '#FF5252',
+    fontSize: fontSizes.md,
+    fontWeight: '500',
   },
 });

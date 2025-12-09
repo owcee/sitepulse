@@ -230,7 +230,7 @@ export default function App() {
       <PaperProvider theme={theme}>
         <SafeAreaProvider>
           <NavigationContainer>
-            <CreateNewProjectScreen onProjectCreated={handleRefresh} />
+            <CreateNewProjectScreen onProjectCreated={handleRefresh} isFirstProject={true} />
             <StatusBar style="auto" />
           </NavigationContainer>
         </SafeAreaProvider>
