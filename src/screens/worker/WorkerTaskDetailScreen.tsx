@@ -234,7 +234,49 @@ export default function WorkerTaskDetailScreen() {
         setShowCamera(false);
         setSelectedPhotoUri(photo.uri);
         
-        // Show notes modal after photo is taken (optional)
+        // Run CNN prediction immediately after photo is captured
+        let cnnPrediction = null;
+        console.log('[CNN] ========== CNN ELIGIBILITY CHECK (After Photo Capture) ==========');
+        console.log('[CNN] Task exists:', !!task);
+        console.log('[CNN] Task cnnEligible field:', task?.cnnEligible);
+        console.log('[CNN] CNN initialized:', cnnInitialized);
+        console.log('[CNN] Task subTask:', task?.subTask);
+        console.log('[CNN] Is CNN eligible (model check):', task?.subTask ? TaskAwareCNNModel.isCNNEligible(task.subTask) : 'NO SUBTASK');
+        console.log('[CNN] =======================================');
+        
+        const cnnReady = task && task.cnnEligible && task.subTask && TaskAwareCNNModel.isCNNEligible(task.subTask) && await ensureCnnInitialized();
+        if (cnnReady) {
+          try {
+            setPredictingCnn(true);
+            console.log('[CNN] ✅✅✅ RUNNING CNN PREDICTION for task:', task.subTask);
+            console.log('[CNN] Image URI:', photo.uri);
+            const prediction = await cnnStatusPredictor.predictStatus(
+              photo.uri,
+              task.subTask
+            );
+            cnnPrediction = prediction;
+            setCurrentCnnPrediction(prediction); // Store prediction for modal display
+            console.log('[CNN] ✅✅✅ PREDICTION SUCCESS:', JSON.stringify(prediction, null, 2));
+          } catch (cnnError: any) {
+            console.error('[CNN] ❌❌❌ PREDICTION FAILED:', cnnError);
+            console.error('[CNN] Error stack:', cnnError.stack);
+            // Continue without CNN prediction - don't block showing the photo
+          } finally {
+            setPredictingCnn(false);
+          }
+        } else {
+          console.log('[CNN] ❌❌❌ SKIPPING CNN PREDICTION');
+          console.log('[CNN] Reason breakdown:');
+          if (!task) console.log('[CNN]   - Task is null/undefined');
+          if (task && !task.cnnEligible) console.log('[CNN]   - task.cnnEligible is false');
+          if (!cnnInitialized) console.log('[CNN]   - CNN not initialized');
+          if (task && !task.subTask) console.log('[CNN]   - task.subTask is missing');
+          if (task && task.subTask && !TaskAwareCNNModel.isCNNEligible(task.subTask)) {
+            console.log('[CNN]   - task.subTask "' + task.subTask + '" not in CNN model mapping');
+          }
+        }
+        
+        // Show notes modal after photo is taken and CNN prediction (if any) is complete
         setShowNotesModal(true);
       } catch (error) {
         Alert.alert('Error', 'Failed to take picture. Please try again.');
@@ -549,6 +591,13 @@ export default function WorkerTaskDetailScreen() {
                       style={styles.modalPhotoPreview}
                       resizeMode="cover"
                     />
+                    {/* Loading indicator while CNN is predicting */}
+                    {predictingCnn && (
+                      <View style={styles.cnnLoadingOverlay}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                        <Paragraph style={styles.cnnLoadingText}>Analyzing with AI...</Paragraph>
+                      </View>
+                    )}
                   </View>
                 )}
 
@@ -633,25 +682,21 @@ export default function WorkerTaskDetailScreen() {
                 )}
 
                 <Paragraph style={styles.notesModalSubtitle}>
-                  {currentCnnPrediction ? 'Photo uploaded successfully!' : 'Photo captured successfully. Add notes (optional) before uploading:'}
+                  {currentCnnPrediction ? 'CNN prediction complete. Add notes (optional) before uploading:' : 'Photo captured successfully. Add notes (optional) before uploading:'}
                 </Paragraph>
                 
-                {!currentCnnPrediction && (
-                  <>
-                    <Title style={[styles.notesModalTitle, { fontSize: fontSizes.md, marginTop: spacing.md, marginBottom: spacing.xs }]}>Add Notes (Optional)</Title>
-                    
-                    <TextInput
-                      mode="outlined"
-                      multiline
-                      numberOfLines={4}
-                      value={photoNotes}
-                      onChangeText={setPhotoNotes}
-                      placeholder="Enter your notes here..."
-                      style={styles.notesTextInput}
-                      theme={{ colors: { text: '#FFFFFF', placeholder: '#999', background: '#1A1A1A', primary: theme.colors.primary } }}
-                    />
-                  </>
-                )}
+                <Title style={[styles.notesModalTitle, { fontSize: fontSizes.md, marginTop: spacing.md, marginBottom: spacing.xs }]}>Add Notes (Optional)</Title>
+                
+                <TextInput
+                  mode="outlined"
+                  multiline
+                  numberOfLines={4}
+                  value={photoNotes}
+                  onChangeText={setPhotoNotes}
+                  placeholder="Enter your notes here..."
+                  style={styles.notesTextInput}
+                  theme={{ colors: { text: '#FFFFFF', placeholder: '#999', background: '#1A1A1A', primary: theme.colors.primary } }}
+                />
 
                 <View style={styles.notesModalActions}>
                   <Button
@@ -665,12 +710,11 @@ export default function WorkerTaskDetailScreen() {
                     style={styles.notesModalCancelButton}
                     labelStyle={{ color: '#FFFFFF' }}
                   >
-                    {currentCnnPrediction ? 'Close' : 'Cancel'}
+                    Cancel
                   </Button>
-                  {!currentCnnPrediction && (
-                    <Button
-                      mode="contained"
-                      onPress={async () => {
+                  <Button
+                    mode="contained"
+                    onPress={async () => {
                       setUploadingPhoto(true);
 
                       try {
@@ -694,49 +738,8 @@ export default function WorkerTaskDetailScreen() {
                           }
                         }
 
-                      // Run CNN prediction if task is CNN-eligible
-                      let cnnPrediction = null;
-                      console.log('[CNN] ========== CNN ELIGIBILITY CHECK ==========');
-                      console.log('[CNN] Task exists:', !!task);
-                      console.log('[CNN] Task cnnEligible field:', task?.cnnEligible);
-                      console.log('[CNN] CNN initialized:', cnnInitialized);
-                      console.log('[CNN] Task subTask:', task?.subTask);
-                      console.log('[CNN] Is CNN eligible (model check):', task?.subTask ? TaskAwareCNNModel.isCNNEligible(task.subTask) : 'NO SUBTASK');
-                      console.log('[CNN] =======================================');
-                      
-                      const cnnReady = task && task.cnnEligible && task.subTask && TaskAwareCNNModel.isCNNEligible(task.subTask) && await ensureCnnInitialized();
-                      if (cnnReady) {
-                        try {
-                          setPredictingCnn(true);
-                          console.log('[CNN] ✅✅✅ RUNNING CNN PREDICTION for task:', task.subTask);
-                          console.log('[CNN] Image URI:', selectedPhotoUri);
-                          const prediction = await cnnStatusPredictor.predictStatus(
-                            selectedPhotoUri,
-                            task.subTask
-                          );
-                          cnnPrediction = prediction;
-                          setCurrentCnnPrediction(prediction); // Store prediction for modal display
-                          console.log('[CNN] ✅✅✅ PREDICTION SUCCESS:', JSON.stringify(prediction, null, 2));
-                        } catch (cnnError: any) {
-                          console.error('[CNN] ❌❌❌ PREDICTION FAILED:', cnnError);
-                          console.error('[CNN] Error stack:', cnnError.stack);
-                          // Continue without CNN prediction - don't block upload
-                        } finally {
-                          setPredictingCnn(false);
-                        }
-                      } else {
-                        console.log('[CNN] ❌❌❌ SKIPPING CNN PREDICTION');
-                        console.log('[CNN] Reason breakdown:');
-                        if (!task) console.log('[CNN]   - Task is null/undefined');
-                        if (task && !task.cnnEligible) console.log('[CNN]   - task.cnnEligible is false');
-                        if (!cnnInitialized) console.log('[CNN]   - CNN not initialized');
-                        if (task && !task.subTask) console.log('[CNN]   - task.subTask is missing');
-                        if (task && task.subTask && !TaskAwareCNNModel.isCNNEligible(task.subTask)) {
-                          console.log('[CNN]   - task.subTask "' + task.subTask + '" not in CNN model mapping');
-                        }
-                      }
-
-                      // Upload photo with proper metadata including CNN prediction
+                      // CNN prediction already done in takePicture(), use stored prediction
+                      const cnnPrediction = currentCnnPrediction;
                       console.log('[Upload] ========== UPLOADING PHOTO ==========');
                       console.log('[Upload] Task ID:', taskId);
                       console.log('[Upload] Image URI:', selectedPhotoUri);
@@ -791,7 +794,6 @@ export default function WorkerTaskDetailScreen() {
                   >
                     {predictingCnn ? 'Analyzing with AI...' : uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
                   </Button>
-                  )}
                 </View>
               </View>
             </ScrollView>
@@ -1373,6 +1375,7 @@ const styles = StyleSheet.create({
   },
   modalPhotoPreviewContainer: {
     marginBottom: spacing.md,
+    position: 'relative',
   },
   modalPhotoLabel: {
     fontSize: fontSizes.sm,
@@ -1385,6 +1388,23 @@ const styles = StyleSheet.create({
     height: 250,
     borderRadius: theme.roundness,
     backgroundColor: '#1A1A1A',
+  },
+  cnnLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: theme.roundness,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cnnLoadingText: {
+    color: '#FFFFFF',
+    marginTop: spacing.sm,
+    fontSize: fontSizes.md,
+    fontWeight: '600',
   },
   modalTaskDetails: {
     backgroundColor: '#1A1A1A',
