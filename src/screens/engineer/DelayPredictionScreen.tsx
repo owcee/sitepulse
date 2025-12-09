@@ -56,6 +56,7 @@ export default function DelayPredictionScreen() {
   const [predictions, setPredictions] = useState<DelayPrediction[]>([]);
   const [activeTasks, setActiveTasks] = useState<DelayPrediction[]>([]);
   const [delayedTasks, setDelayedTasks] = useState<DelayPrediction[]>([]);
+  const [totalActiveTaskCount, setTotalActiveTaskCount] = useState(0); // All active tasks (matching dashboard)
   const [summary, setSummary] = useState({
     totalTasks: 0,
     highRiskCount: 0,
@@ -93,6 +94,13 @@ export default function DelayPredictionScreen() {
       console.log('[DelayPrediction] Fetching predictions for project:', projectId);
       const result = await predictAllDelays(projectId);
       
+      // Also fetch all tasks to get accurate active count (matching dashboard)
+      const allTasks = await getProjectTasks(projectId);
+      const activeTaskCount = allTasks.filter(t => 
+        t.status === 'not_started' || t.status === 'in_progress'
+      ).length;
+      setTotalActiveTaskCount(activeTaskCount);
+      
       // Filter out not_started tasks - they haven't started yet so no delay prediction needed
       const filteredPredictions = result.predictions.filter(p => p.status !== 'not_started');
       
@@ -111,9 +119,9 @@ export default function DelayPredictionScreen() {
         return { ...p, daysOverdue: Math.max(0, daysOverdue) };
       });
       
-      // Separate into active (< 2 days overdue) and delayed (>= 2 days overdue)
-      // 1 day overdue = still on time, 2+ days = delayed
-      const active = tasksWithOverdue.filter(p => (p.daysOverdue || 0) < 2);
+      // Separate into active (<= 1 day overdue) and delayed (>= 2 days overdue)
+      // 0-1 days overdue = still on time, 2+ days = delayed
+      const active = tasksWithOverdue.filter(p => (p.daysOverdue || 0) <= 1);
       const delayed = tasksWithOverdue.filter(p => (p.daysOverdue || 0) >= 2);
       
       setPredictions(filteredPredictions);
@@ -126,7 +134,7 @@ export default function DelayPredictionScreen() {
       const filteredLowRisk = filteredPredictions.filter(p => p.riskLevel === 'Low').length;
       
       setSummary({
-        totalTasks: filteredPredictions.length,
+        totalTasks: activeTaskCount, // Use actual active task count (matching dashboard)
         highRiskCount: filteredHighRisk,
         mediumRiskCount: filteredMediumRisk,
         lowRiskCount: filteredLowRisk,
@@ -645,7 +653,7 @@ export default function DelayPredictionScreen() {
           value={viewMode}
           onValueChange={(value) => setViewMode(value as ViewMode)}
           buttons={[
-            { value: 'active', label: `Active (${activeTasks.length})`, icon: 'clock' },
+            { value: 'active', label: `Active (${totalActiveTaskCount})`, icon: 'clock' },
             { value: 'delayed', label: `Delayed (${delayedTasks.length})`, icon: 'alert' },
             { value: 'completed', label: 'Completed', icon: 'check-circle' },
           ]}
