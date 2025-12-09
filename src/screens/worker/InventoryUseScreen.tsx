@@ -1499,18 +1499,24 @@ export default function InventoryUseScreen() {
           contentContainerStyle={styles.blackModalContainer}
         >
           <Surface style={styles.blackModalContent}>
+            <Ionicons name="alert-circle" size={48} color="#FF5252" style={{ alignSelf: 'center', marginBottom: spacing.md }} />
             <Title style={styles.blackModalTitle}>Required Fields Missing</Title>
             <Paragraph style={styles.blackModalMessage}>
-              Please fill in the following required fields:
+              Please fill in the following required fields to continue:
             </Paragraph>
             <View style={styles.missingFieldsList}>
               {missingFieldsList.map((field, index) => (
                 <View key={index} style={styles.missingFieldItem}>
-                  <Text style={styles.missingFieldBullet}>•</Text>
+                  <Ionicons name="close-circle" size={20} color="#FF5252" style={{ marginRight: spacing.sm }} />
                   <Text style={styles.missingFieldText}>{field}</Text>
                 </View>
               ))}
             </View>
+            <Paragraph style={[styles.blackModalMessage, { fontSize: fontSizes.sm, marginTop: spacing.md }]}>
+              {submissionType === 'material' && 'Material usage requires: Photo, Quantity, and Notes'}
+              {submissionType === 'equipment' && 'Equipment usage requires: Photo and Usage Notes'}
+              {submissionType === 'damage' && 'Damage report requires: Photo and Damage Description'}
+            </Paragraph>
             <Button
               mode="contained"
               onPress={() => setShowFillRequiredFieldsModal(false)}
@@ -2111,8 +2117,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   missingFieldText: {
-    color: '#FF5252',
+    color: '#FFFFFF',
     fontSize: fontSizes.md,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });
