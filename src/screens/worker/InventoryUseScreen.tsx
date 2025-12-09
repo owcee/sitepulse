@@ -304,7 +304,7 @@ export default function InventoryUseScreen() {
     };
     
     if (!capturedImage) {
-      missingFields.push('Photo');
+      missingFields.push('Photo Evidence');
       errors.photo = true;
     }
     
@@ -314,16 +314,23 @@ export default function InventoryUseScreen() {
     }
     
     if (!notes.trim()) {
-      missingFields.push('Usage Notes');
+      if (submissionType === 'damage') {
+        missingFields.push('Damage Description');
+      } else {
+        missingFields.push('Usage Notes');
+      }
       errors.notes = true;
     }
 
     if (missingFields.length > 0) {
+      console.log('[Validation] Missing fields:', missingFields);
       setFieldErrors(errors);
       setMissingFieldsList(missingFields);
       setShowFillRequiredFieldsModal(true);
       return;
     }
+
+    console.log('[Validation] All fields valid, proceeding with submission');
 
     // Clear errors if all fields are valid
     setFieldErrors({ quantity: false, notes: false, photo: false });
