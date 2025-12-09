@@ -96,9 +96,9 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
   const [engineerProjects, setEngineerProjects] = useState<any[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [delayData, setDelayData] = useState({
-    onSchedule: 0,
-    atRisk: 0,
-    delayed: 0,
+    highRisk: 0,
+    mediumRisk: 0,
+    lowRisk: 0,
     total: 0,
   });
 
@@ -108,53 +108,51 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
     description: 'Construction of 12-story office building'
   };
 
-  // Load task delay data
+  // Load task delay prediction data
   useEffect(() => {
     if (!projectId) return;
     
     let isMounted = true;
     const loadTaskDelayData = async () => {
       try {
-        const tasks = await getProjectTasks(projectId);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Fetch delay predictions from cloud function
+        const { predictAllDelays } = await import('../../services/delayPredictionService');
+        const result = await predictAllDelays(projectId);
         
-        let onSchedule = 0;
-        let atRisk = 0;
-        let delayed = 0;
+        // Count tasks by risk level
+        let highRisk = 0;
+        let mediumRisk = 0;
+        let lowRisk = 0;
         
-        // Only count active tasks (not completed, cancelled, or blocked)
-        const activeTasks = tasks.filter(t => 
-          t.status === 'not_started' || t.status === 'in_progress'
-        );
-        
-        activeTasks.forEach(task => {
-          const dueDate = new Date(task.planned_end_date);
-          dueDate.setHours(0, 0, 0, 0);
-          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          
-          if (daysUntilDue < 0) {
-            // Overdue
-            delayed++;
-          } else if (daysUntilDue <= 3) {
-            // Due within 3 days - at risk
-            atRisk++;
+        result.predictions.forEach(prediction => {
+          if (prediction.riskLevel === 'High') {
+            highRisk++;
+          } else if (prediction.riskLevel === 'Medium') {
+            mediumRisk++;
           } else {
-            // On schedule
-            onSchedule++;
+            lowRisk++;
           }
         });
         
         if (isMounted) {
           setDelayData({
-            onSchedule,
-            atRisk,
-            delayed,
-            total: activeTasks.length,
+            highRisk,
+            mediumRisk,
+            lowRisk,
+            total: result.totalTasks || result.predictions.length,
           });
         }
       } catch (error) {
-        console.error('Error loading task delay data:', error);
+        console.error('Error loading task delay prediction data:', error);
+        // Fallback to zeros if prediction fails
+        if (isMounted) {
+          setDelayData({
+            highRisk: 0,
+            mediumRisk: 0,
+            lowRisk: 0,
+            total: 0,
+          });
+        }
       }
     };
     

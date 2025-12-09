@@ -355,18 +355,18 @@ function identifyDelayFactors(inputFeatures, delayDays = 0) {
   }
   
   // Check if progress is behind schedule
-  // If there's a predicted delay, be more sensitive to progress issues
-  if (inputFeatures.plannedDuration > 0) {
+  // Only flag "Behind schedule" if progress is significantly behind expected progress
+  if (inputFeatures.plannedDuration > 0 && inputFeatures.daysPassed > 0) {
     const expectedProgress = (inputFeatures.daysPassed / inputFeatures.plannedDuration) * 100;
-    // If there's a delay, use a tighter threshold (5% instead of 15%)
-    // If no delay, use the original 15% threshold
-    const threshold = delayDays > 0 ? 5 : 15;
-    if (inputFeatures.progressPercent < expectedProgress - threshold) {
+    const progressGap = expectedProgress - inputFeatures.progressPercent;
+    
+    // Only flag if progress is significantly behind (10% or more)
+    // This prevents false positives from small progress discrepancies
+    if (progressGap >= 10) {
       factors.push("Behind schedule");
     }
-    // If there's a delay but progress is ahead of expected, it might be due to other factors
-    // If there's a delay and progress is slightly behind (within threshold), still flag it
-    else if (delayDays > 0 && inputFeatures.progressPercent < expectedProgress) {
+    // If there's a delay AND progress is behind (even slightly), it's worth flagging
+    else if (delayDays >= 2 && progressGap > 0) {
       factors.push("Behind schedule");
     }
   }

@@ -96,9 +96,9 @@ export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
 // Task Delay Summary Chart Card
 interface DelayChartProps extends ChartCardProps {
   delayData?: {
-    onSchedule: number;
-    atRisk: number;
-    delayed: number;
+    highRisk: number;
+    mediumRisk: number;
+    lowRisk: number;
     total: number;
   };
 }
@@ -106,34 +106,34 @@ interface DelayChartProps extends ChartCardProps {
 export const DelayPredictionChart: React.FC<DelayChartProps> = ({ onPress, delayData }) => {
   // Use provided data or fallback to zeros
   const taskDelayData = delayData || {
-    onSchedule: 0,
-    atRisk: 0,
-    delayed: 0,
+    highRisk: 0,
+    mediumRisk: 0,
+    lowRisk: 0,
     total: 0,
   };
 
-  const tasksWithDelays = taskDelayData.atRisk + taskDelayData.delayed;
+  const tasksWithRisks = taskDelayData.highRisk + taskDelayData.mediumRisk;
   
   const taskStatusData = [
     {
-      name: 'On Schedule',
-      population: taskDelayData.onSchedule,
-      color: constructionColors.complete,
-              legendFontColor: theme.colors.onSurfaceVariant,
-      legendFontSize: 12,
-    },
-    {
-      name: 'At Risk',
-      population: taskDelayData.atRisk,
-      color: constructionColors.warning,
-              legendFontColor: theme.colors.onSurfaceVariant,
-      legendFontSize: 12,
-    },
-    {
-      name: 'Delayed',
-      population: taskDelayData.delayed,
+      name: 'High Risk',
+      population: taskDelayData.highRisk,
       color: constructionColors.urgent,
-              legendFontColor: theme.colors.onSurfaceVariant,
+      legendFontColor: theme.colors.onSurfaceVariant,
+      legendFontSize: 12,
+    },
+    {
+      name: 'Medium Risk',
+      population: taskDelayData.mediumRisk,
+      color: constructionColors.warning,
+      legendFontColor: theme.colors.onSurfaceVariant,
+      legendFontSize: 12,
+    },
+    {
+      name: 'Low Risk',
+      population: taskDelayData.lowRisk,
+      color: constructionColors.complete,
+      legendFontColor: theme.colors.onSurfaceVariant,
       legendFontSize: 12,
     },
   ].filter(item => item.population > 0);
@@ -145,30 +145,30 @@ export const DelayPredictionChart: React.FC<DelayChartProps> = ({ onPress, delay
           <View style={styles.cardHeader}>
             <Title style={styles.cardTitle}>Task Delays</Title>
             <Chip 
-              icon={tasksWithDelays > 0 ? "alert" : "check-circle"} 
+              icon={tasksWithRisks > 0 ? "alert" : "check-circle"} 
               style={[
                 styles.headerChip, 
-                { backgroundColor: tasksWithDelays > 0 ? constructionColors.warning : constructionColors.complete }
+                { backgroundColor: tasksWithRisks > 0 ? constructionColors.warning : constructionColors.complete }
               ]}
               textStyle={styles.headerChipText}
             >
-              {tasksWithDelays} affected
+              {tasksWithRisks} at risk
             </Chip>
           </View>
 
           <View style={styles.progressSection}>
             <Paragraph style={styles.progressLabel}>
-              Tasks on schedule: {taskDelayData.onSchedule} of {taskDelayData.total}
+              Low risk tasks: {taskDelayData.lowRisk} of {taskDelayData.total}
             </Paragraph>
             <ProgressBar 
-              progress={taskDelayData.total > 0 ? taskDelayData.onSchedule / taskDelayData.total : 0} 
+              progress={taskDelayData.total > 0 ? taskDelayData.lowRisk / taskDelayData.total : 0} 
               color={constructionColors.complete}
               style={styles.progressBar}
             />
           </View>
 
           <Paragraph style={styles.chartDescription}>
-            Current task delay status breakdown
+            Delay prediction risk breakdown
           </Paragraph>
 
           {taskStatusData.length > 0 ? (
