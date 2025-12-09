@@ -156,12 +156,6 @@ export default function WorkerTaskDetailScreen() {
 
   const handleUploadPhoto = async () => {
     try {
-      // If CNN prediction already exists and modal is open, show confirmation modal
-      if (currentCnnPrediction && showNotesModal) {
-        setShowConfirmationModal(true);
-        return;
-      }
-
       // Check if worker can submit today (one-day limit)
       if (auth.currentUser) {
         const eligibility = await canWorkerSubmitToday(taskId, auth.currentUser.uid);
@@ -186,6 +180,87 @@ export default function WorkerTaskDetailScreen() {
     } catch (error: any) {
       console.error('Error in photo upload flow:', error);
       Alert.alert('Error', error.message || 'Failed to start photo upload');
+    }
+  };
+
+  const proceedWithUpload = async () => {
+    setUploadingPhoto(true);
+    setShowConfirmationModal(false);
+
+    try {
+      // Get user profile for metadata from Firestore
+      let userProfile = null;
+      if (auth.currentUser) {
+        try {
+          const profile = await getUserProfile(auth.currentUser.uid);
+          userProfile = {
+            projectId: task?.projectId || '',
+            name: profile?.name || auth.currentUser.displayName || 'Worker',
+            uid: auth.currentUser.uid
+          };
+        } catch (err) {
+          console.error('Error fetching user profile:', err);
+          userProfile = {
+            projectId: task?.projectId || '',
+            name: auth.currentUser.displayName || 'Worker',
+            uid: auth.currentUser.uid
+          };
+        }
+      }
+
+      // CNN prediction already done in takePicture(), use stored prediction
+      const cnnPrediction = currentCnnPrediction;
+      console.log('[Upload] ========== UPLOADING PHOTO ==========');
+      console.log('[Upload] Task ID:', taskId);
+      console.log('[Upload] Image URI:', selectedPhotoUri);
+      console.log('[Upload] CNN Prediction to upload:', cnnPrediction);
+      console.log('[Upload] Is CNN Task:', !!cnnPrediction);
+      console.log('[Upload] =====================================');
+      
+      await uploadTaskPhoto(
+        taskId,
+        selectedPhotoUri,
+        {
+          projectId: userProfile?.projectId || '',
+          uploaderName: userProfile?.name || 'Worker',
+          uploaderId: userProfile?.uid || '',
+          notes: photoNotes || undefined,
+          cnnPrediction: cnnPrediction,
+          autoApproved: !!cnnPrediction // Mark CNN predictions as auto-approved
+        }
+      );
+      
+      console.log('[Upload] ✅ Photo uploaded successfully');
+
+      // Auto-complete CNN tasks
+      if (cnnPrediction) {
+        console.log('[CNN Auto-Complete] Completing task automatically...');
+        try {
+          await updateTaskStatus(taskId, 'completed');
+          console.log('[CNN Auto-Complete] ✅ Task marked as completed');
+        } catch (updateError) {
+          console.error('[CNN Auto-Complete] Failed to update task status:', updateError);
+          // Don't fail the whole operation
+        }
+      }
+
+      // Close modal and reload task
+      setShowNotesModal(false);
+      setPhotoNotes('');
+      setCurrentCnnPrediction(null);
+      setSelectedPhotoUri('');
+      await loadTaskDetails();
+      
+      setSuccessMessage('Photo uploaded successfully!');
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.error('Error uploading photo:', error);
+      Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
+      setShowNotesModal(false);
+      setCurrentCnnPrediction(null);
+    } finally {
+      setUploadingPhoto(false);
+      setPredictingCnn(false);
     }
   };
 
@@ -715,77 +790,14 @@ export default function WorkerTaskDetailScreen() {
                   <Button
                     mode="contained"
                     onPress={async () => {
-                      setUploadingPhoto(true);
-
-                      try {
-                        // Get user profile for metadata from Firestore
-                        let userProfile = null;
-                        if (auth.currentUser) {
-                          try {
-                            const profile = await getUserProfile(auth.currentUser.uid);
-                            userProfile = {
-                              projectId: task?.projectId || '',
-                              name: profile?.name || auth.currentUser.displayName || 'Worker',
-                              uid: auth.currentUser.uid
-                            };
-                          } catch (err) {
-                            console.error('Error fetching user profile:', err);
-                            userProfile = {
-                              projectId: task?.projectId || '',
-                              name: auth.currentUser.displayName || 'Worker',
-                              uid: auth.currentUser.uid
-                            };
-                          }
-                        }
-
-                      // CNN prediction already done in takePicture(), use stored prediction
-                      const cnnPrediction = currentCnnPrediction;
-                      console.log('[Upload] ========== UPLOADING PHOTO ==========');
-                      console.log('[Upload] Task ID:', taskId);
-                      console.log('[Upload] Image URI:', selectedPhotoUri);
-                      console.log('[Upload] CNN Prediction to upload:', cnnPrediction);
-                      console.log('[Upload] Is CNN Task:', !!cnnPrediction);
-                      console.log('[Upload] =====================================');
-                      
-                      await uploadTaskPhoto(
-                        taskId,
-                        selectedPhotoUri,
-                        {
-                          projectId: userProfile?.projectId || '',
-                          uploaderName: userProfile?.name || 'Worker',
-                          uploaderId: userProfile?.uid || '',
-                          notes: photoNotes || undefined,
-                          cnnPrediction: cnnPrediction,
-                          autoApproved: !!cnnPrediction // Mark CNN predictions as auto-approved
-                        }
-                      );
-                      
-                      console.log('[Upload] ✅ Photo uploaded successfully');
-
-                      // Auto-complete CNN tasks
-                      if (cnnPrediction) {
-                        console.log('[CNN Auto-Complete] Completing task automatically...');
-                        try {
-                          await updateTaskStatus(taskId, 'completed');
-                          console.log('[CNN Auto-Complete] ✅ Task marked as completed');
-                        } catch (updateError) {
-                          console.error('[CNN Auto-Complete] Failed to update task status:', updateError);
-                          // Don't fail the whole operation
-                        }
+                      // If CNN prediction exists, show confirmation modal first
+                      if (currentCnnPrediction) {
+                        setShowConfirmationModal(true);
+                        return;
                       }
-
-                        // Don't close modal - show CNN prediction in modal instead
-                        // Reload task to update data
-                        await loadTaskDetails();
-                      } catch (error: any) {
-                        console.error('Error uploading photo:', error);
-                        Alert.alert('Upload Failed', error.message || 'Failed to upload photo');
-                        setShowNotesModal(false);
-                        setCurrentCnnPrediction(null);
-                      } finally {
-                        setUploadingPhoto(false);
-                        setPredictingCnn(false);
-                      }
+                      
+                      // If no CNN prediction, proceed directly with upload
+                      await proceedWithUpload();
                     }}
                     icon="upload"
                     loading={uploadingPhoto || predictingCnn}
@@ -845,19 +857,49 @@ export default function WorkerTaskDetailScreen() {
         </Modal>
       </Portal>
 
-      {/* Confirmation Modal */}
+      {/* CNN Prediction Confirmation Modal - Black Mode */}
       <Portal>
         <Modal
           visible={showConfirmationModal}
           onDismiss={() => setShowConfirmationModal(false)}
           contentContainerStyle={styles.blackModalContainer}
         >
-          <Surface style={styles.confirmModalContent}>
-            <Title style={styles.confirmModalTitle}>Confirm Prediction</Title>
-            <Paragraph style={styles.confirmModalMessage}>
-              Are you sure the prediction is correct? You can take another photo if needed. 
-              This will be visible to the engineer in the history records.
+          <Surface style={styles.blackModalContent}>
+            <Title style={styles.blackModalTitle}>Is the CNN Prediction Correct?</Title>
+            <Paragraph style={styles.blackModalMessage}>
+              Please confirm if the CNN prediction shown below is accurate. If not, you can cancel and take another photo from a different angle.
             </Paragraph>
+            
+            {/* Show CNN Prediction Summary */}
+            {currentCnnPrediction && (
+              <View style={styles.confirmModalCnnSummary}>
+                <View style={styles.confirmModalCnnRow}>
+                  <Paragraph style={styles.confirmModalCnnLabel}>Status:</Paragraph>
+                  <Chip 
+                    style={[
+                      styles.confirmModalCnnChip,
+                      { backgroundColor: getStatusColor(currentCnnPrediction.status) }
+                    ]}
+                    textStyle={styles.confirmModalCnnChipText}
+                  >
+                    {formatStatus(currentCnnPrediction.status)}
+                  </Chip>
+                </View>
+                <View style={styles.confirmModalCnnRow}>
+                  <Paragraph style={styles.confirmModalCnnLabel}>Confidence:</Paragraph>
+                  <Paragraph style={[styles.confirmModalCnnValue, { color: getConfidenceColor(currentCnnPrediction.confidence) }]}>
+                    {Math.round(currentCnnPrediction.confidence * 100)}%
+                  </Paragraph>
+                </View>
+                <View style={styles.confirmModalCnnRow}>
+                  <Paragraph style={styles.confirmModalCnnLabel}>Progress:</Paragraph>
+                  <Paragraph style={styles.confirmModalCnnValue}>
+                    {currentCnnPrediction.progressPercent}%
+                  </Paragraph>
+                </View>
+              </View>
+            )}
+            
             <View style={styles.confirmModalActions}>
               <Button
                 mode="outlined"
@@ -866,19 +908,18 @@ export default function WorkerTaskDetailScreen() {
                 contentStyle={styles.confirmModalButtonContent}
                 labelStyle={styles.confirmModalRetakeLabel}
               >
-                Take Another Photo
+                Cancel & Retake Photo
               </Button>
               <Button
                 mode="contained"
-                onPress={() => {
-                  setShowConfirmationModal(false);
-                  // Keep the prediction visible in the modal
-                }}
+                onPress={proceedWithUpload}
                 style={styles.confirmModalConfirmButton}
                 contentStyle={styles.confirmModalButtonContent}
                 labelStyle={styles.confirmModalConfirmLabel}
+                loading={uploadingPhoto}
+                disabled={uploadingPhoto}
               >
-                Confirm
+                Yes, Upload Photo
               </Button>
             </View>
           </Surface>
@@ -1502,6 +1543,37 @@ const styles = StyleSheet.create({
   confirmModalActions: {
     flexDirection: 'column',
     gap: spacing.sm,
+  },
+  confirmModalCnnSummary: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: theme.roundness,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    marginTop: spacing.md,
+  },
+  confirmModalCnnRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  confirmModalCnnLabel: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+  },
+  confirmModalCnnValue: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.sm,
+    fontWeight: '500',
+  },
+  confirmModalCnnChip: {
+    height: 28,
+  },
+  confirmModalCnnChipText: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.xs,
+    fontWeight: '600',
   },
   confirmModalRetakeButton: {
     borderColor: '#FFFFFF',
