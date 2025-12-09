@@ -19,6 +19,9 @@ import {
   ActivityIndicator,
   Surface,
   Text,
+  Portal,
+  Modal,
+  Dialog,
 } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { PieChart } from 'react-native-chart-kit';
@@ -62,6 +65,13 @@ export default function DelayPredictionScreen() {
   
   // Completed tasks from Firestore
   const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
+  
+  // Modal states
+  const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false);
+  const [selectedTaskForFinish, setSelectedTaskForFinish] = useState<{id: string, title: string} | null>(null);
+  const [showFinishSuccessModal, setShowFinishSuccessModal] = useState(false);
+  const [showPdfSuccessModal, setShowPdfSuccessModal] = useState(false);
+  const [pdfSuccessMessage, setPdfSuccessMessage] = useState('');
 
   // Load predictions and tasks
   const loadData = useCallback(async (showRefreshIndicator = false) => {
@@ -149,30 +159,22 @@ export default function DelayPredictionScreen() {
   };
 
   // Handle marking task as finished
-  const handleTaskFinished = async (taskId: string, taskTitle: string) => {
+  const handleTaskFinished = (taskId: string, taskTitle: string) => {
+    setSelectedTaskForFinish({ id: taskId, title: taskTitle });
+    setShowFinishConfirmModal(true);
+  };
+
+  const confirmTaskFinished = async () => {
+    if (!selectedTaskForFinish) return;
+    
     try {
-      Alert.alert(
-        'Mark Task as Finished',
-        `Are you sure you want to mark "${taskTitle}" as completed?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Mark Finished',
-            style: 'default',
-            onPress: async () => {
-              try {
-                await updateTaskStatus(taskId, 'completed');
-                Alert.alert('Success', 'Task marked as completed');
-                loadData(true); // Reload data
-              } catch (error: any) {
-                Alert.alert('Error', error.message || 'Failed to update task');
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Error in handleTaskFinished:', error);
+      await updateTaskStatus(selectedTaskForFinish.id, 'completed');
+      setShowFinishConfirmModal(false);
+      setShowFinishSuccessModal(true);
+      loadData(true); // Reload data
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update task');
+      setShowFinishConfirmModal(false);
     }
   };
 
@@ -341,8 +343,11 @@ export default function DelayPredictionScreen() {
           dialogTitle: 'Save Delay Prediction Report',
           UTI: 'com.adobe.pdf',
         });
+        setPdfSuccessMessage('PDF exported and shared successfully!');
+        setShowPdfSuccessModal(true);
       } else {
-        Alert.alert('PDF Generated', `PDF saved to: ${uri}`);
+        setPdfSuccessMessage(`PDF saved to: ${uri}`);
+        setShowPdfSuccessModal(true);
       }
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -777,6 +782,94 @@ export default function DelayPredictionScreen() {
         {/* Bottom padding */}
         <View style={{ height: spacing.xl }} />
       </ScrollView>
+
+      {/* Task Finished Confirmation Modal - Black Mode */}
+      <Portal>
+        <Modal
+          visible={showFinishConfirmModal}
+          onDismiss={() => setShowFinishConfirmModal(false)}
+          contentContainerStyle={styles.blackModalContainer}
+        >
+          <Surface style={styles.blackModalContent}>
+            <Title style={styles.blackModalTitle}>Mark Task as Finished</Title>
+            <Paragraph style={styles.blackModalMessage}>
+              Are you sure you want to mark "{selectedTaskForFinish?.title}" as completed?
+            </Paragraph>
+            <View style={styles.modalActions}>
+              <Button
+                mode="outlined"
+                onPress={() => setShowFinishConfirmModal(false)}
+                style={styles.modalCancelButton}
+                contentStyle={styles.modalButtonContent}
+                labelStyle={styles.modalCancelLabel}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={confirmTaskFinished}
+                style={styles.modalConfirmButton}
+                contentStyle={styles.modalButtonContent}
+                labelStyle={styles.modalConfirmLabel}
+              >
+                Mark Finished
+              </Button>
+            </View>
+          </Surface>
+        </Modal>
+      </Portal>
+
+      {/* Task Finished Success Modal - Black Mode */}
+      <Portal>
+        <Modal
+          visible={showFinishSuccessModal}
+          onDismiss={() => setShowFinishSuccessModal(false)}
+          contentContainerStyle={styles.blackModalContainer}
+        >
+          <Surface style={styles.blackModalContent}>
+            <Title style={styles.blackModalTitle}>Success</Title>
+            <Paragraph style={styles.blackModalMessage}>
+              Task marked as completed successfully!
+            </Paragraph>
+            <Button
+              mode="contained"
+              onPress={() => setShowFinishSuccessModal(false)}
+              style={styles.blackModalButton}
+              contentStyle={styles.blackModalButtonContent}
+              labelStyle={styles.blackModalButtonLabel}
+            >
+              OK
+            </Button>
+          </Surface>
+        </Modal>
+      </Portal>
+
+      {/* PDF Export Success Modal - Black Mode */}
+      <Portal>
+        <Dialog
+          visible={showPdfSuccessModal}
+          onDismiss={() => setShowPdfSuccessModal(false)}
+          style={styles.pdfSuccessDialog}
+        >
+          <Dialog.Title style={styles.pdfSuccessDialogTitle}>
+            PDF Exported Successfully
+          </Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.pdfSuccessDialogMessage}>
+              {pdfSuccessMessage}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setShowPdfSuccessModal(false)}
+              textColor={theme.colors.primary}
+              labelStyle={styles.pdfSuccessButtonLabel}
+            >
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -1085,5 +1178,91 @@ const styles = StyleSheet.create({
   },
   noDataText: {
     color: theme.colors.onSurfaceVariant,
+  },
+  blackModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  blackModalContent: {
+    backgroundColor: '#000000',
+    borderRadius: 16,
+    padding: spacing.xl,
+    width: '90%',
+    maxWidth: 400,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  blackModalTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  blackModalMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  blackModalButton: {
+    backgroundColor: theme.colors.primary,
+    marginTop: spacing.sm,
+  },
+  blackModalButtonContent: {
+    paddingVertical: spacing.sm,
+  },
+  blackModalButtonLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  modalCancelButton: {
+    flex: 1,
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+  },
+  modalConfirmButton: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+  },
+  modalButtonContent: {
+    paddingVertical: spacing.sm,
+  },
+  modalCancelLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  modalConfirmLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  pdfSuccessDialog: {
+    backgroundColor: '#000000',
+    borderRadius: theme.roundness,
+  },
+  pdfSuccessDialogTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  pdfSuccessDialogMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+  },
+  pdfSuccessButtonLabel: {
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
 });
