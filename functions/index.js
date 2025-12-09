@@ -338,7 +338,7 @@ function calculateRiskLevel(delayDays) {
 /**
  * Identify contributing delay factors
  */
-function identifyDelayFactors(inputFeatures) {
+function identifyDelayFactors(inputFeatures, delayDays = 0) {
   const factors = [];
   
   if (inputFeatures.material_shortage === 1) {
@@ -355,15 +355,31 @@ function identifyDelayFactors(inputFeatures) {
   }
   
   // Check if progress is behind schedule
+  // If there's a predicted delay, be more sensitive to progress issues
   if (inputFeatures.plannedDuration > 0) {
     const expectedProgress = (inputFeatures.daysPassed / inputFeatures.plannedDuration) * 100;
-    if (inputFeatures.progressPercent < expectedProgress - 15) {
+    // If there's a delay, use a tighter threshold (5% instead of 15%)
+    // If no delay, use the original 15% threshold
+    const threshold = delayDays > 0 ? 5 : 15;
+    if (inputFeatures.progressPercent < expectedProgress - threshold) {
+      factors.push("Behind schedule");
+    }
+    // If there's a delay but progress is ahead of expected, it might be due to other factors
+    // If there's a delay and progress is slightly behind (within threshold), still flag it
+    else if (delayDays > 0 && inputFeatures.progressPercent < expectedProgress) {
       factors.push("Behind schedule");
     }
   }
   
   if (factors.length === 0) {
-    factors.push("On track");
+    // Only show "On track" if there's no delay or if progress is ahead of expected
+    if (delayDays <= 0) {
+      factors.push("On track");
+    } else {
+      // If there's a delay but no obvious factors, it's likely due to model predictions
+      // or subtle factors not explicitly tracked
+      factors.push("Minor delays expected");
+    }
   }
   
   return factors;
@@ -418,7 +434,7 @@ exports.predictDelay = functions.https.onCall(async (data, context) => {
     const roundedPrediction = Math.round(finalPrediction * 10) / 10;
     const delayDays = Math.max(0, roundedPrediction - plannedDuration);
     const riskLevel = calculateRiskLevel(delayDays);
-    const factors = identifyDelayFactors(numericFeatures);
+    const factors = identifyDelayFactors(numericFeatures, delayDays);
 
     const result = {
       taskId,
@@ -671,7 +687,7 @@ exports.predictAllDelays = functions.https.onCall(async (data, context) => {
       
       const delayDays = Math.max(0, predictedDuration - plannedDuration);
       const riskLevel = calculateRiskLevel(delayDays);
-      const factors = identifyDelayFactors(numericFeatures);
+      const factors = identifyDelayFactors(numericFeatures, delayDays);
       
       predictions.push({
         taskId: taskDoc.id,

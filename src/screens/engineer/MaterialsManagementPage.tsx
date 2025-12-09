@@ -352,7 +352,7 @@ export default function MaterialsManagementPage() {
                 onChangeText={(text) => setFormData(prev => ({ ...prev, pricePerUnit: text }))}
                 keyboardType="numeric"
                 style={styles.input}
-                left={<TextInput.Icon icon="currency-usd" />}
+                left={<TextInput.Icon icon="cash" />}
                 textColor={theme.colors.text}
               />
 

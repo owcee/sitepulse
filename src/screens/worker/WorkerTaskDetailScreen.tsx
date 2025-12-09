@@ -49,6 +49,8 @@ export default function WorkerTaskDetailScreen() {
   const [cnnInitialized, setCnnInitialized] = useState(false);
   const [predictingCnn, setPredictingCnn] = useState(false);
   const [latestPhoto, setLatestPhoto] = useState<any>(null);
+  const [showCannotSubmitModal, setShowCannotSubmitModal] = useState(false);
+  const [cannotSubmitMessage, setCannotSubmitMessage] = useState('');
 
   // Lazy CNN initialization helper – only runs when we actually need a prediction
   const ensureCnnInitialized = async (): Promise<boolean> => {
@@ -155,7 +157,8 @@ export default function WorkerTaskDetailScreen() {
       if (auth.currentUser) {
         const eligibility = await canWorkerSubmitToday(taskId, auth.currentUser.uid);
         if (!eligibility.canSubmit) {
-          Alert.alert('Cannot Submit', eligibility.reason || 'You have already submitted a photo for this task today.');
+          setCannotSubmitMessage(eligibility.reason || 'You have already submitted a photo for this task today.');
+          setShowCannotSubmitModal(true);
           return;
         }
       }
@@ -715,6 +718,29 @@ export default function WorkerTaskDetailScreen() {
           </Surface>
         </Modal>
       </Portal>
+
+      {/* Cannot Submit Modal */}
+      <Portal>
+        <Modal
+          visible={showCannotSubmitModal}
+          onDismiss={() => setShowCannotSubmitModal(false)}
+          contentContainerStyle={styles.blackModalContainer}
+        >
+          <Surface style={styles.blackModalContent}>
+            <Title style={styles.blackModalTitle}>Cannot Submit</Title>
+            <Paragraph style={styles.blackModalMessage}>{cannotSubmitMessage}</Paragraph>
+            <Button
+              mode="contained"
+              onPress={() => setShowCannotSubmitModal(false)}
+              style={styles.blackModalButton}
+              contentStyle={styles.blackModalButtonContent}
+              labelStyle={styles.blackModalButtonLabel}
+            >
+              OK
+            </Button>
+          </Surface>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -1220,6 +1246,49 @@ const styles = StyleSheet.create({
   },
   successModalButton: {
     marginTop: spacing.md,
+  },
+  blackModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  blackModalContent: {
+    backgroundColor: '#000000',
+    borderRadius: 16,
+    padding: spacing.xl,
+    width: '90%',
+    maxWidth: 400,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  blackModalTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  blackModalMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  blackModalButton: {
+    backgroundColor: theme.colors.primary,
+    marginTop: spacing.sm,
+  },
+  blackModalButtonContent: {
+    paddingVertical: spacing.sm,
+  },
+  blackModalButtonLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   cnnPredictionContainer: {
     marginTop: spacing.md,

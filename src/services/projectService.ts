@@ -88,6 +88,9 @@ export async function createProject(projectData: {
 
     // Create initial budget document in budgets collection with the same structure as BudgetLogsManagementPage
     const { saveBudget } = await import('./firebaseDataService');
+    // Calculate 20% of initial budget for each category
+    const equipmentAllocated = Math.round(projectData.budget * 0.2);
+    const materialsAllocated = Math.round(projectData.budget * 0.2);
     const initialBudget = {
       totalBudget: projectData.budget, // Use the budget from project creation
       totalSpent: 0,
@@ -97,7 +100,7 @@ export async function createProject(projectData: {
         {
           id: 'equipment',
           name: 'Equipment',
-          allocatedAmount: 50000,
+          allocatedAmount: equipmentAllocated,
           spentAmount: 0,
           description: 'Equipment rental and purchases (Auto-calculated)',
           lastUpdated: new Date(),
@@ -106,7 +109,7 @@ export async function createProject(projectData: {
         {
           id: 'materials',
           name: 'Materials',
-          allocatedAmount: 150000,
+          allocatedAmount: materialsAllocated,
           spentAmount: 0,
           description: 'Construction materials and supplies (Auto-calculated)',
           lastUpdated: new Date(),

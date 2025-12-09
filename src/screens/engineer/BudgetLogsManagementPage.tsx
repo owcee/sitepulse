@@ -159,12 +159,38 @@ export default function BudgetLogsManagementPage() {
           };
           
           // Update primary categories with current spent amounts
+          // Only fix allocatedAmount if it's clearly wrong (old hardcoded values that don't match 20% of current budget)
+          // IMPORTANT: Preserve ALL user adjustments - only fix old hardcoded values (50K or 150K) that are wrong
+          const expectedAllocated = Math.round(loadedBudget.totalBudget * 0.2);
+          const oldHardcodedValues = [50000, 150000];
           const updatedCategories = loadedBudget.categories.map(cat => {
             if (cat.id === 'equipment') {
-              return { ...cat, spentAmount: calculateEquipmentSpent(), lastUpdated: new Date() };
+              // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
+              // This preserves any user adjustments (even if not exactly 20%)
+              const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
+              const exceedsBudget = cat.allocatedAmount > loadedBudget.totalBudget;
+              // Only fix old hardcoded values that are wrong - preserve all other user adjustments
+              const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
+              return { 
+                ...cat, 
+                spentAmount: calculateEquipmentSpent(), 
+                allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
+                lastUpdated: shouldFix ? new Date() : cat.lastUpdated // Only update timestamp if we fixed it
+              };
             }
             if (cat.id === 'materials') {
-              return { ...cat, spentAmount: calculateMaterialsSpent(), lastUpdated: new Date() };
+              // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
+              // This preserves any user adjustments (even if not exactly 20%)
+              const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
+              const exceedsBudget = cat.allocatedAmount > loadedBudget.totalBudget;
+              // Only fix old hardcoded values that are wrong - preserve all other user adjustments
+              const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
+              return { 
+                ...cat, 
+                spentAmount: calculateMaterialsSpent(), 
+                allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
+                lastUpdated: shouldFix ? new Date() : cat.lastUpdated // Only update timestamp if we fixed it
+              };
             }
             return cat;
           });
@@ -178,19 +204,53 @@ export default function BudgetLogsManagementPage() {
           };
           
           console.log('✅ Final budget after updates:', finalBudget);
+          
+          // Check if any allocations were corrected (only save if corrections were made)
+          const allocationsWereFixed = updatedCategories.some(cat => {
+            if (cat.id === 'equipment' || cat.id === 'materials') {
+              const oldCat = loadedBudget.categories.find(c => c.id === cat.id);
+              return oldCat && oldCat.allocatedAmount !== cat.allocatedAmount;
+            }
+            return false;
+          });
+          
+          // Only save to Firebase if allocations were corrected (to avoid unnecessary saves)
+          if (allocationsWereFixed) {
+            console.log('🔧 Correcting old hardcoded allocations, saving to Firebase...');
+            await saveBudgetToFirebase(finalBudget);
+          }
+          
           setBudget(finalBudget);
           setSharedBudget(finalBudget);
         } else {
           console.log('ℹ️ No saved budget found, using defaults');
-          // If no saved budget, initialize with defaults
-          const defaultBudget = getDefaultBudget();
+          // If no saved budget, get project's totalBudget or use default
+          let projectTotalBudget = 250000; // Default
+          try {
+            const project = await getProject(projectId);
+            if (project) {
+              projectTotalBudget = project.budget || 250000;
+            }
+          } catch (error) {
+            console.warn('Could not load project budget, using default');
+          }
+          const defaultBudget = getDefaultBudget(projectTotalBudget);
           setBudget(defaultBudget);
           setSharedBudget(defaultBudget);
         }
       } catch (error) {
         console.error('❌ Error loading budget from Firebase:', error);
-        // On error, use defaults
-        const defaultBudget = getDefaultBudget();
+        // On error, get project's totalBudget or use defaults
+        let projectTotalBudget = 250000; // Default
+        try {
+          const project = await getProject(projectId);
+          if (project) {
+            projectTotalBudget = project.budget || 250000;
+          }
+        } catch (err) {
+          console.warn('Could not load project budget, using default');
+        }
+        const defaultBudget = getDefaultBudget(projectTotalBudget);
         setBudget(defaultBudget);
         setSharedBudget(defaultBudget);
       } finally {
@@ -206,12 +266,16 @@ export default function BudgetLogsManagementPage() {
   const initialEquipmentSpent = calculateEquipmentSpent();
   const initialMaterialsSpent = calculateMaterialsSpent();
   
-  const getDefaultBudget = (): ProjectBudget => {
+  const getDefaultBudget = (totalBudget: number = 250000): ProjectBudget => {
+    // Calculate 20% of total budget for each category
+    const equipmentAllocated = Math.round(totalBudget * 0.2);
+    const materialsAllocated = Math.round(totalBudget * 0.2);
+    
     const categories = [
       {
         id: 'equipment',
         name: 'Equipment',
-        allocatedAmount: 50000,
+        allocatedAmount: equipmentAllocated,
         spentAmount: initialEquipmentSpent,
         description: 'Equipment rental and purchases (Auto-calculated)',
         lastUpdated: new Date(),
@@ -220,7 +284,7 @@ export default function BudgetLogsManagementPage() {
       {
         id: 'materials',
         name: 'Materials',
-        allocatedAmount: 150000,
+        allocatedAmount: materialsAllocated,
         spentAmount: initialMaterialsSpent,
         description: 'Construction materials and supplies (Auto-calculated)',
         lastUpdated: new Date(),
@@ -231,7 +295,7 @@ export default function BudgetLogsManagementPage() {
     const totalSpent = categories.reduce((sum, cat) => sum + cat.spentAmount, 0);
     
     return {
-      totalBudget: 250000, // ₱250,000 - default budget
+      totalBudget,
       totalSpent,
       contingencyPercentage: 10,
       lastUpdated: new Date(),
@@ -329,7 +393,7 @@ export default function BudgetLogsManagementPage() {
     // Update immediately (no debounce) to ensure changes persist
     // This is the SINGLE source of truth for budget updates
     setBudget(prev => {
-      if (!prev) return getDefaultBudget();
+      if (!prev) return getDefaultBudget(250000);
       const updatedCategories = prev.categories.map(cat => {
         if (cat.id === 'equipment') {
           return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
@@ -430,6 +494,26 @@ export default function BudgetLogsManagementPage() {
     }
 
     const allocatedAmount = parseFloat(formData.allocatedAmount);
+    
+    // Validate that total allocated doesn't exceed total budget
+    if (!budget) {
+      Alert.alert('Error', 'Budget not loaded');
+      return;
+    }
+    
+    const otherCategoriesAllocated = budget.categories
+      .filter(cat => editingCategory ? cat.id !== editingCategory.id : true)
+      .reduce((sum, cat) => sum + cat.allocatedAmount, 0);
+    
+    const totalAllocated = otherCategoriesAllocated + allocatedAmount;
+    
+    if (totalAllocated > budget.totalBudget) {
+      Alert.alert(
+        'Budget Exceeded',
+        `Total allocated amount (₱${(totalAllocated / 1000).toFixed(0)}K) cannot exceed total budget (₱${(budget.totalBudget / 1000).toFixed(0)}K). Please reduce the allocated amount.`
+      );
+      return;
+    }
     
     // For primary categories, only allow editing allocated amount
     const isPrimary = editingCategory?.isPrimary;

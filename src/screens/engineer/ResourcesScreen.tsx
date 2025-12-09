@@ -105,10 +105,12 @@ export default function ResourcesScreen() {
     }));
   } else {
     // Only use defaults if budget hasn't been loaded yet
-    // This will be updated once BudgetLogsManagementPage loads the budget
+    // Calculate 20% of totalBudget for each category
+    const equipmentAllocated = Math.round(totalBudget * 0.2);
+    const materialsAllocated = Math.round(totalBudget * 0.2);
     categories = [
-      { name: 'Equipment', allocated: 50000, spent: 0 },
-      { name: 'Materials', allocated: 150000, spent: 0 },
+      { name: 'Equipment', allocated: equipmentAllocated, spent: 0 },
+      { name: 'Materials', allocated: materialsAllocated, spent: 0 },
     ];
   }
   
@@ -303,8 +305,9 @@ export default function ResourcesScreen() {
                 icon="alert-circle" 
                 size={24} 
                 iconColor={constructionColors.urgent}
+                style={{ margin: 0 }}
               />
-              <Title style={[styles.cardTitle, { color: constructionColors.urgent }]}>
+              <Title style={[styles.cardTitle, { color: constructionColors.urgent, flex: 1, marginLeft: spacing.xs }]}>
                 Low Stock & Maintenance Alerts
               </Title>
               <Badge 
@@ -928,13 +931,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   categoryItem: {
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
   },
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   categoryName: {
     fontSize: fontSizes.md,
@@ -949,7 +953,8 @@ const styles = StyleSheet.create({
   categoryAmounts: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
+    marginTop: spacing.xs,
   },
   categorySpent: {
     fontSize: fontSizes.sm,
@@ -975,12 +980,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.md,
+    gap: spacing.sm,
   },
   alertBadge: {
     marginLeft: 'auto',
+    minWidth: 30,
   },
   alertItem: {
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
   },
   alertItemName: {
     fontSize: fontSizes.md,

@@ -74,6 +74,8 @@ export default function InventoryUseScreen() {
   const [loadingBorrowRequests, setLoadingBorrowRequests] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
+  const [showReportUsageRequiredModal, setShowReportUsageRequiredModal] = useState(false);
+  const [showFillRequiredFieldsModal, setShowFillRequiredFieldsModal] = useState(false);
 
   // Load usage history when history tab is active
   useEffect(() => {
@@ -160,8 +162,14 @@ export default function InventoryUseScreen() {
     }
   };
 
-  const handleReturnEquipment = async (borrowRequestId: string, equipmentName: string) => {
+  const handleReturnEquipment = async (borrowRequestId: string, equipmentName: string, hasReportedUsage: boolean) => {
     if (!typedAuth?.currentUser) return;
+    
+    // Check if usage report has been submitted
+    if (!hasReportedUsage) {
+      setShowReportUsageRequiredModal(true);
+      return;
+    }
     
     try {
       setIsSubmitting(true);
@@ -280,19 +288,23 @@ export default function InventoryUseScreen() {
       return;
     }
 
-    // Mandatory photo validation
+    // Check for required fields and show modal if missing
+    const missingFields: string[] = [];
+    
     if (!capturedImage) {
-      Alert.alert('Photo Required', 'A photo is mandatory for all usage reports. Please take a photo as evidence.');
-      return;
+      missingFields.push('photo');
     }
-
+    
     if (submissionType === 'material' && !quantity) {
-      Alert.alert('No Quantity', 'Please enter the quantity used.');
-      return;
+      missingFields.push('quantity');
+    }
+    
+    if (!notes.trim()) {
+      missingFields.push('notes');
     }
 
-    if (!notes.trim()) {
-      Alert.alert('No Notes', 'Please add notes describing the usage.');
+    if (missingFields.length > 0) {
+      setShowFillRequiredFieldsModal(true);
       return;
     }
 
@@ -692,12 +704,12 @@ export default function InventoryUseScreen() {
                             </Button>
                             <Button
                               mode="contained"
-                              onPress={() => borrowRequest && handleReturnEquipment(borrowRequest.id, equipment.name)}
+                              onPress={() => borrowRequest && handleReturnEquipment(borrowRequest.id, equipment.name, hasReportedUsage)}
                               icon="hand-coin-outline"
                               style={[styles.reportDamageButton, { backgroundColor: constructionColors.complete }]}
                               contentStyle={styles.reportButtonContent}
                               labelStyle={styles.reportButtonLabel}
-                              disabled={!canReturn || isSubmitting}
+                              disabled={isSubmitting}
                               loading={isSubmitting}
                             >
                               Return
@@ -1371,6 +1383,56 @@ export default function InventoryUseScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Report Usage Required Modal */}
+      <Portal>
+        <Modal
+          visible={showReportUsageRequiredModal}
+          onDismiss={() => setShowReportUsageRequiredModal(false)}
+          contentContainerStyle={styles.blackModalContainer}
+        >
+          <Surface style={styles.blackModalContent}>
+            <Title style={styles.blackModalTitle}>Report Usage Required</Title>
+            <Paragraph style={styles.blackModalMessage}>
+              You need to do the report usage before returning the equipment.
+            </Paragraph>
+            <Button
+              mode="contained"
+              onPress={() => setShowReportUsageRequiredModal(false)}
+              style={styles.blackModalButton}
+              contentStyle={styles.blackModalButtonContent}
+              labelStyle={styles.blackModalButtonLabel}
+            >
+              OK
+            </Button>
+          </Surface>
+        </Modal>
+      </Portal>
+
+      {/* Fill Required Fields Modal */}
+      <Portal>
+        <Modal
+          visible={showFillRequiredFieldsModal}
+          onDismiss={() => setShowFillRequiredFieldsModal(false)}
+          contentContainerStyle={styles.blackModalContainer}
+        >
+          <Surface style={styles.blackModalContent}>
+            <Title style={styles.blackModalTitle}>Required Fields Missing</Title>
+            <Paragraph style={styles.blackModalMessage}>
+              Fill up the required text before submitting.
+            </Paragraph>
+            <Button
+              mode="contained"
+              onPress={() => setShowFillRequiredFieldsModal(false)}
+              style={styles.blackModalButton}
+              contentStyle={styles.blackModalButtonContent}
+              labelStyle={styles.blackModalButtonLabel}
+            >
+              OK
+            </Button>
+          </Surface>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -1886,5 +1948,48 @@ const styles = StyleSheet.create({
   },
   dialogMessage: {
     color: theme.colors.text,
+  },
+  blackModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  blackModalContent: {
+    backgroundColor: '#000000',
+    borderRadius: 16,
+    padding: spacing.xl,
+    width: '90%',
+    maxWidth: 400,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  blackModalTitle: {
+    color: theme.colors.primary,
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  blackModalMessage: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  blackModalButton: {
+    backgroundColor: theme.colors.primary,
+    marginTop: spacing.sm,
+  },
+  blackModalButtonContent: {
+    paddingVertical: spacing.sm,
+  },
+  blackModalButtonLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });

@@ -351,12 +351,39 @@ export function ProjectDataProvider({
         }, 0);
         
         // Update primary categories with current spent amounts
+        // Only fix allocatedAmount if it's clearly wrong (old hardcoded values that don't match 20% of current budget)
+        // IMPORTANT: Preserve ALL user adjustments - only fix old hardcoded values (50K or 150K) that are wrong
+        const totalBudget = (savedBudget as any).totalBudget || 250000;
+        const expectedAllocated = Math.round(totalBudget * 0.2);
+        const oldHardcodedValues = [50000, 150000];
         const updatedCategories = (savedBudget as any).categories.map((cat: any) => {
           if (cat.id === 'equipment') {
-            return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
+            // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
+            // This preserves any user adjustments (even if not exactly 20%)
+            const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
+            const exceedsBudget = cat.allocatedAmount > totalBudget;
+            // Only fix old hardcoded values that are wrong - preserve all other user adjustments
+            const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
+            return { 
+              ...cat, 
+              spentAmount: equipmentSpent, 
+              allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
+              lastUpdated: shouldFix ? new Date() : (cat.lastUpdated || new Date()) // Only update timestamp if we fixed it
+            };
           }
           if (cat.id === 'materials') {
-            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+            // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
+            // This preserves any user adjustments (even if not exactly 20%)
+            const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
+            const exceedsBudget = cat.allocatedAmount > totalBudget;
+            // Only fix old hardcoded values that are wrong - preserve all other user adjustments
+            const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
+            return { 
+              ...cat, 
+              spentAmount: materialsSpent, 
+              allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
+              lastUpdated: shouldFix ? new Date() : (cat.lastUpdated || new Date()) // Only update timestamp if we fixed it
+            };
           }
           return {
             ...cat,
