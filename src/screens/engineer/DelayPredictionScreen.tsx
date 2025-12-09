@@ -94,7 +94,7 @@ export default function DelayPredictionScreen() {
       console.log('[DelayPrediction] Fetching predictions for project:', projectId);
       const result = await predictAllDelays(projectId);
       
-      // Also fetch all tasks to get accurate active count (matching dashboard)
+      // Fetch all tasks to get accurate active count (matching dashboard) and completed tasks
       const allTasks = await getProjectTasks(projectId);
       const activeTaskCount = allTasks.filter(t => 
         t.status === 'not_started' || t.status === 'in_progress'
@@ -140,8 +140,7 @@ export default function DelayPredictionScreen() {
         lowRiskCount: filteredLowRisk,
       });
 
-      // Also fetch completed tasks
-      const allTasks = await getProjectTasks(projectId);
+      // Get completed tasks from the same allTasks array
       const completed = allTasks.filter(t => t.status === 'completed');
       setCompletedTasks(completed);
 
