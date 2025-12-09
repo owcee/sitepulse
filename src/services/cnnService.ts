@@ -76,13 +76,6 @@ export class TaskAwareCNNModel {
   private isLoaded: boolean = false;
 
   /**
-   * Check if the model is loaded and ready
-   */
-  isModelLoaded(): boolean {
-    return this.isLoaded && this.tflite !== null;
-  }
-
-  /**
    * Initialize and load the TFLite model
    * Call this once when app starts
    */
@@ -90,8 +83,7 @@ export class TaskAwareCNNModel {
     const TfliteModule = loadTflite();
     if (!TfliteModule) {
       console.warn('[CNN] Tflite-react-native is not loaded, skipping initialization.');
-      this.isLoaded = false;
-      return; // Gracefully skip - don't throw error
+      return;
     }
     
     try {
@@ -99,12 +91,6 @@ export class TaskAwareCNNModel {
       
       // tflite-react-native exports default class
       this.tflite = new TfliteModule();
-      
-      if (!this.tflite) {
-        console.warn('[CNN] TFLite instance is null, skipping model load.');
-        this.isLoaded = false;
-        return; // Gracefully skip
-      }
       
       console.log('[CNN] Loading model: model_optimized.tflite');
       
@@ -119,10 +105,7 @@ export class TaskAwareCNNModel {
       console.log('[CNN] ✅ Model loaded successfully');
     } catch (error) {
       console.error('[CNN] ❌ Initialization error:', error);
-      console.warn('[CNN] CNN will be disabled for this session');
-      this.isLoaded = false;
-      this.tflite = null;
-      // Don't throw - let the app continue without CNN
+      throw new Error('Failed to initialize CNN model');
     }
   }
 

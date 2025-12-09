@@ -63,13 +63,6 @@ export default function WorkerTaskDetailScreen() {
     try {
       console.log('[CNN] Lazy init start...');
       await cnnStatusPredictor.initialize();
-      
-      // Check if model actually loaded
-      if (!cnnStatusPredictor.isModelLoaded()) {
-        console.warn('[CNN] Model not available, CNN predictions disabled');
-        return false;
-      }
-      
       setCnnInitialized(true);
       console.log('[CNN] Lazy init success');
       return true;
