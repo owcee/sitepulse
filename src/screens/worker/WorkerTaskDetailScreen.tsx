@@ -472,7 +472,7 @@ export default function WorkerTaskDetailScreen() {
                 <Chip 
                   icon="clock" 
                   style={[styles.statusChip, { backgroundColor: getStatusColor(task.status) }]}
-                  textStyle={{ color: 'white' }}
+                  textStyle={{ color: 'white', fontSize: 9 }}
                 >
                   {task.status.replace('_', ' ').toUpperCase()}
                 </Chip>
@@ -1572,7 +1572,7 @@ const styles = StyleSheet.create({
   },
   confirmModalCnnChipText: {
     color: '#FFFFFF',
-    fontSize: fontSizes.xs,
+    fontSize: 9,
     fontWeight: '600',
   },
   confirmModalRetakeButton: {
@@ -1695,7 +1695,7 @@ const styles = StyleSheet.create({
   },
   cnnStatusText: {
     color: 'white',
-    fontSize: fontSizes.sm,
+    fontSize: 9,
     fontWeight: '600',
   },
   cnnConfidenceRow: {
