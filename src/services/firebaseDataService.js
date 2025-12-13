@@ -73,9 +73,9 @@ export async function addMaterial(projectId, material) {
     const materialName = material.name || 'Material';
     const unit = material.unit || 'units';
     
-    // Check for low stock (threshold: 10 units OR 20% of totalBought, whichever is higher)
-    const percentageThreshold = Math.floor(totalBought * 0.2); // 20% of total
-    const LOW_STOCK_THRESHOLD = Math.max(10, percentageThreshold); // At least 10 units, or 20% if higher
+    // Check for low stock (threshold: 4 units OR min_threshold if specified)
+    const minThreshold = material.min_threshold || 4;
+    const LOW_STOCK_THRESHOLD = minThreshold;
     
     if (quantity <= LOW_STOCK_THRESHOLD) {
       // Send low stock alert to engineer
@@ -137,9 +137,9 @@ export async function updateMaterial(materialId, updates) {
     const materialName = updates.name || currentData.name;
     const unit = updates.unit || currentData.unit || 'units';
     
-    // Check for low stock (threshold: 10 units OR 20% of totalBought, whichever is higher)
-    const percentageThreshold = Math.floor(totalBought * 0.2); // 20% of total
-    const LOW_STOCK_THRESHOLD = Math.max(10, percentageThreshold); // At least 10 units, or 20% if higher
+    // Check for low stock (threshold: 4 units OR min_threshold if specified)
+    const minThreshold = updates.min_threshold !== undefined ? updates.min_threshold : (currentData.min_threshold || 4);
+    const LOW_STOCK_THRESHOLD = minThreshold;
     
     if (updatedQuantity <= LOW_STOCK_THRESHOLD) {
       // Send low stock alert to engineer
@@ -277,92 +277,6 @@ export async function deleteWorker(workerId) {
 // EQUIPMENT
 // ============================================================================
 
-/**
- * Get all equipment for a project
- * @param {string} projectId - Project ID
- * @returns {Promise<Array>} Array of equipment objects
- */
-export async function getEquipment(projectId) {
-  try {
-    const equipmentRef = collection(db, 'equipment');
-    const q = query(
-      equipmentRef, 
-      where('projectId', '==', projectId),
-      orderBy('dateAcquired', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-  } catch (error) {
-    console.error('Error getting equipment:', error);
-    throw new Error('Failed to fetch equipment');
-  }
-}
-
-/**
- * Add new equipment
- * @param {string} projectId - Project ID
- * @param {Object} equipment - Equipment data
- * @returns {Promise<Object>} Created equipment with ID
- */
-export async function addEquipment(projectId, equipment) {
-  try {
-    const equipmentRef = collection(db, 'equipment');
-    const equipmentData = {
-      ...equipment,
-      projectId,
-      dateAcquired: equipment.dateAcquired || new Date().toISOString().split('T')[0],
-      createdAt: serverTimestamp()
-    };
-    
-    const docRef = await addDoc(equipmentRef, equipmentData);
-    
-    return {
-      id: docRef.id,
-      ...equipmentData
-    };
-  } catch (error) {
-    console.error('Error adding equipment:', error);
-    throw new Error('Failed to add equipment');
-  }
-}
-
-/**
- * Update existing equipment
- * @param {string} equipmentId - Equipment ID
- * @param {Object} updates - Fields to update
- * @returns {Promise<void>}
- */
-export async function updateEquipment(equipmentId, updates) {
-  try {
-    const equipmentRef = doc(db, 'equipment', equipmentId);
-    await updateDoc(equipmentRef, {
-      ...updates,
-      updatedAt: serverTimestamp()
-    });
-  } catch (error) {
-    console.error('Error updating equipment:', error);
-    throw new Error('Failed to update equipment');
-  }
-}
-
-/**
- * Delete equipment
- * @param {string} equipmentId - Equipment ID
- * @returns {Promise<void>}
- */
-export async function deleteEquipment(equipmentId) {
-  try {
-    const equipmentRef = doc(db, 'equipment', equipmentId);
-    await deleteDoc(equipmentRef);
-  } catch (error) {
-    console.error('Error deleting equipment:', error);
-    throw new Error('Failed to delete equipment');
-  }
-}
 
 // ============================================================================
 // BUDGET LOGS

@@ -179,6 +179,33 @@ service cloud.firestore {
         isEngineerForProject(request.resource.data.projectId);
     }
     
+    // Blueprints - engineers can manage, workers can read for their assigned projects
+    match /blueprints/{blueprintId} {
+      // Read: engineers for their projects, workers for assigned projects
+      allow read: if isAuthenticated() && (
+        isEngineerForProject(resource.data.projectId) || 
+        getUserProjectId() == resource.data.projectId ||
+        workerHasProjectAccess(resource.data.projectId)
+      );
+      // List: authenticated users can list (queries filter by projectId)
+      allow list: if isAuthenticated();
+      // Create: engineers can create blueprints for any project they have access to
+      // This includes projects in activeProjectIds or where they are the engineerId
+      allow create: if isAuthenticated() && isEngineer() && (
+        isEngineerForProject(request.resource.data.projectId) ||
+        getUserProjectId() == request.resource.data.projectId ||
+        (exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.engineerId == request.auth.uid)
+      );
+      // Update/Delete: engineers for their projects
+      allow update, delete: if isAuthenticated() && isEngineer() && (
+        isEngineerForProject(resource.data.projectId) ||
+        getUserProjectId() == resource.data.projectId ||
+        (exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.engineerId == request.auth.uid)
+      );
+    }
+    
     // Chat messages - all project members can read and create
     match /chat_messages/{messageId} {
       // Read: check existing message's projectId

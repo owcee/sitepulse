@@ -15,7 +15,7 @@ export interface VerificationLog {
   id: string;
   workerId: string;
   workerName: string;
-  type: 'equipment' | 'material' | 'task' | 'damage' | 'borrow';
+  type: 'material' | 'task' | 'damage';
   photo: string;
   workerNotes: string;
   timestamp: string; // ISO string
@@ -25,7 +25,7 @@ export interface VerificationLog {
   verifiedAt?: string;
   rawTimestamp: Date; // For sorting
   taskTitle?: string; // For task completion photos
-  itemName?: string; // For material/equipment/damage
+  itemName?: string; // For material/damage
   cnnPrediction?: {
     status: 'not_started' | 'in_progress' | 'completed';
     confidence: number;
@@ -119,24 +119,7 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       usageSnapshot = { forEach: () => {}, size: 0 }; // Fallback
     }
 
-    // 3. Fetch Equipment Borrow Requests
-    console.log('Fetching equipment borrow requests for project:', projectId);
-    const borrowRef = collection(db, 'equipment_borrow_requests');
-    const borrowQuery = query(
-      borrowRef,
-      where('projectId', '==', projectId)
-    );
-    
-    let borrowSnapshot;
-    try {
-      borrowSnapshot = await getDocs(borrowQuery);
-      console.log(`Fetched ${borrowSnapshot.size} borrow requests`);
-    } catch (e) {
-      console.error('Error fetching borrow requests:', e);
-      borrowSnapshot = { forEach: () => {}, size: 0 }; // Fallback
-    }
-
-    // 4. Process and normalize data
+    // 3. Process and normalize data
     const logs: VerificationLog[] = [];
 
     // Process Photos
@@ -191,8 +174,7 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
     for (const docItem of usageSnapshot.docs || []) {
       const data = docItem.data();
       // Map specific usage types
-      let type: 'equipment' | 'material' | 'damage' = 'material';
-      if (data.type === 'equipment') type = 'equipment';
+      let type: 'material' | 'damage' = 'material';
       if (data.type === 'damage') type = 'damage';
 
       // Use workerName from document if available, otherwise fetch from worker_accounts
@@ -218,39 +200,6 @@ export async function getProjectVerificationLogs(projectId: string): Promise<Wor
       });
     }
 
-    // Process Borrow Requests - need to use for...of loop for async
-    for (const docItem of borrowSnapshot.docs || []) {
-      const data = docItem.data();
-      // Map status: 'pending' | 'approved' | 'rejected' | 'returned'
-      let status: 'pending' | 'approved' | 'rejected' = 'pending';
-      if (data.status === 'approved') status = 'approved';
-      if (data.status === 'rejected') status = 'rejected';
-      // Skip 'returned' status as they don't need verification
-
-      if (data.status !== 'returned') {
-        // Use workerName from document if available, otherwise fetch from worker_accounts
-        let workerName = data.workerName;
-        if (!workerName || workerName === 'Worker' || workerName === 'Unknown Worker') {
-          workerName = await getWorkerName(data.workerId);
-        }
-
-        logs.push({
-          id: docItem.id,
-          workerId: data.workerId,
-          workerName: workerName,
-          type: 'borrow',
-          photo: '', // No photo for borrow requests
-          workerNotes: `Request to borrow ${data.equipmentName}`,
-          timestamp: data.requestedAt?.toDate().toISOString() || new Date().toISOString(),
-          status: status,
-          engineerNotes: data.rejectionReason,
-          verifiedBy: data.approvedBy,
-          verifiedAt: data.approvedAt?.toDate().toISOString(),
-          rawTimestamp: data.requestedAt?.toDate() || new Date(),
-          itemName: data.equipmentName
-        });
-      }
-    }
 
     // 5. Group by Worker
     const workerMap = new Map<string, WorkerVerificationData>();

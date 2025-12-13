@@ -27,6 +27,11 @@ export interface Task {
   lastPhoto?: TaskPhoto;
   createdAt: string;
   updatedAt: string;
+  // Blueprint-related fields (NEW for SitePulse 3.0)
+  blueprintPinId?: string; // Reference to blueprint pin
+  verifiedCount?: number; // Number of verifications for this task
+  totalRequired?: number; // Total items needed
+  componentType?: string; // Type of electrical component
 }
 
 export interface TaskPhoto {
@@ -115,7 +120,7 @@ export interface Notification {
 
 export interface UsageSubmission {
   id: string;
-  type: 'material' | 'equipment' | 'damage';
+  type: 'material' | 'damage';
   itemId: string;
   itemName: string;
   quantity?: number;

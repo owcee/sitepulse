@@ -21,9 +21,9 @@ import CreateNewProjectScreen from '../screens/engineer/CreateNewProjectScreen';
 import WorkerAssignmentScreen from '../screens/engineer/WorkerAssignmentScreen';
 import MaterialsManagementPage from '../screens/engineer/MaterialsManagementPage';
 import WorkersManagementPage from '../screens/engineer/WorkersManagementPage';
-import EquipmentManagementPage from '../screens/engineer/EquipmentManagementPage';
 import BudgetLogsManagementPage from '../screens/engineer/BudgetLogsManagementPage';
 import TasksScreen from '../screens/engineer/TasksScreen';
+import BlueprintEditorScreen from '../screens/engineer/BlueprintEditorScreen';
 import DelayPredictionScreen from '../screens/engineer/DelayPredictionScreen';
 import ResourcesScreen from '../screens/engineer/ResourcesScreen';
 import ChatScreen from '../screens/shared/ChatScreen';
@@ -156,13 +156,13 @@ const ProjectToolsStack = ({ user, project, onLogout, onRefresh }: Props) => (
       {(props) => <ProjectToolsScreen {...props} user={user} project={project} onLogout={onLogout} onRefresh={onRefresh} />}
     </Stack.Screen>
     <Stack.Screen name="Tasks" component={TasksStack} />
+    <Stack.Screen name="BlueprintEditor" component={BlueprintEditorScreen} />
     <Stack.Screen name="CreateNewProject">
       {(props) => <CreateNewProjectScreen {...props} onProjectCreated={onRefresh} />}
     </Stack.Screen>
     <Stack.Screen name="WorkerAssignment" component={WorkerAssignmentScreen as any} />
     <Stack.Screen name="MaterialsManagement" component={MaterialsManagementPage} />
     <Stack.Screen name="WorkersManagement" component={WorkersManagementPage} />
-    <Stack.Screen name="EquipmentManagement" component={EquipmentManagementPage} />
     <Stack.Screen name="BudgetLogsManagement" component={BudgetLogsManagementPage} />
     <Stack.Screen 
       name="PrivacyPolicy" 

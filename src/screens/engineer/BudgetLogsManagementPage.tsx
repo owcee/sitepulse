@@ -31,6 +31,7 @@ import { exportBudgetToPDF } from '../../services/pdfExportService';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { updateProject, getProject } from '../../services/projectService';
 import { getBudgetLogs, getBudget, saveBudget } from '../../services/firebaseDataService';
+import { predictAllDelays } from '../../services/delayPredictionService';
 
 interface BudgetCategory {
   id: string;
@@ -69,22 +70,68 @@ export default function BudgetLogsManagementPage() {
   const [successMessage, setSuccessMessage] = useState('');
   const isSyncingRef = React.useRef(false);
   
-  // Calculate equipment and materials spent amounts from actual data
-  const calculateEquipmentSpent = () => {
-    return state.equipment.reduce((total, equip) => {
-      if (equip.type === 'rental' && equip.rentalCost) {
-        return total + equip.rentalCost;
-      }
-      return total;
-    }, 0);
-  };
-
+  // Calculate materials spent amounts from actual data
   const calculateMaterialsSpent = () => {
     return state.materials.reduce((total, material) => {
       // Use totalBought if available, otherwise use quantity
       const quantity = material.totalBought || material.quantity;
       return total + (quantity * material.price);
     }, 0);
+  };
+
+  // Calculate contingency delay spent from actual completed delays + predicted delays
+  const calculateContingencyDelaySpent = async (projectTotalBudget: number): Promise<number> => {
+    if (!projectId || !budget) return 0;
+    
+    try {
+      // Get project for delay penalty rate
+      const project = await getProject(projectId);
+      const delayPenaltyRate = project?.delayContingencyRate || 2; // Default 2% per day
+      
+      // Calculate actual penalty from completed tasks
+      const { getProjectTasks } = await import('../../services/taskService');
+      const allTasks = await getProjectTasks(projectId);
+      const completedTasks = allTasks.filter(t => t.status === 'completed' && t.planned_end_date && t.actual_end_date);
+      
+      let actualPenalty = 0;
+      completedTasks.forEach((task) => {
+        const plannedEnd = new Date(task.planned_end_date);
+        const actualEnd = new Date(task.actual_end_date!);
+        
+        // Calculate actual delay days
+        const delayDays = Math.max(0, Math.ceil((actualEnd.getTime() - plannedEnd.getTime()) / (1000 * 60 * 60 * 24)));
+        
+        if (delayDays > 0) {
+          // Calculate penalty for this task: (delayDays × rate) × totalBudget / 100
+          const penaltyPercentage = delayDays * delayPenaltyRate;
+          const taskPenalty = (projectTotalBudget * penaltyPercentage) / 100;
+          actualPenalty += taskPenalty;
+        }
+      });
+      
+      // Also get predicted penalty from active/in-progress tasks (for potential future delays)
+      const result = await predictAllDelays(projectId);
+      const activePredictions = result.predictions.filter(p => p.status !== 'completed');
+      
+      let predictedPenalty = 0;
+      if (activePredictions.length > 0) {
+        // Get max predicted delay from active tasks
+        const maxDelay = Math.max(...activePredictions.map(p => p.delayDays || 0), 0);
+        
+        if (maxDelay > 0) {
+          const deductionPercentage = maxDelay * delayPenaltyRate;
+          predictedPenalty = (projectTotalBudget * deductionPercentage) / 100;
+        }
+      }
+      
+      // Return the higher of actual or predicted (since actual is certain, predicted is potential)
+      // Actually, we should use actual for completed + predicted for active
+      // But for spent amount, we should use actual penalties only
+      return actualPenalty;
+    } catch (error) {
+      console.error('Error calculating contingency delay:', error);
+      return 0;
+    }
   };
 
   // Project info state
@@ -163,21 +210,19 @@ export default function BudgetLogsManagementPage() {
           // IMPORTANT: Preserve ALL user adjustments - only fix old hardcoded values (50K or 150K) that are wrong
           const expectedAllocated = Math.round(loadedBudget.totalBudget * 0.2);
           const oldHardcodedValues = [50000, 150000];
-          const updatedCategories = loadedBudget.categories.map(cat => {
-            if (cat.id === 'equipment') {
-              // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
-              // This preserves any user adjustments (even if not exactly 20%)
-              const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
-              const exceedsBudget = cat.allocatedAmount > loadedBudget.totalBudget;
-              // Only fix old hardcoded values that are wrong - preserve all other user adjustments
-              const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
-              return { 
-                ...cat, 
-                spentAmount: calculateEquipmentSpent(), 
-                allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
-                lastUpdated: shouldFix ? new Date() : cat.lastUpdated // Only update timestamp if we fixed it
-              };
-            }
+          
+          // Calculate contingency delay spent
+          const contingencyDelaySpent = await calculateContingencyDelaySpent(loadedBudget.totalBudget);
+          
+          // Calculate allocated amount for Contingency Delay from contingency percentage
+          const contingencyDelayAllocated = (loadedBudget.totalBudget * loadedBudget.contingencyPercentage) / 100;
+          
+          // Ensure Contingency Delay category exists
+          let hasContingencyDelay = loadedBudget.categories.some(cat => cat.id === 'contingency_delay');
+          
+          const updatedCategories = loadedBudget.categories
+            .filter(cat => cat.id !== 'equipment') // Remove equipment category
+            .map(cat => {
             if (cat.id === 'materials') {
               // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
               // This preserves any user adjustments (even if not exactly 20%)
@@ -192,8 +237,30 @@ export default function BudgetLogsManagementPage() {
                 lastUpdated: shouldFix ? new Date() : cat.lastUpdated // Only update timestamp if we fixed it
               };
             }
+            if (cat.id === 'contingency_delay') {
+              hasContingencyDelay = true;
+              return {
+                ...cat,
+                allocatedAmount: contingencyDelayAllocated,
+                spentAmount: contingencyDelaySpent,
+                lastUpdated: new Date(),
+              };
+            }
             return cat;
           });
+          
+          // Add Contingency Delay category if it doesn't exist
+          if (!hasContingencyDelay) {
+            updatedCategories.push({
+              id: 'contingency_delay',
+              name: 'Contingency Delay',
+              allocatedAmount: contingencyDelayAllocated,
+              spentAmount: contingencyDelaySpent,
+              description: 'Auto-calculated penalty based on delay prediction',
+              lastUpdated: new Date(),
+              isPrimary: true,
+            });
+          }
           
           const updatedTotalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
           
@@ -207,7 +274,7 @@ export default function BudgetLogsManagementPage() {
           
           // Check if any allocations were corrected (only save if corrections were made)
           const allocationsWereFixed = updatedCategories.some(cat => {
-            if (cat.id === 'equipment' || cat.id === 'materials') {
+            if (cat.id === 'materials') {
               const oldCat = loadedBudget.categories.find(c => c.id === cat.id);
               return oldCat && oldCat.allocatedAmount !== cat.allocatedAmount;
             }
@@ -234,7 +301,8 @@ export default function BudgetLogsManagementPage() {
           } catch (error) {
             console.warn('Could not load project budget, using default');
           }
-          const defaultBudget = getDefaultBudget(projectTotalBudget);
+          const contingencyDelaySpent = await calculateContingencyDelaySpent(projectTotalBudget);
+          const defaultBudget = getDefaultBudget(projectTotalBudget, contingencyDelaySpent);
           setBudget(defaultBudget);
           setSharedBudget(defaultBudget);
         }
@@ -250,7 +318,8 @@ export default function BudgetLogsManagementPage() {
         } catch (err) {
           console.warn('Could not load project budget, using default');
         }
-        const defaultBudget = getDefaultBudget(projectTotalBudget);
+        const contingencyDelaySpent = await calculateContingencyDelaySpent(projectTotalBudget);
+        const defaultBudget = getDefaultBudget(projectTotalBudget, contingencyDelaySpent, 10);
         setBudget(defaultBudget);
         setSharedBudget(defaultBudget);
       } finally {
@@ -263,30 +332,31 @@ export default function BudgetLogsManagementPage() {
   }, [projectId]); // Only depend on projectId, not setSharedBudget
   
   // Budget state - will be initialized from Firebase or defaults
-  const initialEquipmentSpent = calculateEquipmentSpent();
   const initialMaterialsSpent = calculateMaterialsSpent();
   
-  const getDefaultBudget = (totalBudget: number = 250000): ProjectBudget => {
-    // Calculate 20% of total budget for each category
-    const equipmentAllocated = Math.round(totalBudget * 0.2);
+  const getDefaultBudget = (totalBudget: number = 250000, contingencyDelaySpent: number = 0, contingencyPercentage: number = 10): ProjectBudget => {
+    // Calculate 20% of total budget for materials category
     const materialsAllocated = Math.round(totalBudget * 0.2);
     
+    // Calculate allocated amount for Contingency Delay from contingency percentage
+    const contingencyDelayAllocated = (totalBudget * contingencyPercentage) / 100;
+    
     const categories = [
-      {
-        id: 'equipment',
-        name: 'Equipment',
-        allocatedAmount: equipmentAllocated,
-        spentAmount: initialEquipmentSpent,
-        description: 'Equipment rental and purchases (Auto-calculated)',
-        lastUpdated: new Date(),
-        isPrimary: true,
-      },
       {
         id: 'materials',
         name: 'Materials',
         allocatedAmount: materialsAllocated,
         spentAmount: initialMaterialsSpent,
-        description: 'Construction materials and supplies (Auto-calculated)',
+        description: 'Material purchases (Auto-calculated)',
+        lastUpdated: new Date(),
+        isPrimary: true,
+      },
+      {
+        id: 'contingency_delay',
+        name: 'Contingency Delay',
+        allocatedAmount: contingencyDelayAllocated,
+        spentAmount: contingencyDelaySpent,
+        description: 'Auto-calculated penalty based on delay prediction',
         lastUpdated: new Date(),
         isPrimary: true,
       },
@@ -297,7 +367,7 @@ export default function BudgetLogsManagementPage() {
     return {
       totalBudget,
       totalSpent,
-      contingencyPercentage: 10,
+      contingencyPercentage,
       lastUpdated: new Date(),
       categories,
     };
@@ -354,19 +424,34 @@ export default function BudgetLogsManagementPage() {
   const [totalBudgetForm, setTotalBudgetForm] = useState({
     totalBudget: '250000',
     contingencyPercentage: '10',
+    delayContingencyRate: '2',
   });
   
   // Update totalBudgetForm when budget loads
   React.useEffect(() => {
-    if (budget) {
-      setTotalBudgetForm({
-        totalBudget: budget.totalBudget.toString(),
-        contingencyPercentage: budget.contingencyPercentage.toString(),
-      });
-    }
-  }, [budget]);
+    const loadFormData = async () => {
+      if (budget && projectId) {
+        try {
+          const project = await getProject(projectId);
+          setTotalBudgetForm({
+            totalBudget: budget.totalBudget.toString(),
+            contingencyPercentage: budget.contingencyPercentage.toString(),
+            delayContingencyRate: (project?.delayContingencyRate || 2).toString(),
+          });
+        } catch (error) {
+          console.error('Error loading project for delay contingency rate:', error);
+          setTotalBudgetForm({
+            totalBudget: budget.totalBudget.toString(),
+            contingencyPercentage: budget.contingencyPercentage.toString(),
+            delayContingencyRate: '2',
+          });
+        }
+      }
+    };
+    loadFormData();
+  }, [budget, projectId]);
 
-  // Update primary categories when equipment or materials change
+  // Update primary categories when materials change
   // Also update categories based on budget logs
   React.useEffect(() => {
     // Wait for budget to be loaded before updating
@@ -378,31 +463,47 @@ export default function BudgetLogsManagementPage() {
     // Prevent updates during sync to avoid loops
     if (isSyncingRef.current) return;
     
-    const equipmentSpent = calculateEquipmentSpent();
     const materialsSpent = calculateMaterialsSpent();
     
     // Check if primary categories need updating
-    const equipmentCategory = budget.categories.find(cat => cat.id === 'equipment');
     const materialsCategory = budget.categories.find(cat => cat.id === 'materials');
     
-    const equipmentChanged = equipmentCategory && Math.abs(equipmentCategory.spentAmount - equipmentSpent) > 0.01;
     const materialsChanged = materialsCategory && Math.abs(materialsCategory.spentAmount - materialsSpent) > 0.01;
     
-    if (!equipmentChanged && !materialsChanged) return;
+    if (!materialsChanged) return;
     
     // Update immediately (no debounce) to ensure changes persist
     // This is the SINGLE source of truth for budget updates
-    setBudget(prev => {
-      if (!prev) return getDefaultBudget(250000);
-      const updatedCategories = prev.categories.map(cat => {
-        if (cat.id === 'equipment') {
-          return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
+    // Calculate contingency delay asynchronously
+    (async () => {
+      const contingencyDelaySpent = await calculateContingencyDelaySpent(budget.totalBudget);
+      setBudget((prev) => {
+        if (!prev) return getDefaultBudget(250000, 0);
+        const updatedCategories = prev.categories
+          .filter(cat => cat.id !== 'equipment') // Remove equipment category
+          .map(cat => {
+          if (cat.id === 'materials') {
+            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+          }
+          if (cat.id === 'contingency_delay') {
+            return { ...cat, spentAmount: contingencyDelaySpent, lastUpdated: new Date() };
+          }
+          return cat;
+        });
+        
+        // Ensure Contingency Delay category exists
+        const hasContingencyDelay = updatedCategories.some(cat => cat.id === 'contingency_delay');
+        if (!hasContingencyDelay) {
+          updatedCategories.push({
+            id: 'contingency_delay',
+            name: 'Contingency Delay',
+            allocatedAmount: 0,
+            spentAmount: contingencyDelaySpent,
+            description: 'Auto-calculated penalty based on delay prediction',
+            lastUpdated: new Date(),
+            isPrimary: true,
+          });
         }
-        if (cat.id === 'materials') {
-          return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
-        }
-        return cat;
-      });
       
       // Calculate spent amounts from budget logs for each category
       const logsByCategory = state.budgetLogs.reduce((acc, log) => {
@@ -449,8 +550,72 @@ export default function BudgetLogsManagementPage() {
       saveBudgetToFirebase(updatedBudget);
       
       return updatedBudget;
-    });
-  }, [state.equipment, state.materials, state.budgetLogs, budget, loadingBudget]);
+      });
+    })();
+  }, [state.materials, state.budgetLogs, budget, loadingBudget]);
+
+    // Update contingency delay category when delay predictions might change
+    // This runs periodically to keep the category up-to-date
+    React.useEffect(() => {
+      if (loadingBudget || !budget || isSyncingRef.current) return;
+      
+      // Update contingency delay category every time budget is accessed
+      // This ensures it stays current with latest delay predictions
+      (async () => {
+        const contingencyDelaySpent = await calculateContingencyDelaySpent(budget.totalBudget);
+        const contingencyDelayAllocated = (budget.totalBudget * budget.contingencyPercentage) / 100;
+        const contingencyCategory = budget.categories.find(cat => cat.id === 'contingency_delay');
+        
+        // Only update if the value has changed
+        const needsUpdate = !contingencyCategory || 
+          Math.abs(contingencyCategory.spentAmount - contingencyDelaySpent) > 0.01 ||
+          Math.abs(contingencyCategory.allocatedAmount - contingencyDelayAllocated) > 0.01;
+        
+        if (needsUpdate) {
+          setBudget((prev) => {
+            if (!prev) return prev;
+            
+            const updatedCategories = prev.categories.map(cat => {
+              if (cat.id === 'contingency_delay') {
+                return { 
+                  ...cat, 
+                  allocatedAmount: contingencyDelayAllocated,
+                  spentAmount: contingencyDelaySpent, 
+                  lastUpdated: new Date() 
+                };
+              }
+              return cat;
+            });
+            
+            // Ensure category exists if it doesn't
+            const hasContingencyDelay = updatedCategories.some(cat => cat.id === 'contingency_delay');
+            if (!hasContingencyDelay) {
+              updatedCategories.push({
+                id: 'contingency_delay',
+                name: 'Contingency Delay',
+                allocatedAmount: contingencyDelayAllocated,
+                spentAmount: contingencyDelaySpent,
+                description: 'Auto-calculated penalty based on delay prediction',
+                lastUpdated: new Date(),
+                isPrimary: true,
+              });
+            }
+            
+            const newTotalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
+            
+            const updatedBudget: ProjectBudget = {
+              ...prev,
+              categories: updatedCategories,
+              totalSpent: newTotalSpent,
+              lastUpdated: new Date(),
+            };
+            
+            saveBudgetToFirebase(updatedBudget);
+            return updatedBudget;
+          });
+        }
+      })();
+    }, [budget, loadingBudget]);
 
   const resetForm = () => {
     setFormData({
@@ -478,12 +643,23 @@ export default function BudgetLogsManagementPage() {
     setModalVisible(true);
   };
 
-  const openTotalBudgetModal = () => {
-    if (!budget) return;
-    setTotalBudgetForm({
-      totalBudget: budget.totalBudget.toString(),
-      contingencyPercentage: budget.contingencyPercentage.toString(),
-    });
+  const openTotalBudgetModal = async () => {
+    if (!budget || !projectId) return;
+    try {
+      const project = await getProject(projectId);
+      setTotalBudgetForm({
+        totalBudget: budget.totalBudget.toString(),
+        contingencyPercentage: budget.contingencyPercentage.toString(),
+        delayContingencyRate: (project?.delayContingencyRate || 2).toString(),
+      });
+    } catch (error) {
+      console.error('Error loading project:', error);
+      setTotalBudgetForm({
+        totalBudget: budget.totalBudget.toString(),
+        contingencyPercentage: budget.contingencyPercentage.toString(),
+        delayContingencyRate: '2',
+      });
+    }
     setTotalBudgetModalVisible(true);
   };
 
@@ -493,7 +669,17 @@ export default function BudgetLogsManagementPage() {
       return;
     }
 
-    const allocatedAmount = parseFloat(formData.allocatedAmount);
+    let allocatedAmount = parseFloat(formData.allocatedAmount);
+    
+    // For primary categories, only allow editing allocated amount (except Contingency Delay)
+    const isPrimary = editingCategory?.isPrimary;
+    const isContingencyDelay = editingCategory?.id === 'contingency_delay';
+    
+    // For Contingency Delay, allocated amount comes from contingency percentage
+    // Don't allow manual editing - it's set from Edit Total Budget modal
+    if (isContingencyDelay && budget) {
+      allocatedAmount = (budget.totalBudget * budget.contingencyPercentage) / 100;
+    }
     
     // Validate that total allocated doesn't exceed total budget
     if (!budget) {
@@ -515,8 +701,6 @@ export default function BudgetLogsManagementPage() {
       return;
     }
     
-    // For primary categories, only allow editing allocated amount
-    const isPrimary = editingCategory?.isPrimary;
     let spentAmount: number;
     
     if (isPrimary) {
@@ -580,25 +764,75 @@ export default function BudgetLogsManagementPage() {
   };
 
   const saveTotalBudget = async () => {
-    if (!budget) return;
-    
+    if (!budget || !projectId) return;
+
     const newTotalBudget = parseFloat(totalBudgetForm.totalBudget);
-    const newContingency = parseFloat(totalBudgetForm.contingencyPercentage);
+    const newContingencyPercentage = parseFloat(totalBudgetForm.contingencyPercentage);
+    const newDelayContingencyRate = parseFloat(totalBudgetForm.delayContingencyRate);
 
     if (!newTotalBudget || newTotalBudget <= 0) {
       Alert.alert('Error', 'Please enter a valid total budget');
       return;
     }
 
-    if (newContingency < 0 || newContingency > 50) {
+    if (newContingencyPercentage < 0 || newContingencyPercentage > 50) {
       Alert.alert('Error', 'Contingency percentage must be between 0% and 50%');
       return;
+    }
+
+    if (newDelayContingencyRate < 0 || newDelayContingencyRate > 10) {
+      Alert.alert('Error', 'Delay contingency rate must be between 0% and 10% per day');
+      return;
+    }
+
+    // Update project's delayContingencyRate
+    try {
+      await updateProject(projectId, {
+        budget: newTotalBudget,
+        delayContingencyRate: newDelayContingencyRate,
+      });
+    } catch (error) {
+      console.error('Error updating project:', error);
+      Alert.alert('Error', 'Failed to update delay contingency rate');
+      return;
+    }
+
+    // Calculate new allocated amount for Contingency Delay category
+    const contingencyDelayAllocated = (newTotalBudget * newContingencyPercentage) / 100;
+    
+    // Update Contingency Delay category's allocated amount
+    const updatedCategories = budget.categories.map(cat => {
+      if (cat.id === 'contingency_delay') {
+        return {
+          ...cat,
+          allocatedAmount: contingencyDelayAllocated,
+          lastUpdated: new Date(),
+        };
+      }
+      return cat;
+    });
+
+    // Ensure Contingency Delay category exists
+    const hasContingencyDelay = updatedCategories.some(cat => cat.id === 'contingency_delay');
+    if (!hasContingencyDelay) {
+      // Calculate spent amount for new category
+      const contingencyDelaySpent = await calculateContingencyDelaySpent(newTotalBudget);
+      updatedCategories.push({
+        id: 'contingency_delay',
+        name: 'Contingency Delay',
+        allocatedAmount: contingencyDelayAllocated,
+        spentAmount: contingencyDelaySpent,
+        description: 'Auto-calculated penalty based on delay prediction',
+        lastUpdated: new Date(),
+        isPrimary: true,
+      });
     }
 
     const updatedBudget: ProjectBudget = {
       ...budget,
       totalBudget: newTotalBudget,
-      contingencyPercentage: newContingency,
+      contingencyPercentage: newContingencyPercentage,
+      categories: updatedCategories,
       lastUpdated: new Date(),
     };
 
@@ -607,7 +841,7 @@ export default function BudgetLogsManagementPage() {
     // Immediately save to Firebase
     await saveBudgetToFirebase(updatedBudget);
 
-    setSuccessMessage('Total budget updated successfully');
+    setSuccessMessage('Total budget, contingency percentage, and delay contingency rate updated successfully');
     setShowSuccessDialog(true);
     setTotalBudgetModalVisible(false);
   };
@@ -619,7 +853,7 @@ export default function BudgetLogsManagementPage() {
     if (isPrimary) {
       Alert.alert(
         'Cannot Delete',
-        'Equipment and Materials are primary categories that cannot be deleted. They are automatically synced with your inventory.'
+        'Materials is a primary category that cannot be deleted. It is automatically synced with your inventory.'
       );
       return;
     }
@@ -736,7 +970,6 @@ export default function BudgetLogsManagementPage() {
   
   const budgetUsagePercent = budget.totalSpent / budget.totalBudget;
   const contingencyAmount = budget.totalBudget * (budget.contingencyPercentage / 100);
-  const effectiveBudget = budget.totalBudget - contingencyAmount;
   const remainingBudget = budget.totalBudget - budget.totalSpent;
 
   return (
@@ -819,7 +1052,7 @@ export default function BudgetLogsManagementPage() {
               </Text>
             </View>
             <View style={styles.budgetRow}>
-              <Text style={styles.budgetLabel}>Contingency ({budget.contingencyPercentage}%):</Text>
+              <Text style={styles.budgetLabel}>Contingency Allocation ({budget.contingencyPercentage}%):</Text>
               <Text style={styles.budgetValue}>{formatCurrency(contingencyAmount)}</Text>
             </View>
           </View>
@@ -881,7 +1114,9 @@ export default function BudgetLogsManagementPage() {
             {editingCategory?.isPrimary && (
               <Surface style={styles.warningBox}>
                 <Text style={styles.warningText}>
-                  ⚠️ This is a primary category. Spent amount is auto-calculated from {editingCategory.name} inventory.
+                  {editingCategory.id === 'contingency_delay' 
+                    ? '⚠️ This is a protected category. Penalty amount is auto-calculated from delay predictions. Allocated amount is not used for this category.'
+                    : `⚠️ This is a primary category. Spent amount is auto-calculated from ${editingCategory.name} inventory.`}
                 </Text>
               </Surface>
             )}
@@ -905,7 +1140,13 @@ export default function BudgetLogsManagementPage() {
               style={styles.input}
               left={<TextInput.Icon icon="cash" />}
               textColor={theme.colors.text}
+              disabled={editingCategory?.id === 'contingency_delay'}
             />
+            {editingCategory?.id === 'contingency_delay' && (
+              <Paragraph style={styles.helperText}>
+                Allocated amount is automatically calculated from Contingency Percentage in Edit Total Budget. It cannot be manually edited here.
+              </Paragraph>
+            )}
 
             {!editingCategory?.isPrimary && (
               <TextInput
@@ -984,12 +1225,47 @@ export default function BudgetLogsManagementPage() {
               right={<TextInput.Affix text="%" />}
               textColor={theme.colors.text}
             />
+            {(() => {
+              const totalBudget = parseFloat(totalBudgetForm.totalBudget || '0');
+              const contingencyPercent = parseFloat(totalBudgetForm.contingencyPercentage || '0');
+              const calculatedAmount = (totalBudget * contingencyPercent) / 100;
+              return (
+                <>
+                  <Paragraph style={styles.calculatedAmount}>
+                    <Text style={styles.calculatedAmountBold}>{formatCurrency(calculatedAmount)}</Text>
+                  </Paragraph>
+                  <Paragraph style={styles.helperText}>
+                    Percentage of total budget allocated for Contingency Delay category
+                  </Paragraph>
+                </>
+              );
+            })()}
 
-            <View style={styles.contingencyInfo}>
-              <Text style={styles.contingencyText}>
-                Contingency Amount: {formatCurrency(parseFloat(totalBudgetForm.totalBudget || '0') * (parseFloat(totalBudgetForm.contingencyPercentage || '0') / 100))}
-              </Text>
-            </View>
+            <TextInput
+              mode="outlined"
+              label="Delay Penalty Rate (% per day) *"
+              value={totalBudgetForm.delayContingencyRate}
+              onChangeText={(text) => setTotalBudgetForm(prev => ({ ...prev, delayContingencyRate: text }))}
+              keyboardType="numeric"
+              style={styles.input}
+              right={<TextInput.Affix text="%" />}
+              textColor={theme.colors.text}
+            />
+            {(() => {
+              const totalBudget = parseFloat(totalBudgetForm.totalBudget || '0');
+              const delayRate = parseFloat(totalBudgetForm.delayContingencyRate || '0');
+              const perDayAmount = (totalBudget * delayRate) / 100;
+              return (
+                <>
+                  <Paragraph style={styles.calculatedAmount}>
+                    <Text style={styles.calculatedAmountBold}>{formatCurrency(perDayAmount)} per day</Text>
+                  </Paragraph>
+                  <Paragraph style={styles.helperText}>
+                    Percentage of total budget deducted per day of predicted delay (used to calculate spent amount)
+                  </Paragraph>
+                </>
+              );
+            })()}
 
             <View style={styles.modalActions}>
               <Button onPress={() => setTotalBudgetModalVisible(false)}>Cancel</Button>
@@ -1522,6 +1798,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: constructionColors.complete,
     textAlign: 'center',
+  },
+  helperText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.xs,
+  },
+  calculatedAmount: {
+    fontSize: fontSizes.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    marginHorizontal: spacing.xs,
+  },
+  calculatedAmountBold: {
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+    color: theme.colors.primary,
   },
   modalActions: {
     flexDirection: 'row',

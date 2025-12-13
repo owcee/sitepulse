@@ -557,16 +557,6 @@ interface MaterialItem {
   dateAdded: string;
 }
 
-interface EquipmentItem {
-  id: string;
-  name: string;
-  type: 'owned' | 'rental';
-  category: string;
-  condition: 'excellent' | 'good' | 'fair' | 'needs_repair';
-  rentalCost?: number;
-  status: 'available' | 'in_use' | 'maintenance';
-  dateAcquired: string;
-}
 
 /**
  * Generate Materials Inventory Report as PDF
@@ -574,11 +564,10 @@ interface EquipmentItem {
 export async function exportMaterialsToPDF(
   materials: MaterialItem[], 
   projectInfo: ProjectInfo,
-  lowStockThreshold: number = 10,
-  equipment?: EquipmentItem[]
+  lowStockThreshold: number = 10
 ): Promise<void> {
   try {
-    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold, equipment);
+    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold);
 
     const { uri } = await Print.printToFileAsync({
       html: htmlContent,
@@ -623,8 +612,7 @@ export async function exportMaterialsToPDF(
 function generateMaterialsHTML(
   materials: MaterialItem[],
   projectInfo: ProjectInfo,
-  lowStockThreshold: number,
-  equipment?: EquipmentItem[]
+  lowStockThreshold: number
 ): string {
   const currentDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
@@ -633,10 +621,9 @@ function generateMaterialsHTML(
   });
 
   const totalValue = materials.reduce((sum, m) => sum + (m.quantity * m.price), 0);
-  const equipmentValue = equipment ? equipment.reduce((sum, e) => sum + (e.rentalCost || 0), 0) : 0;
-  const totalInventoryValue = totalValue + equipmentValue;
+  const totalInventoryValue = totalValue;
   const lowStockItems = materials.filter(m => m.quantity <= lowStockThreshold);
-  const totalItems = materials.length + (equipment ? equipment.length : 0);
+  const totalItems = materials.length;
 
   // Group by category
   const categorySummary = materials.reduce((acc, m) => {
@@ -685,29 +672,6 @@ function generateMaterialsHTML(
       `;
     })
     .join('');
-
-  // Generate equipment rows
-  const equipmentRows = equipment && equipment.length > 0 ? equipment
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((e) => {
-      const statusColor = e.status === 'available' ? '#4CAF50' : e.status === 'in_use' ? '#FF9800' : '#F44336';
-      const conditionText = e.condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-      return `
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${e.name}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${e.category}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px; text-transform: capitalize;">${e.type}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${conditionText}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px; color: ${statusColor}; font-weight: 600; text-transform: capitalize;">
-            ${e.status.replace('_', ' ')}
-          </td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; font-weight: 600;">
-            ${e.rentalCost ? `₱${e.rentalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
-          </td>
-        </tr>
-      `;
-    })
-    .join('') : '';
 
   const lowStockRows = lowStockItems
     .map((m) => `
@@ -923,26 +887,6 @@ function generateMaterialsHTML(
         </table>
       </div>
 
-      ${equipment && equipment.length > 0 ? `
-      <div class="section">
-        <h2>Detailed Inventory - Equipment (${equipment.length} items)</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Equipment</th>
-              <th>Category</th>
-              <th>Type</th>
-              <th>Condition</th>
-              <th>Status</th>
-              <th style="text-align: right;">Rental Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${equipmentRows}
-          </tbody>
-        </table>
-      </div>
-      ` : ''}
 
       <div class="footer">
         <p><strong>SitePulse</strong> - Construction Management Platform</p>
@@ -954,12 +898,4 @@ function generateMaterialsHTML(
   `;
 }
 
-/**
- * Generate Equipment Report as PDF
- * (Future enhancement)
- */
-export async function exportEquipmentToPDF(equipment: any[], projectInfo: ProjectInfo): Promise<void> {
-  // Similar implementation for equipment
-  Alert.alert('Coming Soon', 'Equipment export feature will be available in the next update.');
-}
 

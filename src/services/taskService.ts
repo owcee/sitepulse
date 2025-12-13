@@ -45,6 +45,11 @@ export interface Task {
       score: number;
     };
   };
+  // Blueprint-related fields (NEW for SitePulse 3.0: Electrical)
+  blueprintPinId?: string; // Reference to blueprint pin that created this task
+  verifiedCount?: number; // Number of verifications for this task
+  totalRequired?: number; // Total items needed for this task
+  componentType?: string; // Type of electrical component (e.g., "Outlet", "Switch", "Light Fixture")
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;

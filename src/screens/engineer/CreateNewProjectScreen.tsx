@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { 
   Card, 
   Title, 
@@ -11,12 +11,17 @@ import {
   Chip,
   IconButton,
   Portal,
-  Dialog
+  Dialog,
+  ProgressBar,
+  ActivityIndicator
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { createProject } from '../../services/firebaseService';
+import { uploadWithProgress } from '../../services/storageUploadHelperV2';
 
 interface CreateNewProjectScreenProps {
   navigation?: any;
@@ -35,24 +40,95 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [budget, setBudget] = useState('');
-  const [duration, setDuration] = useState('');
   const [clientName, setClientName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  
+  // File upload states
+  const [excelFile, setExcelFile] = useState<{uri: string, name: string, size?: number} | null>(null);
+  const [blueprintImage, setBlueprintImage] = useState<{uri: string, name: string} | null>(null);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const [uploadingBlueprint, setUploadingBlueprint] = useState(false);
+  const [excelUploadProgress, setExcelUploadProgress] = useState(0);
+  const [blueprintUploadProgress, setBlueprintUploadProgress] = useState(0);
+  const [excelFileUrl, setExcelFileUrl] = useState<string>('');
+  const [blueprintImageUrl, setBlueprintImageUrl] = useState<string>('');
+  
   const [fieldErrors, setFieldErrors] = useState({
     projectName: false,
-    budget: false,
-    duration: false
+    excelFile: false,
+    blueprintImage: false
   });
+
+  const handlePickExcelFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const file = result.assets[0];
+        setExcelFile({
+          uri: file.uri,
+          name: file.name || 'scope_of_work.xlsx',
+          size: file.size
+        });
+        setFieldErrors(prev => ({ ...prev, excelFile: false }));
+        
+        // Upload file immediately
+        await handleUploadExcelFile(file.uri, file.name || 'scope_of_work.xlsx');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', `Failed to pick Excel file: ${error.message}`);
+    }
+  };
+
+  const handleUploadExcelFile = async (fileUri: string, fileName: string) => {
+    // Store file info but don't upload yet - will upload after project creation
+    // This way we can use the actual project ID in the storage path
+    setExcelFileUrl(fileUri); // Store local URI temporarily
+    console.log('✅ Excel file selected:', fileName);
+  };
+
+  const handlePickBlueprint = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.9,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setBlueprintImage({
+          uri: asset.uri,
+          name: asset.fileName || 'electrical_plan.jpg'
+        });
+        setFieldErrors(prev => ({ ...prev, blueprintImage: false }));
+        
+        // Upload image immediately
+        await handleUploadBlueprint(asset.uri, asset.fileName || 'electrical_plan.jpg');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', `Failed to pick blueprint image: ${error.message}`);
+    }
+  };
+
+  const handleUploadBlueprint = async (imageUri: string, fileName: string) => {
+    // Store image info but don't upload yet - will upload after project creation
+    // This way we can use the actual project ID in the storage path
+    setBlueprintImageUrl(imageUri); // Store local URI temporarily
+    console.log('✅ Blueprint image selected:', fileName);
+  };
 
   const handleCreateProject = async () => {
     const errors = {
       projectName: false,
-      budget: false,
-      duration: false
+      excelFile: false,
+      blueprintImage: false
     };
 
     if (!projectName.trim()) {
@@ -63,41 +139,43 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
       return;
     }
 
-    if (!budget.trim()) {
-      errors.budget = true;
+    if (!excelFile) {
+      errors.excelFile = true;
       setFieldErrors(errors);
-      setErrorMessage('Please enter a project budget.');
+      setErrorMessage('Please upload the Excel file (Scope of Work & Gantt Chart).');
       setShowErrorDialog(true);
       return;
     }
 
-    if (!duration.trim()) {
-      errors.duration = true;
+    if (!blueprintImage) {
+      errors.blueprintImage = true;
       setFieldErrors(errors);
-      setErrorMessage('Please enter project duration.');
+      setErrorMessage('Please upload the Electrical Plan (Blueprint).');
       setShowErrorDialog(true);
       return;
     }
 
     setFieldErrors(errors);
     setIsCreating(true);
+    setUploadingExcel(true);
+    setUploadingBlueprint(true);
 
     try {
-      // Convert months to days (approximately 30 days per month)
-      const durationMonths = parseInt(duration) || 0;
-      const durationDays = durationMonths * 30;
-      
+      // Files will be uploaded in projectService after project creation
+      // Pass local URIs - service will handle upload to correct project folder
       const projectData = {
         name: projectName.trim(),
         description: description.trim(),
         location: location.trim(),
         clientName: clientName.trim(),
-        budget: parseFloat(budget) || 0,
-        duration: durationDays,
-        durationMonths: durationMonths, // Store original months value too
+        excelFileUrl: excelFile.uri, // Local URI - will be uploaded in service
+        blueprintImageUrl: blueprintImage.uri, // Local URI - will be uploaded in service
       };
 
       const createdProject = await createProject(projectData);
+      
+      setUploadingExcel(false);
+      setUploadingBlueprint(false);
       console.log('✅ Project created:', createdProject.id);
       
       // Show success dialog briefly, then redirect
@@ -128,6 +206,8 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
         }, 2000);
       }
     } catch (error: any) {
+      setUploadingExcel(false);
+      setUploadingBlueprint(false);
       setErrorMessage(`Failed to create project: ${error.message}`);
       setShowErrorDialog(true);
     } finally {
@@ -209,48 +289,124 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
           </Card.Content>
         </Card>
 
-        {/* Budget & Timeline */}
+        {/* Excel File Upload */}
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.cardTitle}>Budget & Timeline</Title>
+            <Title style={styles.cardTitle}>Excel File (Scope of Work & Gantt Chart) *</Title>
             
-            <TextInput
-              label="Total Budget (₱) *"
-              value={budget}
-              onChangeText={(text) => {
-                setBudget(text);
-                if (text.trim()) {
-                  setFieldErrors(prev => ({ ...prev, budget: false }));
-                }
-              }}
-              keyboardType="numeric"
-              style={styles.input}
-              placeholder="e.g., 250000"
-              error={fieldErrors.budget}
-              left={<TextInput.Icon icon="cash" />}
-            />
-
-            <TextInput
-              label="Duration (months) *"
-              value={duration}
-              onChangeText={(text) => {
-                setDuration(text);
-                if (text.trim()) {
-                  setFieldErrors(prev => ({ ...prev, duration: false }));
-                }
-              }}
-              keyboardType="numeric"
-              style={styles.input}
-              placeholder="Estimated project duration in months"
-              left={<TextInput.Icon icon="calendar" />}
-              error={fieldErrors.duration}
-            />
+            {!excelFile ? (
+              <Button
+                mode="outlined"
+                onPress={handlePickExcelFile}
+                icon="file-excel"
+                style={styles.uploadButton}
+                disabled={uploadingExcel || isCreating}
+              >
+                Upload Excel File
+              </Button>
+            ) : (
+              <View style={styles.filePreview}>
+                <View style={styles.fileInfo}>
+                  <IconButton icon="file-excel" size={24} iconColor={constructionColors.success} />
+                  <View style={styles.fileDetails}>
+                    <Paragraph style={styles.fileName} numberOfLines={1}>
+                      {excelFile.name}
+                    </Paragraph>
+                    {excelFile.size && (
+                      <Paragraph style={styles.fileSize}>
+                        {(excelFile.size / 1024 / 1024).toFixed(2)} MB
+                      </Paragraph>
+                    )}
+                  </View>
+                  {!uploadingExcel && (
+                    <IconButton 
+                      icon="close" 
+                      size={24} 
+                      iconColor={constructionColors.error}
+                      onPress={() => {
+                        setExcelFile(null);
+                        setExcelFileUrl('');
+                      }}
+                    />
+                  )}
+                </View>
+                {uploadingExcel && (
+                  <View style={styles.progressContainer}>
+                    <ProgressBar progress={excelUploadProgress / 100} color={theme.colors.primary} />
+                    <Paragraph style={styles.progressText}>
+                      Uploading... {excelUploadProgress.toFixed(0)}%
+                    </Paragraph>
+                  </View>
+                )}
+              </View>
+            )}
 
             <Surface style={styles.infoBox}>
               <Paragraph style={styles.infoText} numberOfLines={4}>
-                ℹ️ Timeline adjustable later. Budget includes all costs. Enter amount in Philippine Peso (₱).
+                ℹ️ Must contain: Scope of Work sheet and Gantt Chart sheet. File will be uploaded automatically.
               </Paragraph>
             </Surface>
+            {fieldErrors.excelFile && (
+              <Paragraph style={styles.errorText}>Excel file is required</Paragraph>
+            )}
+          </Card.Content>
+        </Card>
+
+        {/* Electrical Plan Upload */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Title style={styles.cardTitle}>Electrical Plan (Blueprint) *</Title>
+            
+            {!blueprintImage ? (
+              <Button
+                mode="outlined"
+                onPress={handlePickBlueprint}
+                icon="file-image"
+                style={styles.uploadButton}
+                disabled={uploadingBlueprint || isCreating}
+              >
+                Upload Electrical Plan
+              </Button>
+            ) : (
+              <View style={styles.imagePreviewContainer}>
+                <Image 
+                  source={{ uri: blueprintImage.uri }} 
+                  style={styles.imagePreview}
+                  resizeMode="contain"
+                />
+                {uploadingBlueprint && (
+                  <View style={styles.uploadOverlay}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <ProgressBar progress={blueprintUploadProgress / 100} color={theme.colors.primary} style={styles.overlayProgress} />
+                    <Paragraph style={styles.overlayText}>
+                      Uploading... {blueprintUploadProgress.toFixed(0)}%
+                    </Paragraph>
+                  </View>
+                )}
+                {!uploadingBlueprint && (
+                  <View style={styles.imageActions}>
+                    <IconButton 
+                      icon="close" 
+                      size={24} 
+                      iconColor={constructionColors.error}
+                      onPress={() => {
+                        setBlueprintImage(null);
+                        setBlueprintImageUrl('');
+                      }}
+                    />
+                  </View>
+                )}
+              </View>
+            )}
+
+            <Surface style={styles.infoBox}>
+              <Paragraph style={styles.infoText} numberOfLines={4}>
+                ℹ️ Upload the electrical blueprint/plan image. JPG or PNG format recommended. Image will be uploaded automatically.
+              </Paragraph>
+            </Surface>
+            {fieldErrors.blueprintImage && (
+              <Paragraph style={styles.errorText}>Electrical Plan is required</Paragraph>
+            )}
           </Card.Content>
         </Card>
 
@@ -270,7 +426,7 @@ export default function CreateNewProjectScreen({ navigation: propNavigation, onP
                 <Chip icon="package-variant" style={styles.featureChip}>Manage Materials</Chip>
               </View>
               <View style={styles.featureItem}>
-                <Chip icon="hammer" style={styles.featureChip}>Add Equipment</Chip>
+                <Chip icon="file-document" style={styles.featureChip}>Manage Blueprints</Chip>
               </View>
               <View style={styles.featureItem}>
                 <Chip icon="chart-line" style={styles.featureChip}>Track Progress</Chip>
@@ -458,6 +614,85 @@ const styles = StyleSheet.create({
   },
   dialogText: {
     color: theme.colors.text,
+  },
+  uploadButton: {
+    marginBottom: spacing.md,
+    borderColor: theme.colors.primary,
+  },
+  filePreview: {
+    marginBottom: spacing.md,
+  },
+  fileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  fileDetails: {
+    flex: 1,
+    marginLeft: spacing.xs,
+  },
+  fileName: {
+    fontSize: fontSizes.md,
+    color: theme.colors.text,
+    fontWeight: '500',
+  },
+  fileSize: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs / 2,
+  },
+  progressContainer: {
+    marginTop: spacing.sm,
+  },
+  progressText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: spacing.md,
+    borderRadius: theme.roundness,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.background,
+    minHeight: 200,
+    maxHeight: 300,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 250,
+  },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  overlayProgress: {
+    width: '80%',
+    marginTop: spacing.md,
+  },
+  overlayText: {
+    color: theme.colors.surface,
+    marginTop: spacing.sm,
+    fontSize: fontSizes.sm,
+  },
+  imageActions: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    flexDirection: 'row',
+  },
+  errorText: {
+    color: constructionColors.error,
+    fontSize: fontSizes.sm,
+    marginTop: spacing.xs,
   },
 });
 

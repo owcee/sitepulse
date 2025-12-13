@@ -28,12 +28,7 @@ import { UsageSubmission } from '../../types';
 import { submitUsageReport, checkDuplicateUsage } from '../../services/firebaseService';
 import { 
   getWorkerSubmissions, 
-  getPendingUsageForItem,
-  requestBorrowEquipment,
-  getActiveBorrowRequest,
-  markBorrowUsageReported,
-  returnBorrowedEquipment,
-  EquipmentBorrowRequest
+  getPendingUsageForItem
 } from '../../services/usageService';
 // @ts-ignore - firebaseConfig exports auth which may have implicit any type
 import { auth } from '../../firebaseConfig';
@@ -59,7 +54,7 @@ export default function InventoryUseScreen() {
   const [quantity, setQuantity] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionType, setSubmissionType] = useState<'material' | 'equipment' | 'damage'>('material');
+  const [submissionType, setSubmissionType] = useState<'material' | 'damage'>('material');
   const [showItemSelector, setShowItemSelector] = useState(false);
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -71,8 +66,6 @@ export default function InventoryUseScreen() {
   const [duplicateInfo, setDuplicateInfo] = useState<{count: number, itemName: string, quantity: string} | null>(null);
   const [showOverLimitDialog, setShowOverLimitDialog] = useState(false);
   const [overLimitMessage, setOverLimitMessage] = useState('');
-  const [equipmentBorrowRequests, setEquipmentBorrowRequests] = useState<Map<string, EquipmentBorrowRequest>>(new Map());
-  const [loadingBorrowRequests, setLoadingBorrowRequests] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
   const [showReportUsageRequiredModal, setShowReportUsageRequiredModal] = useState(false);
@@ -91,12 +84,6 @@ export default function InventoryUseScreen() {
     }
   }, [activeTab, typedAuth?.currentUser]);
 
-  // Load equipment borrow requests when equipment tab is active
-  useEffect(() => {
-    if (activeTab === 'equipment' && typedAuth?.currentUser) {
-      loadEquipmentBorrowRequests();
-    }
-  }, [activeTab, typedAuth?.currentUser, state.equipment]);
 
   const loadUsageHistory = async () => {
     if (!typedAuth?.currentUser) return;
@@ -129,70 +116,7 @@ export default function InventoryUseScreen() {
     }
   };
 
-  const loadEquipmentBorrowRequests = async () => {
-    if (!typedAuth?.currentUser) return;
-    
-    try {
-      setLoadingBorrowRequests(true);
-      const requestsMap = new Map<string, EquipmentBorrowRequest>();
-      
-      // Load active borrow request for each equipment
-      for (const equipment of state.equipment) {
-        const activeRequest = await getActiveBorrowRequest(typedAuth.currentUser.uid, equipment.id);
-        if (activeRequest) {
-          requestsMap.set(equipment.id, activeRequest);
-        }
-      }
-      
-      setEquipmentBorrowRequests(requestsMap);
-    } catch (error: any) {
-      console.error('Error loading equipment borrow requests:', error);
-    } finally {
-      setLoadingBorrowRequests(false);
-    }
-  };
-
-  const handleRequestBorrow = async (equipmentId: string, equipmentName: string) => {
-    if (!typedAuth?.currentUser) return;
-    
-    try {
-      setIsSubmitting(true);
-      await requestBorrowEquipment(equipmentId, equipmentName);
-      setSuccessMessage(`Borrow request for ${equipmentName} submitted. Waiting for engineer approval.`);
-      setShowSuccessModal(true);
-      await loadEquipmentBorrowRequests();
-    } catch (error: any) {
-      setDialogMessage(error.message || 'Failed to request equipment borrow');
-      setShowErrorDialog(true);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleReturnEquipment = async (borrowRequestId: string, equipmentName: string, hasReportedUsage: boolean) => {
-    if (!typedAuth?.currentUser) return;
-    
-    // Check if usage report has been submitted
-    if (!hasReportedUsage) {
-      setShowReportUsageRequiredModal(true);
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      await returnBorrowedEquipment(borrowRequestId);
-      setSuccessMessage(`${equipmentName} returned successfully. You can request again tomorrow.`);
-      setShowSuccessModal(true);
-      await loadEquipmentBorrowRequests();
-    } catch (error: any) {
-      setDialogMessage(error.message || 'Failed to return equipment');
-      setShowErrorDialog(true);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const openUsageModal = (type: 'material' | 'equipment' | 'damage', itemId: string, taskId: string = 'current-task-1') => {
+  const openUsageModal = (type: 'material' | 'damage', itemId: string, taskId: string = 'current-task-1') => {
     setSubmissionType(type);
     setSelectedItem(itemId);
     setCurrentTaskId(taskId);
@@ -202,7 +126,7 @@ export default function InventoryUseScreen() {
     setShowUsageModal(true);
   };
 
-  const openCamera = (type: 'material' | 'equipment') => {
+  const openCamera = (type: 'material') => {
     setSubmissionType(type);
     setShowItemSelector(true);
   };
@@ -390,19 +314,6 @@ export default function InventoryUseScreen() {
 
       const result = await submitUsageReport(reportData);
       
-      // If this is an equipment usage report, mark borrow request as having reported usage
-      if (submissionType === 'equipment' && selectedItem) {
-        const borrowRequest = equipmentBorrowRequests.get(selectedItem);
-        if (borrowRequest && borrowRequest.status === 'approved') {
-          try {
-            await markBorrowUsageReported(borrowRequest.id);
-            await loadEquipmentBorrowRequests(); // Refresh borrow requests
-          } catch (error) {
-            console.error('Error marking borrow usage reported:', error);
-          }
-        }
-      }
-      
       setIsSubmitting(false);
       
       // Refresh history if on history tab
@@ -410,10 +321,6 @@ export default function InventoryUseScreen() {
         await loadUsageHistory();
       }
       
-      // Refresh borrow requests if on equipment tab
-      if (activeTab === 'equipment') {
-        await loadEquipmentBorrowRequests();
-      }
       
       // Show custom success modal
       setSuccessMessage(
@@ -451,9 +358,8 @@ export default function InventoryUseScreen() {
   const getSelectedItemInfo = () => {
     if (submissionType === 'material') {
       return state.materials.find(m => m.id === selectedItem);
-    } else {
-      return state.equipment.find(e => e.id === selectedItem);
     }
+    return null;
   };
 
   const getStatusColor = (status: string) => {
@@ -466,7 +372,7 @@ export default function InventoryUseScreen() {
   };
 
   const renderItemSelector = () => {
-    const items = submissionType === 'material' ? state.materials : state.equipment;
+    const items = state.materials;
     
     return (
       <Portal>
@@ -478,7 +384,7 @@ export default function InventoryUseScreen() {
           <Card style={styles.modalCard}>
             <Card.Content style={{ backgroundColor: theme.colors.background }}>
               <Title style={styles.modalTitle}>
-                Select {submissionType === 'material' ? 'Material' : 'Equipment'}
+                Select Material
               </Title>
               
               <ScrollView style={styles.itemList}>
@@ -582,11 +488,6 @@ export default function InventoryUseScreen() {
                 icon: 'package-variant',
               },
               {
-                value: 'equipment',
-                label: 'Equipment',
-                icon: 'hammer',
-              },
-              {
                 value: 'history',
                 label: 'History',
                 icon: 'history',
@@ -639,120 +540,6 @@ export default function InventoryUseScreen() {
           </Card>
         )}
 
-        {/* Equipment Tab */}
-        {activeTab === 'equipment' && (
-          <Card style={styles.card}>
-            <Card.Content style={{ backgroundColor: theme.colors.background }}>
-              <Title style={styles.cardTitle}>Equipment Reports</Title>
-              
-              <Paragraph style={styles.instructions}>
-                Report equipment usage or damage with photo evidence
-              </Paragraph>
-
-              {/* Available Equipment with Report Buttons */}
-              <Divider style={styles.divider} />
-              <Paragraph style={styles.sectionTitle}>Available Equipment</Paragraph>
-              
-              {loadingBorrowRequests ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={theme.colors.primary} />
-                  <Text style={styles.loadingText}>Loading equipment status...</Text>
-                </View>
-              ) : (
-                state.equipment.map((equipment) => {
-                  const borrowRequest = equipmentBorrowRequests.get(equipment.id);
-                  const isPending = borrowRequest?.status === 'pending';
-                  const isApproved = borrowRequest?.status === 'approved';
-                  const hasReportedUsage = borrowRequest?.hasReportedUsage || false;
-                  const canReturn = isApproved && hasReportedUsage;
-
-                  return (
-                    <Surface key={equipment.id} style={styles.equipmentCard}>
-                      <List.Item
-                        title={equipment.name}
-                        description={`Status: ${equipment.status} | Condition: ${equipment.condition}${equipment.quantity ? ` | ${equipment.quantity} pcs` : ''}`}
-                        left={() => (
-                          <List.Icon icon="hammer" color={theme.colors.primary} />
-                        )}
-                        style={{ backgroundColor: 'transparent' }}
-                        titleStyle={{ color: theme.colors.text }}
-                        descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
-                      />
-                      <View style={styles.equipmentActions}>
-                        {!borrowRequest && (
-                          <Button
-                            mode="contained"
-                            onPress={() => handleRequestBorrow(equipment.id, equipment.name)}
-                            icon="hand-coin"
-                            style={styles.reportUsageButton}
-                            contentStyle={styles.reportButtonContent}
-                            labelStyle={styles.reportButtonLabel}
-                            disabled={isSubmitting}
-                            loading={isSubmitting}
-                          >
-                            Request Borrow
-                          </Button>
-                        )}
-                        {isPending && (
-                          <Button
-                            mode="outlined"
-                            icon="clock-outline"
-                            style={styles.reportUsageButton}
-                            contentStyle={styles.reportButtonContent}
-                            labelStyle={styles.reportButtonLabel}
-                            disabled
-                          >
-                            Pending Approval
-                          </Button>
-                        )}
-                        {isApproved && (
-                          <>
-                            <Button
-                              mode="contained"
-                              onPress={() => openUsageModal('equipment', equipment.id)}
-                              icon="clipboard-check"
-                              style={styles.reportUsageButton}
-                              contentStyle={styles.reportButtonContent}
-                              labelStyle={styles.reportButtonLabel}
-                            >
-                              Report Usage
-                            </Button>
-                            <Button
-                              mode="contained"
-                              onPress={() => {
-                                setSubmissionType('damage');
-                                openUsageModal('damage', equipment.id);
-                              }}
-                              icon="alert-circle"
-                              style={styles.reportDamageButton}
-                              contentStyle={styles.reportButtonContent}
-                              labelStyle={styles.reportButtonLabel}
-                            >
-                              Report Damage
-                            </Button>
-                            <Button
-                              mode="contained"
-                              onPress={() => borrowRequest && handleReturnEquipment(borrowRequest.id, equipment.name, hasReportedUsage)}
-                              icon="hand-coin-outline"
-                              style={[styles.reportDamageButton, { backgroundColor: constructionColors.complete }]}
-                              contentStyle={styles.reportButtonContent}
-                              labelStyle={styles.reportButtonLabel}
-                              disabled={isSubmitting}
-                              loading={isSubmitting}
-                            >
-                              Return
-                            </Button>
-                          </>
-                        )}
-                      </View>
-                    </Surface>
-                  );
-                })
-              )}
-            </Card.Content>
-          </Card>
-        )}
-
         {/* History Tab */}
         {activeTab === 'history' && (
           <Card style={styles.card}>
@@ -778,7 +565,6 @@ export default function InventoryUseScreen() {
                       <List.Icon 
                         icon={
                           submission.type === 'material' ? 'package-variant' : 
-                          submission.type === 'equipment' ? 'hammer' : 
                           'alert-circle'
                         }
                         color={
@@ -1091,112 +877,6 @@ export default function InventoryUseScreen() {
           </Card>
         )}
 
-        {/* Old equipment form removed - now using modal */}
-        {false && selectedItem && (submissionType === 'equipment' || submissionType === 'damage') && !showCamera && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <Title style={styles.cardTitle}>
-                {submissionType === 'damage' ? 'Report Equipment Damage' : 'Report Equipment Usage'}
-              </Title>
-              
-              {/* Selected Equipment Info */}
-              <Surface style={styles.selectedItemInfo}>
-                <Paragraph style={styles.selectedItemLabel}>Selected Equipment:</Paragraph>
-                <Title style={styles.selectedItemName}>
-                  {getSelectedItemInfo()?.name}
-                </Title>
-                <Paragraph style={styles.selectedItemDetails}>
-                  Status: {(getSelectedItemInfo() as any)?.status} | Condition: {(getSelectedItemInfo() as any)?.condition}
-                </Paragraph>
-              </Surface>
-
-              {/* Notes Input */}
-              <TextInput
-                label={submissionType === 'damage' ? 'Damage Description *' : 'Usage Notes *'}
-                value={notes}
-                onChangeText={(text) => {
-                  setNotes(text);
-                  if (text.trim()) {
-                    setFieldErrors(prev => ({ ...prev, notes: false }));
-                  }
-                }}
-                multiline
-                numberOfLines={4}
-                style={styles.notesInput}
-                placeholder={
-                  submissionType === 'damage' 
-                    ? "Describe the damage, how it occurred, location, severity, etc..."
-                    : "Describe how the equipment was used, location, purpose, etc..."
-                }
-                error={fieldErrors.notes}
-              />
-              {fieldErrors.notes && (
-                <Text style={styles.errorText}>{submissionType === 'damage' ? 'Damage Description' : 'Usage Notes'} is required</Text>
-              )}
-                textColor={theme.colors.text}
-              />
-
-              {/* Photo Section */}
-              <View style={[styles.photoSection, { backgroundColor: theme.colors.background }]}>
-                <Paragraph style={styles.photoLabel}>Photo Evidence:</Paragraph>
-                {capturedImage ? (
-                  <View style={styles.photoPreview}>
-                    <Image source={{ uri: capturedImage || '' }} style={styles.previewImage} />
-                    <Button
-                      mode="text"
-                      onPress={() => setCapturedImage(null)}
-                      icon="close"
-                      style={styles.removePhotoButton}
-                    >
-                      Remove Photo
-                    </Button>
-                  </View>
-                ) : (
-                  <Button
-                    mode="contained"
-                    onPress={openCameraForSelectedItem}
-                    icon="camera"
-                    style={styles.cameraButton}
-                    contentStyle={styles.cameraButtonContent}
-                  >
-                    Take Photo Evidence
-                  </Button>
-                )}
-                {fieldErrors.photo && (
-                  <Text style={styles.errorText}>Photo is required</Text>
-                )}
-              </View>
-
-              {/* Action Buttons */}
-              <View style={styles.formActions}>
-                <Button
-                  mode="outlined"
-                  onPress={() => {
-                    setSelectedItem('');
-                    setCapturedImage(null);
-                    setQuantity('');
-                    setNotes('');
-                  }}
-                  style={styles.cancelButton}
-                >
-                  Cancel
-                </Button>
-                
-                <Button
-                  mode="contained"
-                  onPress={submitUsage}
-                  disabled={!capturedImage || !notes.trim() || isSubmitting}
-                  loading={isSubmitting}
-                  style={styles.submitButton}
-                >
-                  {submissionType === 'damage' ? 'Submit Damage Report' : 'Submit Usage'}
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
-        )}
-
-
       </ScrollView>
 
       {/* Usage Report Modal */}
@@ -1209,26 +889,23 @@ export default function InventoryUseScreen() {
           <Surface style={styles.modalContent}>
             <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
               <Title style={styles.modalTitle}>
-                {submissionType === 'damage' ? 'Report Equipment Damage' : 
-                 submissionType === 'equipment' ? 'Report Equipment Usage' :
-                 'Report Material Usage'}
+                {submissionType === 'damage' ? 'Report Damage' : 'Report Material Usage'}
               </Title>
               
               {/* Selected Item Info */}
-              <Surface style={styles.selectedItemInfo}>
-                <Paragraph style={styles.selectedItemLabel}>
-                  Selected {submissionType === 'material' ? 'Material' : 'Equipment'}:
-                </Paragraph>
-                <Title style={styles.selectedItemName}>
-                  {getSelectedItemInfo()?.name}
-                </Title>
-                <Paragraph style={styles.selectedItemDetails}>
-                  {submissionType === 'material' 
-                    ? `Available: ${(getSelectedItemInfo() as any)?.quantity} / ${(getSelectedItemInfo() as any)?.totalBought || (getSelectedItemInfo() as any)?.quantity} ${(getSelectedItemInfo() as any)?.unit}`
-                    : `Status: ${(getSelectedItemInfo() as any)?.status} | Condition: ${(getSelectedItemInfo() as any)?.condition}`
-                  }
-                </Paragraph>
-              </Surface>
+              {submissionType === 'material' && (
+                <Surface style={styles.selectedItemInfo}>
+                  <Paragraph style={styles.selectedItemLabel}>
+                    Selected Material:
+                  </Paragraph>
+                  <Title style={styles.selectedItemName}>
+                    {getSelectedItemInfo()?.name}
+                  </Title>
+                  <Paragraph style={styles.selectedItemDetails}>
+                    Available: ${(getSelectedItemInfo() as any)?.quantity} / ${(getSelectedItemInfo() as any)?.totalBought || (getSelectedItemInfo() as any)?.quantity} ${(getSelectedItemInfo() as any)?.unit}
+                  </Paragraph>
+                </Surface>
+              )}
 
               {/* Quantity Input - Only for materials */}
               {submissionType === 'material' && (
@@ -1256,8 +933,7 @@ export default function InventoryUseScreen() {
 
               {/* Notes Input */}
               <TextInput
-                label={submissionType === 'damage' ? 'Damage Description *' : 
-                       submissionType === 'equipment' ? 'Usage Notes *' : 'Usage Notes *'}
+                label={submissionType === 'damage' ? 'Damage Description *' : 'Usage Notes *'}
                 value={notes}
                 onChangeText={(text) => {
                   setNotes(text);
@@ -1272,8 +948,6 @@ export default function InventoryUseScreen() {
                 placeholder={
                   submissionType === 'damage' 
                     ? 'Describe the damage in detail...'
-                    : submissionType === 'equipment'
-                    ? 'Describe how the equipment was used...'
                     : 'Describe how the material was used...'
                 }
                 error={fieldErrors.notes}
@@ -1289,8 +963,6 @@ export default function InventoryUseScreen() {
                   <Paragraph style={styles.photoSubtitle}>
                     {submissionType === 'damage' 
                       ? 'Take a photo showing the damage'
-                      : submissionType === 'equipment'
-                      ? 'Take a photo showing the equipment in use'
                       : 'Take a photo showing the material usage'
                     }
                   </Paragraph>
@@ -1477,7 +1149,7 @@ export default function InventoryUseScreen() {
           <Surface style={styles.blackModalContent}>
             <Title style={styles.blackModalTitle}>Report Usage Required</Title>
             <Paragraph style={styles.blackModalMessage}>
-              You need to do the report usage before returning the equipment.
+              Please complete the usage report.
             </Paragraph>
             <Button
               mode="contained"
@@ -1515,7 +1187,6 @@ export default function InventoryUseScreen() {
             </View>
             <Paragraph style={[styles.blackModalMessage, { fontSize: fontSizes.sm, marginTop: spacing.md }]}>
               {submissionType === 'material' && 'Material usage requires: Photo, Quantity, and Notes'}
-              {submissionType === 'equipment' && 'Equipment usage requires: Photo and Usage Notes'}
               {submissionType === 'damage' && 'Damage report requires: Photo and Damage Description'}
             </Paragraph>
             <Button
@@ -1776,18 +1447,6 @@ const styles = StyleSheet.create({
   },
   reportUsedButtonContent: {
     paddingVertical: spacing.xs,
-  },
-  equipmentCard: {
-    marginVertical: spacing.sm,
-    padding: spacing.md,
-    borderRadius: theme.roundness,
-    elevation: 1,
-    backgroundColor: theme.colors.background,
-  },
-  equipmentActions: {
-    flexDirection: 'column',
-    paddingTop: spacing.sm,
-    gap: spacing.sm,
   },
   reportUsageButton: {
     backgroundColor: theme.colors.primary,

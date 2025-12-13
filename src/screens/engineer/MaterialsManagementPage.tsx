@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
-  Alert,
+  TouchableOpacity,
+  Dimensions,
 } from 'react-native';
 import {
   Text,
@@ -11,7 +12,6 @@ import {
   TextInput,
   Button,
   IconButton,
-  List,
   Divider,
   Chip,
   FAB,
@@ -20,6 +20,7 @@ import {
   Surface,
   Dialog,
   Paragraph,
+  SegmentedButtons,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,13 +28,28 @@ import { useNavigation } from '@react-navigation/native';
 
 import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme';
 import { useProjectData } from '../../context/ProjectDataContext';
+import {
+  getElectricalMaterials,
+  searchElectricalMaterials,
+  getElectricalMaterialCategories,
+  ElectricalMaterial,
+} from '../../services/electricalMaterialsService';
+
+type ViewMode = 'electrical' | 'custom';
 
 export default function MaterialsManagementPage() {
   const navigation = useNavigation();
   const { state, addMaterial, updateMaterial, deleteMaterial: deleteMaterialFromContext } = useProjectData();
   const materials = state.materials;
+  
+  // View mode: electrical materials list or custom materials
+  const [viewMode, setViewMode] = useState<ViewMode>('electrical');
+  const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [variantModalVisible, setVariantModalVisible] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<any>(null);
+  const [selectedElectricalMaterial, setSelectedElectricalMaterial] = useState<ElectricalMaterial | null>(null);
+  const [selectedMaterialGroup, setSelectedMaterialGroup] = useState<Array<{ material: ElectricalMaterial; hasVariants: boolean; variants?: ElectricalMaterial[] }>[number] | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogTitle, setDialogTitle] = useState('');
   const [dialogMessage, setDialogMessage] = useState('');
@@ -43,55 +59,219 @@ export default function MaterialsManagementPage() {
   const [formData, setFormData] = useState({
     name: '',
     quantity: '',
-    unit: 'pcs',
-    pricePerUnit: '',
-    supplier: '',
+    customPrice: '',
+    useDefaultPrice: true,
+    dimensions: '', // For mm size, length, etc.
   });
 
-  const units = ['pcs', 'kg', 'lbs', 'ft', 'm', 'bags', 'boxes', 'pallets'];
+  // Get electrical materials from hardcoded list
+  const electricalMaterials = useMemo(() => {
+    if (searchQuery.trim()) {
+      return searchElectricalMaterials(searchQuery);
+    }
+    return getElectricalMaterials();
+  }, [searchQuery]);
+
+  // Group materials by base name (for materials with different sizes like mm)
+  const groupedMaterials = useMemo(() => {
+    const groups: Record<string, ElectricalMaterial[]> = {};
+    
+    electricalMaterials.forEach(material => {
+      // Extract base name (remove size indicators like "20mm", "25mm", "14 AWG", etc.)
+      let baseName = material.name;
+      
+      // Remove common size patterns
+      baseName = baseName.replace(/\d+mm\s*/g, '').trim();
+      baseName = baseName.replace(/\d+\/\d+\s*/g, '').trim(); // Remove "14/2", "12/2"
+      baseName = baseName.replace(/\d+\s*AWG\s*/g, '').trim(); // Remove "14 AWG", "12 AWG"
+      baseName = baseName.replace(/\([^)]*\)/g, '').trim(); // Remove parentheses content
+      baseName = baseName.replace(/\s+/g, ' ').trim(); // Clean up multiple spaces
+      
+      // For materials like "PVC Conduit", "THHN Wire", group them
+      if (!groups[baseName]) {
+        groups[baseName] = [];
+      }
+      groups[baseName].push(material);
+    });
+    
+    return groups;
+  }, [electricalMaterials]);
+
+  // Flatten grouped materials - if a material has variants, show it once; if not, show as is
+  const displayMaterials = useMemo(() => {
+    const result: Array<{ material: ElectricalMaterial; hasVariants: boolean; variants?: ElectricalMaterial[] }> = [];
+    const processed = new Set<string>();
+    
+    Object.entries(groupedMaterials).forEach(([baseName, variants]) => {
+      if (variants.length > 1) {
+        // Group has multiple variants - show the first one as representative
+        if (!processed.has(variants[0].material_id)) {
+          result.push({
+            material: variants[0],
+            hasVariants: true,
+            variants: variants,
+          });
+          variants.forEach(v => processed.add(v.material_id));
+        }
+      } else {
+        // Single material, no variants
+        if (!processed.has(variants[0].material_id)) {
+          result.push({
+            material: variants[0],
+            hasVariants: false,
+          });
+          processed.add(variants[0].material_id);
+        }
+      }
+    });
+    
+    // Sort alphabetically by material name
+    return result.sort((a, b) => a.material.name.localeCompare(b.material.name));
+  }, [groupedMaterials]);
+
+  // Get custom materials (already in inventory)
+  const customMaterials = useMemo(() => {
+    const allMaterials = materials;
+    if (searchQuery.trim()) {
+      const searchLower = searchQuery.toLowerCase();
+      return allMaterials.filter(
+        m => 
+          m.name.toLowerCase().includes(searchLower) ||
+          (m.category && m.category.toLowerCase().includes(searchLower))
+      );
+    }
+    return allMaterials;
+  }, [materials, searchQuery]);
+
+  // Get low stock materials (quantity < 4)
+  const lowStockMaterials = useMemo(() => {
+    return customMaterials.filter(m => m.quantity < 4);
+  }, [customMaterials]);
 
   const resetForm = () => {
     setFormData({
       name: '',
       quantity: '',
-      unit: 'pcs',
-      pricePerUnit: '',
-      supplier: '',
+      customPrice: '',
+      useDefaultPrice: true,
+      dimensions: '',
     });
     setEditingMaterial(null);
+    setSelectedElectricalMaterial(null);
   };
 
-  const openAddModal = () => {
+  const openAddElectricalModal = (electricalMaterial: ElectricalMaterial) => {
+    setSelectedElectricalMaterial(electricalMaterial);
+    setFormData({
+      name: '',
+      quantity: '',
+      customPrice: '',
+      useDefaultPrice: true,
+      dimensions: '',
+    });
+    setModalVisible(true);
+  };
+
+  const openAddCustomModal = () => {
     resetForm();
     setModalVisible(true);
   };
 
   const openEditModal = (material: any) => {
-    setFormData({
-      name: material.name,
-      quantity: material.quantity.toString(),
-      unit: material.unit,
-      pricePerUnit: material.price.toString(), // Using 'price' from context
-      supplier: material.supplier || '',
-    });
     setEditingMaterial(material);
+    setSelectedElectricalMaterial(null);
+    setFormData({
+      name: material.name || '',
+      quantity: material.quantity.toString(),
+      customPrice: '',
+      useDefaultPrice: true,
+      dimensions: '',
+    });
     setModalVisible(true);
   };
 
   const saveMaterial = () => {
-    if (!formData.name.trim() || !formData.quantity || !formData.pricePerUnit) {
-      setDialogTitle('Error');
-      setDialogMessage('Please fill in all required fields');
-      setIsError(true);
+    // Adding electrical material from hardcoded list
+    if (selectedElectricalMaterial) {
+      if (!formData.quantity.trim()) {
+        setDialogTitle('Error');
+        setDialogMessage('Please enter quantity');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+
+      const quantity = parseFloat(formData.quantity);
+      if (isNaN(quantity) || quantity <= 0) {
+        setDialogTitle('Error');
+        setDialogMessage('Please enter a valid quantity');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+
+      // Determine final price
+      let finalPrice = selectedElectricalMaterial.unit_cost;
+      if (!formData.useDefaultPrice) {
+        const customPriceValue = parseFloat(formData.customPrice);
+        if (isNaN(customPriceValue) || customPriceValue <= 0) {
+          setDialogTitle('Error');
+          setDialogMessage('Please enter a valid custom price');
+          setIsError(true);
+          setShowDialog(true);
+          return;
+        }
+        finalPrice = customPriceValue;
+      }
+
+      // Build material name with dimensions if provided
+      let materialName = selectedElectricalMaterial.name;
+      if (formData.dimensions.trim()) {
+        materialName = `${selectedElectricalMaterial.name} (${formData.dimensions.trim()})`;
+      }
+
+      const materialData: Record<string, any> = {
+        name: materialName,
+        quantity,
+        unit: selectedElectricalMaterial.unit,
+        price: finalPrice,
+        category: selectedElectricalMaterial.category,
+        dateAdded: new Date().toISOString().split('T')[0],
+        totalBought: quantity,
+        material_id: selectedElectricalMaterial.material_id,
+        min_threshold: 4,
+      };
+
+      addMaterial(materialData as any);
+      setDialogTitle('Success');
+      setDialogMessage(`${selectedElectricalMaterial.name} added to inventory`);
+      setIsError(false);
       setShowDialog(true);
+      setModalVisible(false);
+      resetForm();
       return;
     }
 
-    const quantity = parseFloat(formData.quantity);
-    const pricePerUnit = parseFloat(formData.pricePerUnit);
-
-    // Prevent decreasing quantity when editing
+    // Editing existing material
     if (editingMaterial) {
+      if (!formData.quantity.trim()) {
+        setDialogTitle('Error');
+        setDialogMessage('Please enter quantity');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+
+      const quantity = parseFloat(formData.quantity);
+      if (isNaN(quantity) || quantity <= 0) {
+        setDialogTitle('Error');
+        setDialogMessage('Please enter a valid quantity');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+
+      // Prevent decreasing quantity
       const currentQuantity = editingMaterial.quantity || 0;
       if (quantity < currentQuantity) {
         setDialogTitle('Error');
@@ -100,45 +280,68 @@ export default function MaterialsManagementPage() {
         setShowDialog(true);
         return;
       }
+
+      const updates: Record<string, any> = {
+        quantity,
+      };
+
+      if (formData.name.trim()) {
+        updates.name = formData.name.trim();
+      }
+
+      updateMaterial(editingMaterial.id, updates);
+      setDialogTitle('Success');
+      setDialogMessage('Material updated successfully');
+      setIsError(false);
+      setShowDialog(true);
+      setModalVisible(false);
+      resetForm();
+      return;
+    }
+
+    // Adding custom material (for manual tasks)
+    if (!formData.name.trim() || !formData.quantity.trim()) {
+      setDialogTitle('Error');
+      setDialogMessage('Please enter material name and quantity');
+      setIsError(true);
+      setShowDialog(true);
+      return;
+    }
+
+    const quantity = parseFloat(formData.quantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      setDialogTitle('Error');
+      setDialogMessage('Please enter a valid quantity');
+      setIsError(true);
+      setShowDialog(true);
+      return;
+    }
+
+    const pricePerUnit = formData.customPrice ? parseFloat(formData.customPrice) : 0;
+    if (isNaN(pricePerUnit) || pricePerUnit <= 0) {
+      setDialogTitle('Error');
+      setDialogMessage('Please enter a valid price');
+      setIsError(true);
+      setShowDialog(true);
+      return;
     }
 
     const materialData: Record<string, any> = {
       name: formData.name.trim(),
       quantity,
-      unit: formData.unit,
-      price: pricePerUnit, // Using 'price' to match context interface
-      category: 'Construction Materials', // Default category
-      dateAdded: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
+      unit: 'pcs', // Default unit for custom materials
+      price: pricePerUnit,
+      category: 'Custom',
+      dateAdded: new Date().toISOString().split('T')[0],
+      totalBought: quantity,
+      min_threshold: 4,
     };
 
-    if (!editingMaterial) {
-      // Initial purchase quantity - set totalBought to the initial quantity
-      materialData.totalBought = quantity;
-    }
-    // When editing, do NOT include totalBought in materialData
-    // This ensures totalBought is preserved and not updated when editing
-
-    const supplierValue = formData.supplier.trim();
-    if (supplierValue) {
-      materialData.supplier = supplierValue;
-    } else if (editingMaterial && editingMaterial.supplier) {
-      materialData.supplier = editingMaterial.supplier;
-    }
-
-    if (editingMaterial) {
-      updateMaterial(editingMaterial.id, materialData as any);
-      setDialogTitle('Success');
-      setDialogMessage('Material updated successfully');
-      setIsError(false);
-      setShowDialog(true);
-    } else {
-      addMaterial(materialData as any);
-      setDialogTitle('Success');
-      setDialogMessage('Material added successfully');
-      setIsError(false);
-      setShowDialog(true);
-    }
-    
+    addMaterial(materialData as any);
+    setDialogTitle('Success');
+    setDialogMessage('Custom material added successfully');
+    setIsError(false);
+    setShowDialog(true);
     setModalVisible(false);
     resetForm();
   };
@@ -166,7 +369,12 @@ export default function MaterialsManagementPage() {
     }
   };
 
-  const totalCost = materials.reduce((sum, material) => sum + (material.quantity * material.price), 0);
+  const totalCost = customMaterials.reduce((sum, material) => sum + (material.quantity * material.price), 0);
+
+  // Check if electrical material is already in inventory
+  const isElectricalMaterialInInventory = (materialId: string) => {
+    return customMaterials.some(m => (m as any).material_id === materialId);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -180,125 +388,323 @@ export default function MaterialsManagementPage() {
             iconColor={theme.colors.primary}
           />
           <View style={styles.headerText}>
-            <Text style={styles.title}>Materials Management</Text>
-            <Text style={styles.subtitle}>Add and manage construction materials</Text>
+            <Text style={styles.title}>Materials Inventory</Text>
+            <Text style={styles.subtitle}>Manage electrical materials and custom items</Text>
           </View>
         </View>
       </View>
 
-      {/* Summary Cards */}
-      <View style={styles.summaryContainer}>
-        <Card style={styles.summaryCard}>
-          <Card.Content style={styles.summaryContent}>
-            <Text style={styles.summaryNumber}>{materials.length}</Text>
-            <Text style={styles.summaryLabel}>Total Items</Text>
-          </Card.Content>
-        </Card>
-        <Card style={styles.summaryCard}>
-          <Card.Content style={styles.summaryContent}>
-            <Text style={styles.summaryNumber}>₱{totalCost.toLocaleString()}</Text>
-            <Text style={styles.summaryLabel}>Total Value</Text>
-          </Card.Content>
-        </Card>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          mode="outlined"
+          placeholder="Search materials..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+          left={<TextInput.Icon icon="magnify" />}
+          right={
+            searchQuery ? (
+              <TextInput.Icon icon="close" onPress={() => setSearchQuery('')} />
+            ) : null
+          }
+          textColor={theme.colors.text}
+        />
       </View>
 
-      {/* Materials List */}
-      <ScrollView style={styles.scrollView}>
-        {materials.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Card.Content style={styles.emptyContent}>
-              <Ionicons 
-                name="cube-outline" 
-                size={48} 
-                color={theme.colors.onSurfaceDisabled} 
-              />
-              <Text style={styles.emptyText}>No materials added yet</Text>
-              <Text style={styles.emptySubtext}>
-                Tap the + button to add your first material
-              </Text>
+      {/* View Mode Toggle */}
+      <View style={styles.toggleContainer}>
+        <SegmentedButtons
+          value={viewMode}
+          onValueChange={(value) => setViewMode(value as ViewMode)}
+          buttons={[
+            {
+              value: 'electrical',
+              label: 'Electrical',
+              icon: 'flash',
+              style: { minWidth: 100 },
+              labelStyle: { fontSize: fontSizes.xs },
+            },
+            {
+              value: 'custom',
+              label: 'Inventory',
+              icon: 'package-variant',
+              style: { minWidth: 100 },
+              labelStyle: { fontSize: fontSizes.xs },
+            },
+          ]}
+          style={styles.segmentedButtons}
+        />
+      </View>
+
+
+      {/* Summary Cards */}
+      {viewMode === 'custom' && (
+        <View style={styles.summaryContainer}>
+          <Card style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <Text style={styles.summaryNumber}>{customMaterials.length}</Text>
+              <Text style={styles.summaryLabel}>Total Items</Text>
             </Card.Content>
           </Card>
-        ) : (
-          materials.map((material, index) => (
-            <Card key={material.id} style={styles.materialCard}>
-              <Card.Content>
-                <View style={styles.materialHeader}>
-                  <Text style={styles.materialName}>{material.name}</Text>
-                  <View style={styles.materialActions}>
-                    <IconButton
-                      icon="pencil"
-                      size={20}
-                      onPress={() => openEditModal(material)}
-                      iconColor={theme.colors.primary}
-                    />
-                    <IconButton
-                      icon="delete"
-                      size={20}
-                      onPress={() => handleDeleteMaterial(material.id)}
-                      iconColor={constructionColors.urgent}
-                    />
-                  </View>
-                </View>
+          <Card style={styles.summaryCard}>
+            <Card.Content style={styles.summaryContent}>
+              <Text style={styles.summaryNumber}>₱{totalCost.toLocaleString()}</Text>
+              <Text style={styles.summaryLabel}>Total Value</Text>
+            </Card.Content>
+          </Card>
+        </View>
+      )}
 
-                <View style={styles.materialDetails}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Status:</Text>
-                    <Text style={styles.detailValue}>
-                      <Text style={{ fontWeight: 'bold', color: constructionColors.complete }}>
-                        {material.quantity} available out of {material.totalBought || material.quantity}
-                      </Text>
-                    </Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Price per {material.unit}:</Text>
-                    <Text style={styles.detailValue}>
-                      ₱{material.price.toFixed(2)}
-                    </Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Total Cost:</Text>
-                    <Text style={[styles.detailValue, styles.totalCost]}>
-                      ₱{((material.totalBought || material.quantity) * material.price).toFixed(2)}
-                    </Text>
-                  </View>
-                  {material.supplier && (
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Supplier:</Text>
-                      <Text style={styles.detailValue}>{material.supplier}</Text>
-                    </View>
-                  )}
-
-                </View>
-
-                <Text style={styles.dateAdded}>
-                  Added: {new Date(material.dateAdded).toLocaleDateString()}
+      {/* Materials List */}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {viewMode === 'electrical' ? (
+          // Electrical Materials List (from hardcoded list)
+          electricalMaterials.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Card.Content style={styles.emptyContent}>
+                <Ionicons 
+                  name="flash-outline" 
+                  size={48} 
+                  color={theme.colors.onSurfaceDisabled} 
+                />
+                <Text style={styles.emptyText}>No materials found</Text>
+                <Text style={styles.emptySubtext}>
+                  Try adjusting your search
                 </Text>
               </Card.Content>
-              {index < materials.length - 1 && <Divider />}
             </Card>
-          ))
+          ) : (
+            <View style={styles.materialsGrid}>
+              {displayMaterials.map((materialGroup) => {
+                const material = materialGroup.material;
+                const isInInventory = isElectricalMaterialInInventory(material.material_id);
+                const existingMaterial = customMaterials.find(m => (m as any).material_id === material.material_id);
+                const isLowStock = existingMaterial && existingMaterial.quantity < 4;
+
+                return (
+                  <TouchableOpacity
+                    key={material.material_id}
+                    style={[
+                      styles.materialGridItem,
+                      isInInventory && styles.materialGridItemInInventory,
+                      isLowStock && styles.materialGridItemLowStock,
+                    ]}
+                    onPress={() => {
+                      if (materialGroup.hasVariants && materialGroup.variants) {
+                        setSelectedMaterialGroup(materialGroup);
+                        setVariantModalVisible(true);
+                      } else {
+                        openAddElectricalModal(material);
+                      }
+                    }}
+                  >
+                    <View style={styles.materialGridContent}>
+                      <Text style={styles.materialGridName} numberOfLines={3}>
+                        {material.name}
+                      </Text>
+                      {materialGroup.hasVariants && (
+                        <Text style={styles.materialGridVariantText}>
+                          {materialGroup.variants?.length} sizes
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        ) : (
+          // Custom Materials List (already in inventory)
+          customMaterials.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Card.Content style={styles.emptyContent}>
+                  <Ionicons 
+                  name="cube-outline"
+                  size={48} 
+                  color={theme.colors.onSurfaceDisabled} 
+                />
+                <Text style={styles.emptyText}>No materials in inventory</Text>
+                <Text style={styles.emptySubtext}>
+                  Switch to "Electrical Materials" to add from the list
+                </Text>
+              </Card.Content>
+            </Card>
+          ) : (
+            customMaterials.map((material, index) => {
+              const threshold = (material as any).min_threshold || 4;
+              const isLowStock = material.quantity < threshold;
+
+              return (
+                <Card key={material.id} style={styles.materialCard}>
+                  <Card.Content>
+                    <View style={styles.materialHeader}>
+                      <View style={styles.materialNameContainer}>
+                        <Text style={styles.materialName}>{material.name}</Text>
+                        {material.category && (
+                          <Chip 
+                            icon="tag" 
+                            style={styles.categoryChip}
+                            textStyle={styles.categoryChipText}
+                          >
+                            {material.category}
+                          </Chip>
+                        )}
+                      </View>
+                      {isLowStock && (
+                        <Chip 
+                          icon="alert" 
+                          style={[styles.lowStockChip, { backgroundColor: constructionColors.urgent }]}
+                          textStyle={{ color: 'white', fontSize: 12 }}
+                        >
+                          LOW STOCK
+                        </Chip>
+                      )}
+                      <View style={styles.materialActions}>
+                        <IconButton
+                          icon="pencil"
+                          size={20}
+                          onPress={() => openEditModal(material)}
+                          iconColor={theme.colors.primary}
+                        />
+                        <IconButton
+                          icon="delete"
+                          size={20}
+                          onPress={() => handleDeleteMaterial(material.id)}
+                          iconColor={constructionColors.urgent}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.materialDetails}>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Stock:</Text>
+                        <Text style={[
+                          styles.detailValue,
+                          isLowStock && { color: constructionColors.urgent, fontWeight: 'bold' }
+                        ]}>
+                          {material.quantity} {material.unit} available
+                          {material.totalBought && ` out of ${material.totalBought}`}
+                        </Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Price per {material.unit}:</Text>
+                        <Text style={styles.detailValue}>₱{material.price.toFixed(2)}</Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Total Value:</Text>
+                        <Text style={[styles.detailValue, styles.totalCost]}>
+                          ₱{((material.totalBought || material.quantity) * material.price).toFixed(2)}
+                        </Text>
+                      </View>
+                      {material.supplier && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Supplier:</Text>
+                          <Text style={styles.detailValue}>{material.supplier}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </Card.Content>
+                  {index < customMaterials.length - 1 && <Divider />}
+                </Card>
+              );
+            })
+          )
         )}
       </ScrollView>
 
-      {/* Add Material FAB */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={openAddModal}
-        label="Add Material"
-      />
+      {/* Add Custom Material FAB (only in custom view) */}
+      {viewMode === 'custom' && (
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={openAddCustomModal}
+          label="Add Custom"
+        />
+      )}
+
+      {/* Variant Selection Modal */}
+      <Portal>
+        <Modal
+          visible={variantModalVisible}
+          onDismiss={() => {
+            setVariantModalVisible(false);
+            setSelectedMaterialGroup(null);
+          }}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Surface style={styles.modalSurface}>
+            <Text style={styles.modalTitle}>Select Size/Variant</Text>
+            <ScrollView 
+              style={styles.modalScrollView}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {selectedMaterialGroup?.variants?.map((variant: ElectricalMaterial) => (
+                <TouchableOpacity
+                  key={variant.material_id}
+                  style={styles.variantItem}
+                  onPress={() => {
+                    setVariantModalVisible(false);
+                    openAddElectricalModal(variant);
+                    setSelectedMaterialGroup(null);
+                  }}
+                >
+                  <Text style={styles.variantItemName}>{variant.name}</Text>
+                  <Text style={styles.variantItemUnit}>{variant.unit}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <Button 
+              onPress={() => {
+                setVariantModalVisible(false);
+                setSelectedMaterialGroup(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </Surface>
+        </Modal>
+      </Portal>
 
       {/* Add/Edit Material Modal */}
       <Portal>
         <Modal
           visible={modalVisible}
-          onDismiss={() => setModalVisible(false)}
+          onDismiss={() => {
+            setModalVisible(false);
+            resetForm();
+          }}
           contentContainerStyle={styles.modalContainer}
         >
           <Surface style={styles.modalSurface}>
             <Text style={styles.modalTitle}>
-              {editingMaterial ? 'Edit Material' : 'Add New Material'}
+              {selectedElectricalMaterial 
+                ? `Add ${selectedElectricalMaterial.name}`
+                : editingMaterial 
+                  ? 'Update Stock'
+                  : 'Add Custom Material'
+              }
             </Text>
+
+            {selectedElectricalMaterial && (
+              <Card style={styles.infoCard}>
+                <Card.Content>
+                  <Paragraph style={styles.infoText}>
+                    <Text style={styles.infoLabel}>Unit:</Text> {selectedElectricalMaterial.unit}
+                  </Paragraph>
+                  <Paragraph style={styles.infoText}>
+                    <Text style={styles.infoLabel}>Category:</Text> {selectedElectricalMaterial.category}
+                  </Paragraph>
+                  <Paragraph style={styles.infoText}>
+                    <Text style={styles.infoLabel}>Default Price:</Text>
+                  </Paragraph>
+                  <Paragraph style={[styles.infoText, styles.priceText]}>
+                    ₱{selectedElectricalMaterial.unit_cost.toFixed(2)} per {selectedElectricalMaterial.unit}
+                  </Paragraph>
+                </Card.Content>
+              </Card>
+            )}
 
             <ScrollView 
               style={styles.modalScrollView}
@@ -307,68 +713,101 @@ export default function MaterialsManagementPage() {
             >
               <TextInput
                 mode="outlined"
-                label="Material Name *"
-                value={formData.name}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
-                style={styles.input}
-                textColor={theme.colors.text}
-              />
-
-              <View style={styles.inputRow}>
-                <TextInput
-                  mode="outlined"
-                  label="Quantity *"
-                  value={formData.quantity}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, quantity: text }))}
-                  keyboardType="numeric"
-                  style={[styles.input, styles.inputHalf]}
-                  textColor={theme.colors.text}
-                />
-                
-                <View style={styles.unitSelector}>
-                  <Text style={styles.unitLabel}>Unit</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.unitChips}>
-                      {units.map((unit) => (
-                        <Chip
-                          key={unit}
-                          selected={formData.unit === unit}
-                          onPress={() => setFormData(prev => ({ ...prev, unit }))}
-                          style={styles.unitChip}
-                          textStyle={formData.unit === unit ? styles.selectedChipText : styles.chipText}
-                        >
-                          {unit}
-                        </Chip>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              </View>
-
-              <TextInput
-                mode="outlined"
-                label="Price per Unit (₱) *"
-                value={formData.pricePerUnit}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, pricePerUnit: text }))}
+                label="Quantity *"
+                value={formData.quantity}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, quantity: text }))}
                 keyboardType="numeric"
                 style={styles.input}
-                left={<TextInput.Icon icon="cash" />}
                 textColor={theme.colors.text}
+                placeholder={selectedElectricalMaterial ? `Enter quantity in ${selectedElectricalMaterial.unit}` : "Enter quantity"}
               />
 
-              <TextInput
-                mode="outlined"
-                label="Supplier (Optional)"
-                value={formData.supplier}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, supplier: text }))}
-                style={styles.input}
-                textColor={theme.colors.text}
-              />
+              {/* Dimensions/Specifications (for mm size, length, etc.) */}
+              {selectedElectricalMaterial && (
+                <TextInput
+                  mode="outlined"
+                  label="Dimensions/Specifications (Optional)"
+                  value={formData.dimensions}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, dimensions: text }))}
+                  style={styles.input}
+                  textColor={theme.colors.text}
+                  placeholder="e.g., 25mm, 6-inch, 12 AWG"
+                />
+              )}
 
-              {formData.quantity && formData.pricePerUnit && (
+              {/* Price Selection */}
+              {selectedElectricalMaterial && (
+                <View style={styles.priceSection}>
+                  <Text style={styles.priceSectionLabel}>Price per {selectedElectricalMaterial.unit}</Text>
+                  <View style={styles.priceOptions}>
+                    <Button
+                      mode={formData.useDefaultPrice ? "contained" : "outlined"}
+                      onPress={() => setFormData(prev => ({ ...prev, useDefaultPrice: true, customPrice: '' }))}
+                      style={styles.priceOptionButton}
+                      buttonColor={formData.useDefaultPrice ? theme.colors.primary : undefined}
+                      labelStyle={styles.priceButtonLabelSmall}
+                    >
+                      Default: ₱{selectedElectricalMaterial.unit_cost.toFixed(2)}
+                    </Button>
+                    <Button
+                      mode={!formData.useDefaultPrice ? "contained" : "outlined"}
+                      onPress={() => setFormData(prev => ({ ...prev, useDefaultPrice: false }))}
+                      style={styles.priceOptionButton}
+                      buttonColor={!formData.useDefaultPrice ? theme.colors.primary : undefined}
+                      labelStyle={styles.priceButtonLabelSmall}
+                    >
+                      Custom
+                    </Button>
+                  </View>
+                  {!formData.useDefaultPrice && (
+                    <TextInput
+                      mode="outlined"
+                      label="Enter Custom Price (₱)"
+                      value={formData.customPrice}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, customPrice: text }))}
+                      keyboardType="numeric"
+                      style={styles.input}
+                      textColor={theme.colors.text}
+                      placeholder={`Default: ₱${selectedElectricalMaterial.unit_cost.toFixed(2)}`}
+                    />
+                  )}
+                </View>
+              )}
+
+              {/* Custom Material Fields */}
+              {!selectedElectricalMaterial && !editingMaterial && (
+                <TextInput
+                  mode="outlined"
+                  label="Material Name *"
+                  value={formData.name}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
+                  style={styles.input}
+                  textColor={theme.colors.text}
+                />
+              )}
+
+              {/* Custom Material Price */}
+              {!selectedElectricalMaterial && !editingMaterial && (
+                <TextInput
+                  mode="outlined"
+                  label="Price per Unit (₱) *"
+                  value={formData.customPrice}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, customPrice: text }))}
+                  keyboardType="numeric"
+                  style={styles.input}
+                  textColor={theme.colors.text}
+                />
+              )}
+
+              {selectedElectricalMaterial && formData.quantity && (
                 <View style={styles.costPreview}>
                   <Text style={styles.costPreviewText}>
-                    Total Cost: ₱{(parseFloat(formData.quantity) * parseFloat(formData.pricePerUnit)).toFixed(2)}
+                    Total Cost: ₱{(
+                      parseFloat(formData.quantity) * 
+                      (formData.useDefaultPrice 
+                        ? selectedElectricalMaterial.unit_cost 
+                        : (parseFloat(formData.customPrice) || selectedElectricalMaterial.unit_cost))
+                    ).toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -376,7 +815,10 @@ export default function MaterialsManagementPage() {
 
             <View style={styles.modalActions}>
               <Button 
-                onPress={() => setModalVisible(false)}
+                onPress={() => {
+                  setModalVisible(false);
+                  resetForm();
+                }}
                 style={styles.modalActionButton}
               >
                 Cancel
@@ -387,14 +829,14 @@ export default function MaterialsManagementPage() {
                 buttonColor={constructionColors.complete}
                 style={styles.modalActionButton}
               >
-                {editingMaterial ? 'Update' : 'Add'}
+                {editingMaterial ? 'Update' : selectedElectricalMaterial ? 'Add' : 'Save'}
               </Button>
             </View>
           </Surface>
         </Modal>
       </Portal>
 
-      {/* Dark Mode Dialog */}
+      {/* Dialog */}
       <Portal>
         <Dialog 
           visible={showDialog} 
@@ -426,7 +868,7 @@ export default function MaterialsManagementPage() {
                 <Button 
                   onPress={() => {
                     confirmDelete();
-                    // Keep dialog open to show success
+                    setShowDialog(false);
                   }}
                   textColor={constructionColors.urgent}
                 >
@@ -483,16 +925,34 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     color: theme.colors.onSurfaceVariant,
   },
-
-  // Summary
+  searchContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  searchInput: {
+    backgroundColor: theme.colors.surface,
+  },
+  toggleContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  segmentedButtons: {
+    backgroundColor: theme.colors.surface,
+  },
+  segmentedButtonLabel: {
+    fontSize: fontSizes.xs,
+  },
   summaryContainer: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    flexWrap: 'wrap',
   },
   summaryCard: {
     flex: 1,
-    marginHorizontal: spacing.sm,
+    minWidth: '30%',
+    marginHorizontal: spacing.xs,
+    marginBottom: spacing.sm,
     backgroundColor: theme.colors.surface,
   },
   summaryContent: {
@@ -505,15 +965,64 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   summaryLabel: {
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.xs,
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
+    marginTop: spacing.xs,
   },
-
-  // Materials List
   scrollView: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+  materialsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.md,
+  },
+  materialGridItem: {
+    width: (Dimensions.get('window').width - spacing.md * 2 - spacing.xs * 4) / 3, // 3 columns: (screen - padding - gaps) / 3
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    minHeight: 90,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  materialGridItemNoMargin: {
+    marginRight: 0,
+  },
+  materialGridItemInInventory: {
+    borderColor: constructionColors.complete,
+    backgroundColor: constructionColors.complete + '10',
+  },
+  materialGridItemLowStock: {
+    borderColor: constructionColors.urgent,
+    backgroundColor: constructionColors.urgent + '10',
+  },
+  materialGridContent: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  materialGridName: {
+    fontSize: fontSizes.xs,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.xs / 2,
+    lineHeight: 15,
+  },
+  materialGridVariantText: {
+    fontSize: fontSizes.xs - 2,
+    color: theme.colors.primary,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: spacing.xs / 2,
   },
   materialCard: {
     marginBottom: spacing.md,
@@ -524,14 +1033,41 @@ const styles = StyleSheet.create({
   materialHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.md,
+    flexWrap: 'wrap',
+  },
+  materialNameContainer: {
+    flex: 1,
+    marginRight: spacing.sm,
   },
   materialName: {
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: theme.colors.text,
-    flex: 1,
+    marginBottom: spacing.xs,
+  },
+  categoryChip: {
+    alignSelf: 'flex-start',
+    height: 24,
+    backgroundColor: theme.colors.primary + '20',
+  },
+  categoryChipText: {
+    fontSize: 10,
+    color: theme.colors.primary,
+  },
+  inInventoryChip: {
+    alignSelf: 'flex-start',
+    height: 24,
+    backgroundColor: constructionColors.complete + '20',
+  },
+  inInventoryChipText: {
+    fontSize: 10,
+    color: constructionColors.complete,
+  },
+  lowStockChip: {
+    alignSelf: 'flex-start',
+    height: 24,
   },
   materialActions: {
     flexDirection: 'row',
@@ -557,22 +1093,9 @@ const styles = StyleSheet.create({
     color: constructionColors.complete,
     fontWeight: 'bold',
   },
-  notesContainer: {
+  addButton: {
     marginTop: spacing.sm,
   },
-  notesText: {
-    fontSize: fontSizes.sm,
-    color: theme.colors.onSurfaceVariant,
-    fontStyle: 'italic',
-    marginTop: spacing.xs,
-  },
-  dateAdded: {
-    fontSize: fontSizes.xs,
-    color: theme.colors.onSurfaceVariant,
-    textAlign: 'right',
-  },
-
-  // Empty state
   emptyCard: {
     marginTop: spacing.xl,
     backgroundColor: theme.colors.surface,
@@ -592,16 +1115,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     textAlign: 'center',
   },
-
-  // FAB
   fab: {
     position: 'absolute',
     right: spacing.lg,
     bottom: spacing.lg,
     backgroundColor: theme.colors.primary,
   },
-
-  // Modal
   modalContainer: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -616,7 +1135,7 @@ const styles = StyleSheet.create({
     maxHeight: '95%',
   },
   modalScrollView: {
-    maxHeight: 450,
+    maxHeight: 400,
     marginBottom: spacing.sm,
   },
   modalScrollContent: {
@@ -626,46 +1145,48 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  infoCard: {
+    backgroundColor: theme.colors.background,
+    marginBottom: spacing.md,
+  },
+  infoText: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.text,
+    marginBottom: spacing.xs,
+  },
+  infoLabel: {
+    fontWeight: 'bold',
+    color: theme.colors.primary,
+  },
+  priceText: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginTop: spacing.xs,
+  },
+  variantItem: {
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  variantItemName: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: spacing.xs / 2,
+  },
+  variantItemUnit: {
+    fontSize: fontSizes.sm,
+    color: theme.colors.onSurfaceVariant,
   },
   input: {
     marginBottom: spacing.md,
     backgroundColor: theme.colors.background,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-  },
-  inputHalf: {
-    flex: 1,
-    marginBottom: 0,
-    marginHorizontal: spacing.xs,
-  },
-  unitSelector: {
-    flex: 1,
-  },
-  unitLabel: {
-    fontSize: fontSizes.sm,
-    color: theme.colors.onSurfaceVariant,
-    marginBottom: spacing.xs,
-  },
-  unitChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -spacing.xs,
-  },
-  unitChip: {
-    marginHorizontal: spacing.xs,
-    marginVertical: spacing.xs,
-  },
-  chipText: {
-    color: theme.colors.onSurfaceVariant,
-    fontSize: fontSizes.xs,
-  },
-  selectedChipText: {
-    color: theme.colors.primary,
-    fontWeight: 'bold',
-    fontSize: fontSizes.xs,
   },
   costPreview: {
     backgroundColor: constructionColors.complete + '20',
@@ -679,8 +1200,34 @@ const styles = StyleSheet.create({
     color: constructionColors.complete,
     textAlign: 'center',
   },
+  priceSection: {
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+  },
+  priceSectionLabel: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: spacing.sm,
+  },
+  priceOptions: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  priceOptionButton: {
+    flex: 1,
+  },
+  priceButtonLabel: {
+    fontSize: fontSizes.xs,
+  },
+  priceButtonLabelSmall: {
+    fontSize: fontSizes.xs - 2,
+  },
   dialog: {
-    backgroundColor: '#000000',
+    backgroundColor: theme.colors.surface,
   },
   dialogTitle: {
     color: theme.colors.primary,
@@ -702,4 +1249,3 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
 });
-

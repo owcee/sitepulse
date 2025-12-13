@@ -32,7 +32,6 @@ const screenWidth = Dimensions.get('window').width;
 const mockTasks: Pick<Task, 'id' | 'title' | 'status'>[] = [
   { id: '2', title: 'Concrete Pouring - Level 1', status: 'in_progress' },
   { id: '5', title: 'Site Cleanup', status: 'not_started' },
-  { id: '6', title: 'Equipment Maintenance', status: 'not_started' },
 ];
 
 // Mock CNN classification results
@@ -50,7 +49,6 @@ const mockClassificationResults = [
   'Insulation',
   'Windows/Doors',
   'Site Cleanup',
-  'Equipment',
   'Safety Check',
 ];
 

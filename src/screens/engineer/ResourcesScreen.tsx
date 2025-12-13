@@ -66,16 +66,6 @@ export default function ResourcesScreen() {
   }, [projectId, state.budget]); // Run when projectId changes or if budget is not loaded
 
   // Get budget from shared state (from BudgetLogsManagementPage)
-  // If not available, calculate from inventory
-  const calculateEquipmentSpent = () => {
-    return state.equipment.reduce((total, equip) => {
-      if (equip.type === 'rental' && equip.rentalCost) {
-        return total + equip.rentalCost;
-      }
-      return total;
-    }, 0);
-  };
-
   const calculateMaterialsSpent = () => {
     return state.materials.reduce((total, material) => {
       // Use totalBought if available, otherwise use quantity
@@ -105,34 +95,30 @@ export default function ResourcesScreen() {
     }));
   } else {
     // Only use defaults if budget hasn't been loaded yet
-    // Calculate 20% of totalBudget for each category
-    const equipmentAllocated = Math.round(totalBudget * 0.2);
+    // Calculate 20% of totalBudget for materials category
     const materialsAllocated = Math.round(totalBudget * 0.2);
     categories = [
-      { name: 'Equipment', allocated: equipmentAllocated, spent: 0 },
       { name: 'Materials', allocated: materialsAllocated, spent: 0 },
     ];
   }
   
   const budgetUsagePercent = totalBudget > 0 ? totalSpent / totalBudget : 0;
   
-  // Combined low stock items from materials and equipment
+  // Low stock items from materials (threshold: 4 or material's min_threshold)
   const lowStockMaterials = state.materials
-    .filter(material => material.quantity <= 10)
-    .map(material => ({
-      ...material,
-      currentStock: material.quantity,
-      minStock: 10,
-      type: 'material' as const,
-    }));
-
-  const lowStockEquipment = state.equipment
-    .filter(equip => equip.status === 'maintenance')
-    .map(equip => ({
-      ...equip,
-      name: equip.name,
-      type: 'equipment' as const,
-    }));
+    .filter(material => {
+      const threshold = (material as any).min_threshold || 4;
+      return material.quantity < threshold;
+    })
+    .map(material => {
+      const threshold = (material as any).min_threshold || 4;
+      return {
+        ...material,
+        currentStock: material.quantity,
+        minStock: threshold,
+        type: 'material' as const,
+      };
+    });
 
   // Pie chart data for budget breakdown (from all categories)
   // Format: Category name only (no amount)
@@ -297,7 +283,7 @@ export default function ResourcesScreen() {
       }
     >
       {/* Inventory Alerts */}
-      {(lowStockMaterials.length > 0 || lowStockEquipment.length > 0) && (
+      {lowStockMaterials.length > 0 && (
         <Card style={[styles.card, styles.alertCard]}>
           <Card.Content>
             <View style={styles.alertHeader}>
@@ -308,12 +294,12 @@ export default function ResourcesScreen() {
                 style={{ margin: 0 }}
               />
               <Title style={[styles.cardTitle, { color: constructionColors.urgent, flex: 1, marginLeft: spacing.xs }]}>
-                Low Stock & Maintenance Alerts
+                Low Stock Alerts
               </Title>
               <Badge 
                 style={[styles.alertBadge, { backgroundColor: constructionColors.urgent }]}
               >
-                {lowStockMaterials.length + lowStockEquipment.length}
+                {lowStockMaterials.length}
               </Badge>
             </View>
             
@@ -325,19 +311,7 @@ export default function ResourcesScreen() {
                     {item.currentStock} {item.unit} remaining (Min: {item.minStock})
                   </Paragraph>
                 </View>
-                {(index < lowStockMaterials.length - 1 || lowStockEquipment.length > 0) && <Divider />}
-              </View>
-            ))}
-            
-            {lowStockEquipment.map((item, index) => (
-              <View key={item.id}>
-                <View style={styles.alertItem}>
-                  <Paragraph style={styles.alertItemName}>{item.name} (Equipment)</Paragraph>
-                  <Paragraph style={styles.alertItemStock}>
-                    Needs Maintenance
-                  </Paragraph>
-                </View>
-                {index < lowStockEquipment.length - 1 && <Divider />}
+                {index < lowStockMaterials.length - 1 && <Divider />}
               </View>
             ))}
           </Card.Content>
@@ -363,13 +337,9 @@ export default function ResourcesScreen() {
               <Paragraph style={styles.summaryValue}>{state.materials.length}</Paragraph>
             </View>
             <View style={styles.summaryItem}>
-              <Paragraph style={styles.summaryLabel}>Equipment</Paragraph>
-              <Paragraph style={styles.summaryValue}>{state.equipment.length}</Paragraph>
-            </View>
-            <View style={styles.summaryItem}>
               <Paragraph style={styles.summaryLabel}>Alerts</Paragraph>
               <Paragraph style={[styles.summaryValue, { color: constructionColors.urgent }]}>
-                {lowStockMaterials.length + lowStockEquipment.length}
+                {lowStockMaterials.length}
               </Paragraph>
             </View>
           </View>
@@ -385,7 +355,8 @@ export default function ResourcesScreen() {
             <Paragraph style={styles.emptyText}>No materials in inventory</Paragraph>
           ) : (
             state.materials.map((item, index) => {
-              const isLowStock = item.quantity <= 10;
+              const threshold = (item as any).min_threshold || 4;
+              const isLowStock = item.quantity < threshold;
               const totalValue = item.quantity * item.price;
               
               return (
@@ -424,57 +395,6 @@ export default function ResourcesScreen() {
         </Card.Content>
       </Card>
 
-      {/* Equipment List */}
-      <Card style={styles.card}>
-        <Card.Content style={{ overflow: 'visible' }}>
-          <Title style={styles.cardTitle}>Equipment ({state.equipment.length})</Title>
-          
-          {state.equipment.length === 0 ? (
-            <Paragraph style={styles.emptyText}>No equipment in inventory</Paragraph>
-          ) : (
-            state.equipment.map((item, index) => {
-              const needsMaintenance = item.status === 'maintenance';
-              const statusColor = item.status === 'available' ? constructionColors.complete : 
-                                 item.status === 'in_use' ? constructionColors.inProgress : 
-                                 constructionColors.urgent;
-              
-              return (
-                <View key={item.id}>
-                  <View style={styles.inventoryItem}>
-                    <View style={styles.itemHeader}>
-                      <View style={styles.itemInfo}>
-                        <Paragraph style={styles.itemName}>{item.name}</Paragraph>
-                        <Paragraph style={styles.itemUnit}>
-                          {item.category} • {item.type === 'rental' ? 'Rental' : 'Owned'}
-                        </Paragraph>
-                      </View>
-                      
-                      <Chip 
-                        style={[styles.lowStockChip, { backgroundColor: statusColor }]}
-                        textStyle={styles.statusChipText}
-                      >
-                        {item.status.replace('_', ' ').toUpperCase()}
-                      </Chip>
-                    </View>
-
-                    <View style={styles.itemFooter}>
-                      {item.type === 'rental' && item.rentalCost && (
-                        <Paragraph style={styles.itemValue}>
-                          Rental Cost: ₱{item.rentalCost.toLocaleString()}
-                        </Paragraph>
-                      )}
-                      <Paragraph style={styles.itemUnit}>
-                        Condition: {item.condition.replace('_', ' ')}
-                      </Paragraph>
-                    </View>
-                  </View>
-                  {index < state.equipment.length - 1 && <Divider />}
-                </View>
-              );
-            })
-          )}
-        </Card.Content>
-      </Card>
     </ScrollView>
   );
 
@@ -554,22 +474,8 @@ export default function ResourcesScreen() {
               return;
             }
             
-            // For primary categories (Equipment, Materials), generate logs from inventory
-            if (cat.id === 'equipment' && cat.spentAmount > 0) {
-              // Add logs from equipment
-              state.equipment.forEach(equipment => {
-                if (equipment.type === 'rental' && equipment.rentalCost && equipment.rentalCost > 0) {
-                  budgetLogs.push({
-                    id: `equipment-${equipment.id}`,
-                    category: 'equipment',
-                    amount: equipment.rentalCost,
-                    description: `${equipment.name} - Rental`,
-                    date: equipment.dateAcquired || new Date().toISOString().split('T')[0],
-                    addedBy: 'System'
-                  });
-                }
-              });
-            } else if (cat.id === 'materials' && cat.spentAmount > 0) {
+            // For primary categories (Materials), generate logs from inventory
+            if (cat.id === 'materials' && cat.spentAmount > 0) {
               // Add logs from materials
               state.materials.forEach(material => {
                 if (material.quantity > 0 && material.price > 0) {
@@ -606,20 +512,6 @@ export default function ResourcesScreen() {
                 amount: material.quantity * material.price,
                 description: `${material.name} - ${material.quantity} ${material.unit}`,
                 date: material.dateAdded || new Date().toISOString().split('T')[0],
-                addedBy: 'System'
-              });
-            }
-          });
-          
-          // Add logs from equipment (for equipment category)
-          state.equipment.forEach(equipment => {
-            if (equipment.type === 'rental' && equipment.rentalCost && equipment.rentalCost > 0) {
-              budgetLogs.push({
-                id: `equipment-${equipment.id}`,
-                category: 'equipment',
-                amount: equipment.rentalCost,
-                description: `${equipment.name} - Rental`,
-                date: equipment.dateAcquired || new Date().toISOString().split('T')[0],
                 addedBy: 'System'
               });
             }
@@ -680,24 +572,13 @@ export default function ResourcesScreen() {
           dateAdded: material.dateAdded || new Date().toISOString()
         }));
 
-        const equipment = state.equipment.map(equip => ({
-          id: equip.id,
-          name: equip.name,
-          type: equip.type,
-          category: equip.category || 'General',
-          condition: equip.condition,
-          rentalCost: equip.rentalCost,
-          status: equip.status,
-          dateAcquired: equip.dateAcquired || new Date().toISOString()
-        }));
-
         const projectInfo = {
           name: projectName,
           description: projectDescription,
           totalBudget: budget?.totalBudget || 0
         };
 
-        await exportMaterialsToPDF(materials, projectInfo, 10, equipment);
+        await exportMaterialsToPDF(materials, projectInfo, 10);
         setSuccessMessage('Your inventory report has been shared.');
         setShowSuccessDialog(true);
       }
@@ -794,7 +675,7 @@ export default function ResourcesScreen() {
                 style={styles.infoIcon}
               />
               <Paragraph style={styles.inventoryInfoText}>
-                Go to Equipment or Materials Management to manage inventory
+                Go to Materials Management to manage inventory
               </Paragraph>
             </View>
           </Dialog.Content>

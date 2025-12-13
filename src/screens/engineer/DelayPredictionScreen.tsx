@@ -39,6 +39,9 @@ import {
   formatDelayDays,
 } from '../../services/delayPredictionService';
 import { getProjectTasks, Task, updateTaskStatus } from '../../services/taskService';
+import { getProject, Project } from '../../services/projectService';
+import { getBudget } from '../../services/firebaseDataService';
+import { Divider } from 'react-native-paper';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -56,6 +59,7 @@ export default function DelayPredictionScreen() {
   const [predictions, setPredictions] = useState<DelayPrediction[]>([]);
   const [activeTasks, setActiveTasks] = useState<DelayPrediction[]>([]);
   const [delayedTasks, setDelayedTasks] = useState<DelayPrediction[]>([]);
+  const [activeTasksWithActualDelays, setActiveTasksWithActualDelays] = useState<DelayPrediction[]>([]);
   const [totalActiveTaskCount, setTotalActiveTaskCount] = useState(0); // All active tasks (matching dashboard)
   const [summary, setSummary] = useState({
     totalTasks: 0,
@@ -66,6 +70,38 @@ export default function DelayPredictionScreen() {
   
   // Completed tasks from Firestore
   const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
+  
+  // Project and budget for penalty calculation
+  const [project, setProject] = useState<Project | null>(null);
+  const [totalBudget, setTotalBudget] = useState(0);
+  
+  // Calculate actual penalty from completed tasks with delays
+  const calculateActualPenalty = () => {
+    if (!project || totalBudget === 0) return 0;
+    
+    const delayPenaltyRate = project.delayContingencyRate || 2;
+    let totalActualPenalty = 0;
+    
+    // Calculate penalty from completed tasks
+    completedTasks.forEach((task) => {
+      if (!task.planned_end_date || !task.actual_end_date) return;
+      
+      const plannedEnd = new Date(task.planned_end_date);
+      const actualEnd = new Date(task.actual_end_date);
+      
+      // Calculate actual delay days
+      const delayDays = Math.max(0, Math.ceil((actualEnd.getTime() - plannedEnd.getTime()) / (1000 * 60 * 60 * 24)));
+      
+      if (delayDays > 0) {
+        // Calculate penalty for this task: (delayDays × rate) × totalBudget / 100
+        const penaltyPercentage = delayDays * delayPenaltyRate;
+        const taskPenalty = (totalBudget * penaltyPercentage) / 100;
+        totalActualPenalty += taskPenalty;
+      }
+    });
+    
+    return totalActualPenalty;
+  };
   
   // Modal states
   const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false);
@@ -124,9 +160,19 @@ export default function DelayPredictionScreen() {
       const active = tasksWithOverdue.filter(p => (p.daysOverdue || 0) <= 1);
       const delayed = tasksWithOverdue.filter(p => (p.daysOverdue || 0) >= 2);
       
+      // Store tasks with actual delays (for penalty calculation)
+      // Tasks that are past their planned end date and not completed
+      const tasksWithActualDelays = tasksWithOverdue.filter(p => {
+        if (!p.plannedEndDate) return false;
+        const dueDate = new Date(p.plannedEndDate);
+        dueDate.setHours(0, 0, 0, 0);
+        return today.getTime() > dueDate.getTime() && p.status !== 'completed';
+      });
+      
       setPredictions(filteredPredictions);
       setActiveTasks(active);
       setDelayedTasks(delayed);
+      setActiveTasksWithActualDelays(tasksWithActualDelays);
       
       // Recalculate summary based on all in-progress predictions
       const filteredHighRisk = filteredPredictions.filter(p => p.riskLevel === 'High').length;
@@ -143,6 +189,19 @@ export default function DelayPredictionScreen() {
       // Get completed tasks from the same allTasks array
       const completed = allTasks.filter(t => t.status === 'completed');
       setCompletedTasks(completed);
+      
+      // Load project and budget for penalty calculation
+      try {
+        const projectData = await getProject(projectId);
+        setProject(projectData);
+        
+        const budgetData = await getBudget(projectId);
+        if (budgetData) {
+          setTotalBudget(budgetData.totalBudget || 0);
+        }
+      } catch (err) {
+        console.error('[DelayPrediction] Error loading project/budget:', err);
+      }
 
       console.log('[DelayPrediction] Loaded', result.predictions.length, 'predictions and', completed.length, 'completed tasks');
 
@@ -616,33 +675,141 @@ export default function DelayPredictionScreen() {
         </View>
       </View>
 
-      {/* Summary Card */}
+      {/* Contingency Penalty Card - Replaces Risk Summary */}
       <Card style={styles.summaryCard}>
         <Card.Content>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Paragraph style={styles.summaryNumber}>{summary.totalTasks}</Paragraph>
-              <Paragraph style={styles.summaryLabel}>Active</Paragraph>
-            </View>
-            <View style={styles.summaryItem}>
-              <Paragraph style={[styles.summaryNumber, { color: constructionColors.urgent }]}>
-                {summary.highRiskCount}
-              </Paragraph>
-              <Paragraph style={styles.summaryLabel}>High Risk</Paragraph>
-            </View>
-            <View style={styles.summaryItem}>
-              <Paragraph style={[styles.summaryNumber, { color: constructionColors.warning }]}>
-                {summary.mediumRiskCount}
-              </Paragraph>
-              <Paragraph style={styles.summaryLabel}>Medium</Paragraph>
-            </View>
-            <View style={styles.summaryItem}>
-              <Paragraph style={[styles.summaryNumber, { color: constructionColors.complete }]}>
-                {summary.lowRiskCount}
-              </Paragraph>
-              <Paragraph style={styles.summaryLabel}>Low Risk</Paragraph>
-            </View>
-          </View>
+          {(() => {
+            const delayPenaltyRate = project?.delayContingencyRate || 2;
+            const actualPenalty = calculateActualPenalty();
+            
+            // Calculate actual delay from active tasks that are past due
+            let maxActualDelay = 0;
+            let totalActualDelayDays = 0;
+            
+            activeTasksWithActualDelays.forEach((prediction) => {
+              if (!prediction.plannedEndDate) return;
+              
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const dueDate = new Date(prediction.plannedEndDate);
+              dueDate.setHours(0, 0, 0, 0);
+              
+              const actualDelayDays = Math.max(0, Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+              if (actualDelayDays > maxActualDelay) {
+                maxActualDelay = actualDelayDays;
+              }
+              totalActualDelayDays += actualDelayDays;
+            });
+            
+            // Calculate predicted delay from predictions (for tasks not yet past due or future predictions)
+            const predictedDelays = predictions
+              .filter(p => {
+                if (!p.plannedEndDate || p.status === 'completed') return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const dueDate = new Date(p.plannedEndDate);
+                dueDate.setHours(0, 0, 0, 0);
+                // Include if not yet past due (future tasks) or has prediction
+                return today.getTime() <= dueDate.getTime() || (p.delayDays || 0) > 0;
+              })
+              .map(p => p.delayDays || 0);
+            
+            const maxPredictedDelay = predictedDelays.length > 0 ? Math.max(...predictedDelays, 0) : 0;
+            
+            // Use actual delay if exists, otherwise use predicted delay
+            const maxDelay = Math.max(maxActualDelay, maxPredictedDelay);
+            
+            // Calculate predicted penalty amount
+            // Sum penalties from ALL active tasks (both actually delayed and predicted to be delayed)
+            let predictedPenaltyAmount = 0;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Process all predictions for active/in-progress tasks
+            predictions.forEach((prediction) => {
+              if (prediction.status === 'completed') return;
+              
+              if (!prediction.plannedEndDate) return;
+              
+              const dueDate = new Date(prediction.plannedEndDate);
+              dueDate.setHours(0, 0, 0, 0);
+              
+              let delayDays = 0;
+              
+              // If task is past its planned end date, use actual delay days
+              if (today.getTime() > dueDate.getTime()) {
+                // Task is actually delayed - calculate actual delay
+                delayDays = Math.max(0, Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+              } else {
+                // Task is not yet past due - use predicted delay days
+                delayDays = prediction.delayDays || 0;
+              }
+              
+              // Calculate penalty for this task
+              if (delayDays > 0) {
+                const penaltyPercentage = delayDays * delayPenaltyRate;
+                const taskPenalty = (totalBudget * penaltyPercentage) / 100;
+                predictedPenaltyAmount += taskPenalty;
+              }
+            });
+            
+            const deductionPercentage = maxDelay > 0 ? maxDelay * delayPenaltyRate : 0;
+            
+            // If no predicted delay and no actual penalty, show "on track"
+            if (maxDelay <= 0 && actualPenalty <= 0) {
+              return (
+                <View style={styles.penaltyContent}>
+                  <Ionicons name="checkmark-circle" size={48} color={constructionColors.complete} />
+                  <Title style={styles.penaltyTitle}>We are on track</Title>
+                  <Paragraph style={styles.penaltyMessage}>No penalty</Paragraph>
+                </View>
+              );
+            }
+            
+            return (
+              <View style={styles.penaltyContent}>
+                <Title style={styles.penaltyCardTitle}>Delay Penalty</Title>
+                {maxActualDelay > 0 && (
+                  <View style={styles.penaltyRow}>
+                    <Paragraph style={styles.penaltyLabel}>Active Delayed Tasks:</Paragraph>
+                    <Paragraph style={styles.penaltyValue}>{activeTasksWithActualDelays.length} tasks</Paragraph>
+                  </View>
+                )}
+                {maxDelay > 0 && (
+                  <>
+                    <View style={styles.penaltyRow}>
+                      <Paragraph style={styles.penaltyLabel}>{maxActualDelay > 0 ? 'Max Actual Delay' : 'Max Predicted Delay'}:</Paragraph>
+                      <Paragraph style={styles.penaltyValue}>{maxDelay} days</Paragraph>
+                    </View>
+                    <View style={styles.penaltyRow}>
+                      <Paragraph style={styles.penaltyLabel}>Delay Penalty Rate:</Paragraph>
+                      <Paragraph style={styles.penaltyValue}>{delayPenaltyRate}% per day</Paragraph>
+                    </View>
+                    <Divider style={styles.penaltyDivider} />
+                    <View style={styles.penaltyRow}>
+                      <Paragraph style={styles.penaltyLabel}>Predicted Penalty Amount:</Paragraph>
+                      <Paragraph style={[styles.penaltyAmount, { color: constructionColors.urgent }]}>
+                        ₱{predictedPenaltyAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Paragraph>
+                    </View>
+                    <Paragraph style={styles.helperText}>
+                      Estimated penalty from active delayed tasks
+                    </Paragraph>
+                    {actualPenalty > 0 && <Divider style={styles.penaltyDivider} />}
+                  </>
+                )}
+                <View style={styles.penaltyRow}>
+                  <Paragraph style={styles.penaltyLabel}>Actual Penalty Amount:</Paragraph>
+                  <Paragraph style={[styles.penaltyAmount, { color: actualPenalty > 0 ? constructionColors.complete : theme.colors.text }]}>
+                    ₱{actualPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Paragraph>
+                </View>
+                <Paragraph style={styles.helperText}>
+                  Actual penalty from completed delayed tasks
+                </Paragraph>
+              </View>
+            );
+          })()}
         </Card.Content>
       </Card>
 
@@ -934,26 +1101,66 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     backgroundColor: theme.colors.surface,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  penaltyContent: {
+    alignItems: 'center',
     paddingVertical: spacing.xs,
   },
-  summaryItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  summaryNumber: {
-    fontSize: fontSizes.xl,
+  penaltyCardTitle: {
+    fontSize: fontSizes.sm,
     fontWeight: 'bold',
-    color: theme.colors.primary,
-    lineHeight: 28,
+    color: theme.colors.text,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
-  summaryLabel: {
+  penaltyTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: 'bold',
+    color: constructionColors.complete,
+    marginTop: spacing.xs / 2,
+    marginBottom: spacing.xs / 2,
+  },
+  penaltyMessage: {
     fontSize: fontSizes.xs,
+    fontWeight: 'bold',
     color: theme.colors.onSurfaceVariant,
     textAlign: 'center',
-    marginTop: 2,
+  },
+  penaltyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: spacing.xs / 4,
+  },
+  penaltyLabel: {
+    fontSize: fontSizes.xs,
+    fontWeight: 'bold',
+    color: theme.colors.onSurfaceVariant,
+    flex: 1,
+  },
+  penaltyValue: {
+    fontSize: fontSizes.xs,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    textAlign: 'right',
+  },
+  penaltyAmount: {
+    fontSize: fontSizes.sm,
+    fontWeight: 'bold',
+    textAlign: 'right',
+  },
+  penaltyDivider: {
+    marginVertical: spacing.xs,
+    width: '100%',
+  },
+  helperText: {
+    fontSize: fontSizes.xs - 1,
+    fontWeight: 'bold',
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs / 2,
+    marginHorizontal: spacing.xs,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   tabContainer: {
     paddingHorizontal: spacing.md,

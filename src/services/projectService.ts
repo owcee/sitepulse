@@ -15,6 +15,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
+import { uploadWithProgress } from './storageUploadHelperV2';
 
 export interface Project {
   id: string;
@@ -24,11 +25,15 @@ export interface Project {
   clientName: string;
   engineerId: string;
   engineerName: string;
-  budget: number;
-  duration: number; // in days
+  budget?: number; // Optional for backward compatibility
+  duration?: number; // Optional for backward compatibility (in days)
+  excelFileUrl?: string; // NEW: Excel file with Scope of Work & Gantt Chart
+  blueprintImageUrl?: string; // NEW: Electrical Plan (Blueprint) image
+  blueprintId?: string; // NEW: Reference to blueprint document
   startDate?: string;
   estimatedEndDate?: string;
   status: 'planning' | 'active' | 'completed' | 'paused';
+  delayContingencyRate?: number; // Percentage deducted per delay day (e.g., 2 = 2% per day)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,8 +48,10 @@ export async function createProject(projectData: {
   description: string;
   location: string;
   clientName: string;
-  budget: number;
-  duration: number;
+  excelFileUrl: string; // Can be local URI or already uploaded URL
+  blueprintImageUrl: string; // Can be local URI or already uploaded URL
+  budget?: number; // Optional for backward compatibility
+  duration?: number; // Optional for backward compatibility
 }): Promise<Project> {
   try {
     if (!auth.currentUser) {
@@ -61,12 +68,13 @@ export async function createProject(projectData: {
 
     const engineerData = engineerDoc.data();
 
-    // Calculate dates
+    // Calculate dates (use default 90 days if duration not provided)
     const startDate = new Date();
+    const duration = projectData.duration || 90; // Default 90 days
     const estimatedEndDate = new Date();
-    estimatedEndDate.setDate(startDate.getDate() + projectData.duration);
+    estimatedEndDate.setDate(startDate.getDate() + duration);
 
-    // Create project document
+    // Create project document first to get project ID
     const projectsRef = collection(db, 'projects');
     const projectDoc = await addDoc(projectsRef, {
       name: projectData.name,
@@ -75,37 +83,68 @@ export async function createProject(projectData: {
       clientName: projectData.clientName,
       engineerId: auth.currentUser.uid,
       engineerName: engineerData.name,
-      budget: projectData.budget,
-      duration: projectData.duration,
+      budget: projectData.budget || 0, // Optional, default to 0
+      duration: duration,
       startDate: startDate.toISOString().split('T')[0],
       estimatedEndDate: estimatedEndDate.toISOString().split('T')[0],
       status: 'planning',
-      totalBudget: projectData.budget,
+      totalBudget: projectData.budget || 0,
       contingencyPercentage: 10,
+      delayContingencyRate: 2, // Default 2% per delay day
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
+    // Upload files to correct project folder
+    let finalExcelUrl = projectData.excelFileUrl;
+    let finalBlueprintUrl = projectData.blueprintImageUrl;
+
+    // Check if URLs are local URIs (start with file://) and need uploading
+    if (projectData.excelFileUrl.startsWith('file://') || projectData.excelFileUrl.startsWith('content://')) {
+      const excelStoragePath = `projects/${projectDoc.id}/scope_of_work.xlsx`;
+      finalExcelUrl = await uploadWithProgress(excelStoragePath, projectData.excelFileUrl);
+      console.log('✅ Excel file uploaded to project folder:', finalExcelUrl);
+    }
+
+    if (projectData.blueprintImageUrl.startsWith('file://') || projectData.blueprintImageUrl.startsWith('content://')) {
+      const blueprintStoragePath = `blueprints/${projectDoc.id}/electrical_plan.jpg`;
+      finalBlueprintUrl = await uploadWithProgress(blueprintStoragePath, projectData.blueprintImageUrl);
+      console.log('✅ Blueprint uploaded to project folder:', finalBlueprintUrl);
+    }
+
+    // Update project with file URLs
+    await updateDoc(projectDoc, {
+      excelFileUrl: finalExcelUrl,
+      blueprintImageUrl: finalBlueprintUrl
+    });
+
+    // Create blueprint document
+    const blueprintsRef = collection(db, 'blueprints');
+    const blueprintDoc = await addDoc(blueprintsRef, {
+      projectId: projectDoc.id,
+      imageUrl: projectData.blueprintImageUrl,
+      pins: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    // Update project with blueprint ID
+    await updateDoc(projectDoc, {
+      blueprintId: blueprintDoc.id
+    });
+
+    console.log('✅ Blueprint document created:', blueprintDoc.id);
+
     // Create initial budget document in budgets collection with the same structure as BudgetLogsManagementPage
     const { saveBudget } = await import('./firebaseDataService');
-    // Calculate 20% of initial budget for each category
-    const equipmentAllocated = Math.round(projectData.budget * 0.2);
-    const materialsAllocated = Math.round(projectData.budget * 0.2);
+    // Calculate 20% of initial budget for materials category (or default to 0 if no budget)
+    const materialsAllocated = Math.round((projectData.budget || 0) * 0.2);
     const initialBudget = {
-      totalBudget: projectData.budget, // Use the budget from project creation
+      totalBudget: projectData.budget || 0,
       totalSpent: 0,
       contingencyPercentage: 10,
       lastUpdated: new Date(),
       categories: [
-        {
-          id: 'equipment',
-          name: 'Equipment',
-          allocatedAmount: equipmentAllocated,
-          spentAmount: 0,
-          description: 'Equipment rental and purchases (Auto-calculated)',
-          lastUpdated: new Date(),
-          isPrimary: true,
-        },
         {
           id: 'materials',
           name: 'Materials',
@@ -139,7 +178,10 @@ export async function createProject(projectData: {
       engineerId: auth.currentUser.uid,
       engineerName: engineerData.name,
       budget: projectData.budget,
-      duration: projectData.duration,
+      duration: duration,
+      excelFileUrl: projectData.excelFileUrl,
+      blueprintImageUrl: projectData.blueprintImageUrl,
+      blueprintId: blueprintDoc.id,
       startDate: startDate.toISOString().split('T')[0],
       estimatedEndDate: estimatedEndDate.toISOString().split('T')[0],
       status: 'planning',
@@ -180,6 +222,9 @@ export async function getProject(projectId: string): Promise<Project | null> {
       engineerName: data.engineerName,
       budget: data.budget,
       duration: data.duration,
+      excelFileUrl: data.excelFileUrl,
+      blueprintImageUrl: data.blueprintImageUrl,
+      blueprintId: data.blueprintId,
       startDate: data.startDate,
       estimatedEndDate: data.estimatedEndDate,
       status: data.status,
@@ -250,6 +295,9 @@ export async function getEngineerProjects(engineerId?: string): Promise<Project[
         engineerName: data.engineerName,
         budget: data.budget,
         duration: data.duration,
+        excelFileUrl: data.excelFileUrl,
+        blueprintImageUrl: data.blueprintImageUrl,
+        blueprintId: data.blueprintId,
         startDate: data.startDate,
         estimatedEndDate: data.estimatedEndDate,
         status: data.status,
@@ -291,7 +339,11 @@ export async function updateProject(
     clientName: string;
     budget: number;
     duration: number;
+    excelFileUrl: string;
+    blueprintImageUrl: string;
+    blueprintId: string;
     status: 'planning' | 'active' | 'completed' | 'paused';
+    delayContingencyRate: number;
   }>
 ): Promise<void> {
   try {

@@ -44,13 +44,13 @@ interface ProjectTool {
 
 type RootStackParamList = {
   Tasks: undefined;
+  BlueprintEditor: undefined;
   'Delay Prediction': undefined;
   Resources: { tab?: string };
   WorkerLogs: undefined;
   CreateNewProject: undefined;
   MaterialsManagement: undefined;
   WorkersManagement: undefined;
-  EquipmentManagement: undefined;
   BudgetLogsManagement: undefined;
 };
 
@@ -268,12 +268,12 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
   // Project tools configuration
   const projectTools: ProjectTool[] = [
     {
-      id: 'task-management',
-      title: 'Task Management',
-      icon: 'clipboard-outline',
+      id: 'blueprint-method',
+      title: 'Blueprint Method',
+      icon: 'map-outline',
       color: constructionColors.inProgress,
-      description: 'Manage project tasks',
-      onPress: () => navigation.navigate('Tasks'),
+      description: 'Edit tasks on blueprint',
+      onPress: () => navigation.navigate('BlueprintEditor'),
     },
     {
       id: 'materials',
@@ -290,14 +290,6 @@ export default function ProjectToolsScreen({ user, project, onLogout, onRefresh 
       color: constructionColors.complete,
       description: 'Workers & Project Team',
       onPress: () => navigation.navigate('WorkersManagement'),
-    },
-    {
-      id: 'equipment',
-      title: 'Manage Equipment',
-      icon: 'construct',
-      color: '#FF9800',
-      description: 'Equipment & rental costs',
-      onPress: () => navigation.navigate('EquipmentManagement'),
     },
     {
       id: 'budget-logs',

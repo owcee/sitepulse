@@ -17,7 +17,7 @@ interface BudgetData {
   categories: Array<{ name: string; allocatedAmount: number; spentAmount: number }>;
 }
 
-// Task Management Chart Card
+// Blueprint Chart Card (formerly Task Management)
 export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
   // This would come from actual data in real implementation
   const taskData = {
@@ -58,7 +58,7 @@ export const TaskManagementChart: React.FC<ChartCardProps> = ({ onPress }) => {
       <Card style={styles.card}>
         <Card.Content>
           <View style={styles.cardHeader}>
-            <Title style={styles.cardTitle}>Task Management</Title>
+            <Title style={styles.cardTitle}>Blueprint</Title>
             <Chip icon="chart-pie" style={styles.headerChip}>
               {taskData.total} Total
             </Chip>

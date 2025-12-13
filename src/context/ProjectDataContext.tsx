@@ -27,21 +27,9 @@ export interface Worker {
   dateHired: string;
 }
 
-export interface Equipment {
-  id: string;
-  name: string;
-  type: 'owned' | 'rental';
-  category: string;
-  condition: 'excellent' | 'good' | 'fair' | 'needs_repair';
-  rentalCost?: number;
-  quantity?: number; // Number of pieces/units
-  status: 'available' | 'in_use' | 'maintenance';
-  dateAcquired: string;
-}
-
 export interface BudgetLog {
   id: string;
-  category: 'materials' | 'workers' | 'equipment' | 'other';
+  category: 'materials' | 'workers' | 'other';
   description: string;
   amount: number;
   type: 'expense' | 'income';
@@ -71,7 +59,6 @@ export interface ProjectBudget {
 export interface ProjectData {
   materials: Material[];
   workers: Worker[];
-  equipment: Equipment[];
   budgetLogs: BudgetLog[];
   totalBudget: number;
   budget?: ProjectBudget; // Optional shared budget state
@@ -83,16 +70,13 @@ export interface ProjectData {
 type ProjectAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
-  | { type: 'SET_ALL_DATA'; payload: { materials: Material[]; workers: Worker[]; equipment: Equipment[]; budgetLogs: BudgetLog[]; totalBudget: number } }
+  | { type: 'SET_ALL_DATA'; payload: { materials: Material[]; workers: Worker[]; budgetLogs: BudgetLog[]; totalBudget: number } }
   | { type: 'ADD_MATERIAL'; payload: Material }
   | { type: 'UPDATE_MATERIAL'; payload: { id: string; updates: Partial<Material> } }
   | { type: 'DELETE_MATERIAL'; payload: string }
   | { type: 'ADD_WORKER'; payload: Worker }
   | { type: 'UPDATE_WORKER'; payload: { id: string; updates: Partial<Worker> } }
   | { type: 'DELETE_WORKER'; payload: string }
-  | { type: 'ADD_EQUIPMENT'; payload: Equipment }
-  | { type: 'UPDATE_EQUIPMENT'; payload: { id: string; updates: Partial<Equipment> } }
-  | { type: 'DELETE_EQUIPMENT'; payload: string }
   | { type: 'ADD_BUDGET_LOG'; payload: BudgetLog }
   | { type: 'UPDATE_BUDGET_LOG'; payload: { id: string; updates: Partial<BudgetLog> } }
   | { type: 'DELETE_BUDGET_LOG'; payload: string }
@@ -104,7 +88,6 @@ type ProjectAction =
 const initialState: ProjectData = {
   materials: [],
   workers: [],
-  equipment: [],
   budgetLogs: [],
   totalBudget: 100000,
   budget: undefined,
@@ -124,7 +107,6 @@ function projectDataReducer(state: ProjectData, action: ProjectAction): ProjectD
         ...state,
         materials: action.payload.materials,
         workers: action.payload.workers,
-        equipment: action.payload.equipment,
         budgetLogs: action.payload.budgetLogs,
         totalBudget: action.payload.totalBudget,
         loading: false,
@@ -157,20 +139,6 @@ function projectDataReducer(state: ProjectData, action: ProjectAction): ProjectD
       return {
         ...state,
         workers: state.workers.filter(item => item.id !== action.payload),
-      };
-    case 'ADD_EQUIPMENT':
-      return { ...state, equipment: [...state.equipment, action.payload] };
-    case 'UPDATE_EQUIPMENT':
-      return {
-        ...state,
-        equipment: state.equipment.map(item =>
-          item.id === action.payload.id ? { ...item, ...action.payload.updates } : item
-        ),
-      };
-    case 'DELETE_EQUIPMENT':
-      return {
-        ...state,
-        equipment: state.equipment.filter(item => item.id !== action.payload),
       };
     case 'ADD_BUDGET_LOG':
       return { ...state, budgetLogs: [...state.budgetLogs, action.payload] };
@@ -219,9 +187,6 @@ interface ProjectDataContextType {
   addWorker: (worker: Omit<Worker, 'id'>) => Promise<void>;
   updateWorker: (id: string, updates: Partial<Worker>) => Promise<void>;
   deleteWorker: (id: string) => Promise<void>;
-  addEquipment: (equipment: Omit<Equipment, 'id'>) => Promise<void>;
-  updateEquipment: (id: string, updates: Partial<Equipment>) => Promise<void>;
-  deleteEquipment: (id: string) => Promise<void>;
   addBudgetLog: (budgetLog: Omit<BudgetLog, 'id'>) => Promise<void>;
   updateBudgetLog: (id: string, updates: Partial<BudgetLog>) => Promise<void>;
   deleteBudgetLog: (id: string) => Promise<void>;
@@ -280,7 +245,7 @@ export function ProjectDataProvider({
         }
       };
 
-      const [materials, workers, equipment, budgetLogs, project, savedBudget] = await Promise.all([
+      const [materials, workers, budgetLogs, project, savedBudget] = await Promise.all([
         loadWithFallback(
           () => firebaseDataService.getMaterials(projectId),
           [],
@@ -290,11 +255,6 @@ export function ProjectDataProvider({
           () => firebaseDataService.getWorkers(projectId),
           [],
           'workers'
-        ),
-        loadWithFallback(
-          () => firebaseDataService.getEquipment(projectId),
-          [],
-          'equipment'
         ),
         loadWithFallback(
           () => firebaseDataService.getBudgetLogs(projectId),
@@ -329,7 +289,6 @@ export function ProjectDataProvider({
         payload: {
           materials,
           workers,
-          equipment,
           budgetLogs,
           totalBudget: (project as any)?.totalBudget || 100000,
         },
@@ -337,14 +296,7 @@ export function ProjectDataProvider({
       
       // Load budget if available and update primary categories with current spent amounts
       if (savedBudget) {
-        // Calculate current spent amounts from loaded materials/equipment
-        const equipmentSpent = equipment.reduce((total, equip) => {
-          if (equip.type === 'rental' && equip.rentalCost) {
-            return total + equip.rentalCost;
-          }
-          return total;
-        }, 0);
-        
+        // Calculate current spent amounts from loaded materials
         const materialsSpent = materials.reduce((total, material) => {
           const quantity = material.totalBought || material.quantity;
           return total + (quantity * material.price);
@@ -356,40 +308,28 @@ export function ProjectDataProvider({
         const totalBudget = (savedBudget as any).totalBudget || 250000;
         const expectedAllocated = Math.round(totalBudget * 0.2);
         const oldHardcodedValues = [50000, 150000];
-        const updatedCategories = (savedBudget as any).categories.map((cat: any) => {
-          if (cat.id === 'equipment') {
-            // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
-            // This preserves any user adjustments (even if not exactly 20%)
-            const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
-            const exceedsBudget = cat.allocatedAmount > totalBudget;
-            // Only fix old hardcoded values that are wrong - preserve all other user adjustments
-            const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
-            return { 
-              ...cat, 
-              spentAmount: equipmentSpent, 
-              allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
-              lastUpdated: shouldFix ? new Date() : (cat.lastUpdated || new Date()) // Only update timestamp if we fixed it
+        const updatedCategories = (savedBudget as any).categories
+          .filter((cat: any) => cat.id !== 'equipment') // Remove equipment category
+          .map((cat: any) => {
+            if (cat.id === 'materials') {
+              // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
+              // This preserves any user adjustments (even if not exactly 20%)
+              const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
+              const exceedsBudget = cat.allocatedAmount > totalBudget;
+              // Only fix old hardcoded values that are wrong - preserve all other user adjustments
+              const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
+              return { 
+                ...cat, 
+                spentAmount: materialsSpent, 
+                allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
+                lastUpdated: shouldFix ? new Date() : (cat.lastUpdated || new Date()) // Only update timestamp if we fixed it
+              };
+            }
+            return {
+              ...cat,
+              lastUpdated: cat.lastUpdated || new Date(),
             };
-          }
-          if (cat.id === 'materials') {
-            // Only fix if: it's exactly one of the old hardcoded values AND it doesn't equal 20% of current budget
-            // This preserves any user adjustments (even if not exactly 20%)
-            const isOldHardcoded = oldHardcodedValues.includes(cat.allocatedAmount);
-            const exceedsBudget = cat.allocatedAmount > totalBudget;
-            // Only fix old hardcoded values that are wrong - preserve all other user adjustments
-            const shouldFix = exceedsBudget || (isOldHardcoded && cat.allocatedAmount !== expectedAllocated);
-            return { 
-              ...cat, 
-              spentAmount: materialsSpent, 
-              allocatedAmount: shouldFix ? expectedAllocated : cat.allocatedAmount,
-              lastUpdated: shouldFix ? new Date() : (cat.lastUpdated || new Date()) // Only update timestamp if we fixed it
-            };
-          }
-          return {
-            ...cat,
-            lastUpdated: cat.lastUpdated || new Date(),
-          };
-        });
+          });
         
         // Calculate total spent
         const totalSpent = updatedCategories.reduce((sum: number, cat: any) => sum + cat.spentAmount, 0);
@@ -412,7 +352,6 @@ export function ProjectDataProvider({
         payload: {
           materials: [],
           workers: [],
-          equipment: [],
           budgetLogs: [],
           totalBudget: 100000,
         },
@@ -432,7 +371,7 @@ export function ProjectDataProvider({
     await loadData();
   };
 
-  // Helper function to recalculate and update budget based on current materials/equipment
+  // Helper function to recalculate and update budget based on current materials
   // Uses stateRef to get the latest state to avoid stale closures
   const recalculateBudget = async () => {
     // Use a small delay to ensure state has been updated after dispatch
@@ -445,31 +384,23 @@ export function ProjectDataProvider({
       }
       
       try {
-        // Calculate equipment and materials spent from current state
-        const equipmentSpent = currentState.equipment.reduce((total, equip) => {
-          if (equip.type === 'rental' && equip.rentalCost) {
-            return total + equip.rentalCost;
-          }
-          return total;
-        }, 0);
-        
+        // Calculate materials spent from current state
         const materialsSpent = currentState.materials.reduce((total, material) => {
           const quantity = material.totalBought || material.quantity;
           return total + (quantity * material.price);
         }, 0);
         
-        console.log('📊 Recalculating budget:', { equipmentSpent, materialsSpent });
+        console.log('📊 Recalculating budget:', { materialsSpent });
         
-        // Update budget categories
-        const updatedCategories = currentState.budget.categories.map(cat => {
-          if (cat.id === 'equipment') {
-            return { ...cat, spentAmount: equipmentSpent, lastUpdated: new Date() };
-          }
-          if (cat.id === 'materials') {
-            return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
-          }
-          return cat;
-        });
+        // Update budget categories (remove equipment category)
+        const updatedCategories = currentState.budget.categories
+          .filter(cat => cat.id !== 'equipment')
+          .map(cat => {
+            if (cat.id === 'materials') {
+              return { ...cat, spentAmount: materialsSpent, lastUpdated: new Date() };
+            }
+            return cat;
+          });
         
         // Calculate total spent
         const newTotalSpent = updatedCategories.reduce((sum, cat) => sum + cat.spentAmount, 0);
@@ -484,7 +415,7 @@ export function ProjectDataProvider({
         // Save to Firebase and update shared state
         await firebaseDataService.saveBudget(projectId, updatedBudget);
         dispatch({ type: 'SET_BUDGET', payload: updatedBudget });
-        console.log('✅ Budget recalculated and updated after material/equipment change', updatedBudget);
+        console.log('✅ Budget recalculated and updated after material change', updatedBudget);
       } catch (error: any) {
         console.error('Error recalculating budget:', error);
       }
@@ -555,40 +486,6 @@ export function ProjectDataProvider({
     }
   };
 
-  const addEquipment = async (equipment: Omit<Equipment, 'id'>) => {
-    try {
-      const newEquipment = await firebaseDataService.addEquipment(projectId, equipment);
-      dispatch({ type: 'ADD_EQUIPMENT', payload: newEquipment as Equipment });
-      // Trigger budget recalculation after equipment add
-      setTimeout(() => recalculateBudget(), 100);
-    } catch (error: any) {
-      console.error('Error adding equipment:', error);
-      throw error;
-    }
-  };
-
-  const updateEquipment = async (id: string, updates: Partial<Equipment>) => {
-    try {
-      await firebaseDataService.updateEquipment(id, updates);
-      dispatch({ type: 'UPDATE_EQUIPMENT', payload: { id, updates } });
-      // Trigger budget recalculation after equipment update
-      setTimeout(() => recalculateBudget(), 100);
-    } catch (error: any) {
-      console.error('Error updating equipment:', error);
-      throw error;
-    }
-  };
-
-  const deleteEquipment = async (id: string) => {
-    try {
-      await firebaseDataService.deleteEquipment(id);
-      dispatch({ type: 'DELETE_EQUIPMENT', payload: id });
-    } catch (error: any) {
-      console.error('Error deleting equipment:', error);
-      throw error;
-    }
-  };
-
   const addBudgetLog = async (budgetLog: Omit<BudgetLog, 'id'>) => {
     try {
       const newLog = await firebaseDataService.addBudgetLog(projectId, budgetLog);
@@ -648,9 +545,6 @@ export function ProjectDataProvider({
     addWorker,
     updateWorker,
     deleteWorker,
-    addEquipment,
-    updateEquipment,
-    deleteEquipment,
     addBudgetLog,
     updateBudgetLog,
     deleteBudgetLog,

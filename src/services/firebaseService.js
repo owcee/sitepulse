@@ -140,13 +140,6 @@ export const approveUsageSubmission = usageService.approveUsageSubmission;
 export const rejectUsageSubmission = usageService.rejectUsageSubmission;
 export const checkDuplicateUsage = usageService.checkDuplicateUsage;
 export const getPendingUsageForItem = usageService.getPendingUsageForItem;
-export const requestBorrowEquipment = usageService.requestBorrowEquipment;
-export const getWorkerBorrowRequests = usageService.getWorkerBorrowRequests;
-export const getActiveBorrowRequest = usageService.getActiveBorrowRequest;
-export const markBorrowUsageReported = usageService.markBorrowUsageReported;
-export const returnBorrowedEquipment = usageService.returnBorrowedEquipment;
-export const approveBorrowRequest = usageService.approveBorrowRequest;
-export const rejectBorrowRequest = usageService.rejectBorrowRequest;
 
 // ============================================================================
 // FCM PUSH NOTIFICATIONS
