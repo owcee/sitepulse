@@ -16,7 +16,7 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { db, auth } from '../firebaseConfig';
 import { getProject } from './projectService';
 import { sendNotification } from './notificationService';
 
@@ -168,17 +168,209 @@ export async function updateMaterial(materialId, updates) {
 }
 
 /**
- * Delete a material
+ * Delete a material (soft delete - moves to deleted_materials collection)
  * @param {string} materialId - Material ID
  * @returns {Promise<void>}
  */
 export async function deleteMaterial(materialId) {
   try {
     const materialRef = doc(db, 'materials', materialId);
+    const materialSnap = await getDoc(materialRef);
+    
+    if (!materialSnap.exists()) {
+      throw new Error('Material not found');
+    }
+    
+    const materialData = materialSnap.data();
+    
+    // Create deleted material record
+    const deletedMaterialsRef = collection(db, 'deleted_materials');
+    await addDoc(deletedMaterialsRef, {
+      ...materialData,
+      originalId: materialId,
+      deletedAt: serverTimestamp(),
+      deletedBy: auth.currentUser?.uid || null,
+      deletedReason: 'Manual deletion',
+    });
+    
+    // Delete original material
     await deleteDoc(materialRef);
+    
+    console.log(`Material ${materialId} soft-deleted and moved to deleted_materials`);
   } catch (error) {
     console.error('Error deleting material:', error);
     throw new Error('Failed to delete material');
+  }
+}
+
+/**
+ * Get all deleted materials for a project
+ * @param {string} projectId - Project ID
+ * @returns {Promise<Array>} Array of deleted material objects
+ */
+export async function getDeletedMaterials(projectId) {
+  try {
+    const deletedMaterialsRef = collection(db, 'deleted_materials');
+    const q = query(
+      deletedMaterialsRef,
+      where('projectId', '==', projectId),
+      orderBy('deletedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      originalId: doc.data().originalId || doc.id,
+      ...doc.data(),
+      deletedAt: doc.data().deletedAt?.toDate?.() || doc.data().deletedAt || null,
+    }));
+  } catch (error) {
+    console.error('Error getting deleted materials:', error);
+    // If orderBy fails, try without it
+    try {
+      const deletedMaterialsRef = collection(db, 'deleted_materials');
+      const q = query(
+        deletedMaterialsRef,
+        where('projectId', '==', projectId)
+      );
+      const snapshot = await getDocs(q);
+      const materials = snapshot.docs.map(doc => ({
+        id: doc.id,
+        originalId: doc.data().originalId || doc.id,
+        ...doc.data(),
+        deletedAt: doc.data().deletedAt?.toDate?.() || doc.data().deletedAt || null,
+      }));
+      // Sort in memory
+      return materials.sort((a, b) => {
+        const dateA = a.deletedAt ? (a.deletedAt instanceof Date ? a.deletedAt.getTime() : new Date(a.deletedAt).getTime()) : 0;
+        const dateB = b.deletedAt ? (b.deletedAt instanceof Date ? b.deletedAt.getTime() : new Date(b.deletedAt).getTime()) : 0;
+        return dateB - dateA;
+      });
+    } catch (fallbackError) {
+      console.error('Error getting deleted materials (fallback):', fallbackError);
+      return [];
+    }
+  }
+}
+
+/**
+ * Get material usage history for a project
+ * @param {string} projectId - Project ID
+ * @returns {Promise<Array>} Array of usage submissions with task information
+ */
+export async function getMaterialUsageHistory(projectId) {
+  try {
+    const usageSubmissionsRef = collection(db, 'usage_submissions');
+    const q = query(
+      usageSubmissionsRef,
+      where('projectId', '==', projectId),
+      where('type', '==', 'material'),
+      where('status', '==', 'approved'),
+      orderBy('timestamp', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    
+    const usageHistory = [];
+    for (const docItem of snapshot.docs) {
+      const data = docItem.data();
+      let taskInfo = null;
+      
+      // Fetch task information if taskId exists
+      if (data.taskId) {
+        try {
+          const taskRef = doc(db, 'tasks', data.taskId);
+          const taskSnap = await getDoc(taskRef);
+          if (taskSnap.exists()) {
+            const taskData = taskSnap.data();
+            taskInfo = {
+              id: taskSnap.id,
+              title: taskData.title || 'Unknown Task',
+              category: taskData.category || '',
+              subTask: taskData.subTask || '',
+            };
+          }
+        } catch (taskError) {
+          console.error('Error fetching task info:', taskError);
+        }
+      }
+      
+      usageHistory.push({
+        id: docItem.id,
+        materialId: data.itemId,
+        materialName: data.itemName,
+        quantity: data.quantity || 0,
+        unit: data.unit || 'units',
+        workerName: data.workerName || 'Unknown Worker',
+        timestamp: data.timestamp?.toDate?.() || data.timestamp || null,
+        reviewedAt: data.reviewedAt?.toDate?.() || data.reviewedAt || null,
+        taskId: data.taskId || null,
+        taskInfo: taskInfo,
+        notes: data.notes || '',
+      });
+    }
+    
+    return usageHistory;
+  } catch (error) {
+    console.error('Error getting material usage history:', error);
+    // If orderBy fails, try without it
+    try {
+      const usageSubmissionsRef = collection(db, 'usage_submissions');
+      const q = query(
+        usageSubmissionsRef,
+        where('projectId', '==', projectId),
+        where('type', '==', 'material'),
+        where('status', '==', 'approved')
+      );
+      const snapshot = await getDocs(q);
+      
+      const usageHistory = [];
+      for (const docItem of snapshot.docs) {
+        const data = docItem.data();
+        let taskInfo = null;
+        
+        if (data.taskId) {
+          try {
+            const taskRef = doc(db, 'tasks', data.taskId);
+            const taskSnap = await getDoc(taskRef);
+            if (taskSnap.exists()) {
+              const taskData = taskSnap.data();
+              taskInfo = {
+                id: taskSnap.id,
+                title: taskData.title || 'Unknown Task',
+                category: taskData.category || '',
+                subTask: taskData.subTask || '',
+              };
+            }
+          } catch (taskError) {
+            console.error('Error fetching task info:', taskError);
+          }
+        }
+        
+        usageHistory.push({
+          id: docItem.id,
+          materialId: data.itemId,
+          materialName: data.itemName,
+          quantity: data.quantity || 0,
+          unit: data.unit || 'units',
+          workerName: data.workerName || 'Unknown Worker',
+          timestamp: data.timestamp?.toDate?.() || data.timestamp || null,
+          reviewedAt: data.reviewedAt?.toDate?.() || data.reviewedAt || null,
+          taskId: data.taskId || null,
+          taskInfo: taskInfo,
+          notes: data.notes || '',
+        });
+      }
+      
+      // Sort in memory
+      return usageHistory.sort((a, b) => {
+        const dateA = a.timestamp ? (a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime()) : 0;
+        const dateB = b.timestamp ? (b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime()) : 0;
+        return dateB - dateA;
+      });
+    } catch (fallbackError) {
+      console.error('Error getting material usage history (fallback):', fallbackError);
+      return [];
+    }
   }
 }
 

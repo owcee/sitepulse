@@ -555,8 +555,39 @@ interface MaterialItem {
   category: string;
   supplier?: string;
   dateAdded: string;
+  totalBought?: number;
 }
 
+interface DeletedMaterial {
+  id: string;
+  originalId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  category: string;
+  deletedAt: Date | string | null;
+  deletedBy?: string;
+}
+
+interface MaterialUsageHistory {
+  id: string;
+  materialId: string;
+  materialName: string;
+  quantity: number;
+  unit: string;
+  workerName: string;
+  timestamp: Date | string | null;
+  reviewedAt: Date | string | null;
+  taskId?: string | null;
+  taskInfo?: {
+    id: string;
+    title: string;
+    category: string;
+    subTask: string;
+  } | null;
+  notes?: string;
+}
 
 /**
  * Generate Materials Inventory Report as PDF
@@ -564,10 +595,12 @@ interface MaterialItem {
 export async function exportMaterialsToPDF(
   materials: MaterialItem[], 
   projectInfo: ProjectInfo,
-  lowStockThreshold: number = 10
+  lowStockThreshold: number = 10,
+  deletedMaterials: DeletedMaterial[] = [],
+  usageHistory: MaterialUsageHistory[] = []
 ): Promise<void> {
   try {
-    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold);
+    const htmlContent = generateMaterialsHTML(materials, projectInfo, lowStockThreshold, deletedMaterials, usageHistory);
 
     const { uri } = await Print.printToFileAsync({
       html: htmlContent,
@@ -612,7 +645,9 @@ export async function exportMaterialsToPDF(
 function generateMaterialsHTML(
   materials: MaterialItem[],
   projectInfo: ProjectInfo,
-  lowStockThreshold: number
+  lowStockThreshold: number,
+  deletedMaterials: DeletedMaterial[] = [],
+  usageHistory: MaterialUsageHistory[] = []
 ): string {
   const currentDate = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
@@ -620,7 +655,11 @@ function generateMaterialsHTML(
     day: 'numeric',
   });
 
-  const totalValue = materials.reduce((sum, m) => sum + (m.quantity * m.price), 0);
+  // Calculate total value using totalBought if available, otherwise use quantity
+  const totalValue = materials.reduce((sum, m) => {
+    const qty = m.totalBought !== undefined ? Math.max(m.totalBought, m.quantity) : m.quantity;
+    return sum + (qty * m.price);
+  }, 0);
   const totalInventoryValue = totalValue;
   const lowStockItems = materials.filter(m => m.quantity <= lowStockThreshold);
   const totalItems = materials.length;
@@ -663,7 +702,10 @@ function generateMaterialsHTML(
             ₱${m.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; font-weight: 600;">
-            ₱${(m.quantity * m.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₱${(() => {
+              const qty = m.totalBought !== undefined ? Math.max(m.totalBought, m.quantity) : m.quantity;
+              return (qty * m.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            })()}
           </td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
             ${m.supplier || '-'}
@@ -887,6 +929,98 @@ function generateMaterialsHTML(
         </table>
       </div>
 
+      ${deletedMaterials.length > 0 ? `
+      <div class="section">
+        <h2 style="color: #f44336;">🗑️ Deleted Materials (${deletedMaterials.length} items)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th>Category</th>
+              <th style="text-align: center;">Quantity</th>
+              <th style="text-align: right;">Unit Price</th>
+              <th style="text-align: right;">Total Value</th>
+              <th>Deleted Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${deletedMaterials.map((m) => {
+              const deletedDate = m.deletedAt 
+                ? (m.deletedAt instanceof Date 
+                    ? m.deletedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                    : new Date(m.deletedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }))
+                : 'N/A';
+              return `
+              <tr style="background-color: #ffebee;">
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px; color: #666;">${m.name}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px; color: #666;">${m.category || '-'}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; font-size: 12px; color: #666;">
+                  ${m.quantity} ${m.unit || 'units'}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; color: #666;">
+                  ₱${(m.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-size: 12px; color: #666;">
+                  ₱${((m.quantity || 0) * (m.price || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
+                  ${deletedDate}
+                </td>
+              </tr>
+            `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+
+      ${usageHistory.length > 0 ? `
+      <div class="section">
+        <h2 style="color: #2196F3;">📋 Material Usage History (${usageHistory.length} entries)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Material</th>
+              <th style="text-align: center;">Quantity</th>
+              <th>Worker</th>
+              <th>Task</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${usageHistory.map((usage) => {
+              const usageDate = usage.timestamp 
+                ? (usage.timestamp instanceof Date 
+                    ? usage.timestamp.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                    : new Date(usage.timestamp).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }))
+                : 'N/A';
+              const taskName = usage.taskInfo 
+                ? `${usage.taskInfo.title}${usage.taskInfo.subTask ? ` - ${usage.taskInfo.subTask}` : ''}`
+                : (usage.taskId ? `Task ID: ${usage.taskId}` : 'No task');
+              return `
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${usageDate}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 12px;">${usage.materialName}</td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; font-size: 12px;">
+                  ${usage.quantity} ${usage.unit}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
+                  ${usage.workerName}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
+                  ${taskName}
+                </td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd; font-size: 11px; color: #666;">
+                  ${usage.notes || '-'}
+                </td>
+              </tr>
+            `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
 
       <div class="footer">
         <p><strong>SitePulse</strong> - Construction Management Platform</p>

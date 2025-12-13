@@ -23,7 +23,7 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import { exportBudgetToPDF, exportMaterialsToPDF } from '../../services/pdfExportService';
 import { getProject } from '../../services/projectService';
-import { getBudget } from '../../services/firebaseDataService';
+import { getBudget, getDeletedMaterials, getMaterialUsageHistory } from '../../services/firebaseDataService';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -578,7 +578,13 @@ export default function ResourcesScreen() {
           totalBudget: budget?.totalBudget || 0
         };
 
-        await exportMaterialsToPDF(materials, projectInfo, 10);
+        // Fetch deleted materials and usage history
+        const [deletedMaterials, usageHistory] = await Promise.all([
+          getDeletedMaterials(projectId),
+          getMaterialUsageHistory(projectId)
+        ]);
+
+        await exportMaterialsToPDF(materials, projectInfo, 10, deletedMaterials, usageHistory);
         setSuccessMessage('Your inventory report has been shared.');
         setShowSuccessDialog(true);
       }

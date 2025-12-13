@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, Alert, RefreshControl, Text as RNText } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { 
   Card, 
   Title, 
@@ -197,10 +198,23 @@ export default function DelayPredictionScreen() {
         
         const budgetData = await getBudget(projectId);
         if (budgetData) {
-          setTotalBudget(budgetData.totalBudget || 0);
+          setTotalBudget((budgetData as { totalBudget?: number }).totalBudget || 0);
         }
       } catch (err) {
         console.error('[DelayPrediction] Error loading project/budget:', err);
+        // If project load fails, try again after a short delay
+        setTimeout(async () => {
+          try {
+            const projectData = await getProject(projectId);
+            setProject(projectData);
+            const budgetData = await getBudget(projectId);
+            if (budgetData) {
+              setTotalBudget((budgetData as { totalBudget?: number }).totalBudget || 0);
+            }
+          } catch (retryErr) {
+            console.error('[DelayPrediction] Retry failed:', retryErr);
+          }
+        }, 500);
       }
 
       console.log('[DelayPrediction] Loaded', result.predictions.length, 'predictions and', completed.length, 'completed tasks');
@@ -218,6 +232,29 @@ export default function DelayPredictionScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  
+  // Reload project data when screen comes into focus (to get updated penalty rate from Budget Management)
+  useFocusEffect(
+    useCallback(() => {
+      const refreshProjectData = async () => {
+        if (projectId) {
+          try {
+            const projectData = await getProject(projectId);
+            setProject(projectData);
+            
+            const budgetData = await getBudget(projectId);
+            if (budgetData) {
+              setTotalBudget((budgetData as { totalBudget?: number }).totalBudget || 0);
+            }
+          } catch (err) {
+            console.error('[DelayPrediction] Error refreshing project/budget:', err);
+          }
+        }
+      };
+      
+      refreshProjectData();
+    }, [projectId])
+  );
 
   // Handle refresh
   const handleRefresh = () => {
@@ -682,53 +719,15 @@ export default function DelayPredictionScreen() {
             const delayPenaltyRate = project?.delayContingencyRate || 2;
             const actualPenalty = calculateActualPenalty();
             
-            // Calculate actual delay from active tasks that are past due
+            // Calculate TOTAL delay days from all active and delayed tasks (sum, not max)
+            let totalDelayDays = 0;
             let maxActualDelay = 0;
-            let totalActualDelayDays = 0;
-            
-            activeTasksWithActualDelays.forEach((prediction) => {
-              if (!prediction.plannedEndDate) return;
-              
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const dueDate = new Date(prediction.plannedEndDate);
-              dueDate.setHours(0, 0, 0, 0);
-              
-              const actualDelayDays = Math.max(0, Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
-              if (actualDelayDays > maxActualDelay) {
-                maxActualDelay = actualDelayDays;
-              }
-              totalActualDelayDays += actualDelayDays;
-            });
-            
-            // Calculate predicted delay from predictions (for tasks not yet past due or future predictions)
-            const predictedDelays = predictions
-              .filter(p => {
-                if (!p.plannedEndDate || p.status === 'completed') return false;
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const dueDate = new Date(p.plannedEndDate);
-                dueDate.setHours(0, 0, 0, 0);
-                // Include if not yet past due (future tasks) or has prediction
-                return today.getTime() <= dueDate.getTime() || (p.delayDays || 0) > 0;
-              })
-              .map(p => p.delayDays || 0);
-            
-            const maxPredictedDelay = predictedDelays.length > 0 ? Math.max(...predictedDelays, 0) : 0;
-            
-            // Use actual delay if exists, otherwise use predicted delay
-            const maxDelay = Math.max(maxActualDelay, maxPredictedDelay);
-            
-            // Calculate predicted penalty amount
-            // Sum penalties from ALL active tasks (both actually delayed and predicted to be delayed)
-            let predictedPenaltyAmount = 0;
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             
-            // Process all predictions for active/in-progress tasks
+            // Process all active/in-progress tasks (both actually delayed and predicted to be delayed)
             predictions.forEach((prediction) => {
               if (prediction.status === 'completed') return;
-              
               if (!prediction.plannedEndDate) return;
               
               const dueDate = new Date(prediction.plannedEndDate);
@@ -740,23 +739,28 @@ export default function DelayPredictionScreen() {
               if (today.getTime() > dueDate.getTime()) {
                 // Task is actually delayed - calculate actual delay
                 delayDays = Math.max(0, Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+                if (delayDays > maxActualDelay) {
+                  maxActualDelay = delayDays;
+                }
               } else {
                 // Task is not yet past due - use predicted delay days
                 delayDays = prediction.delayDays || 0;
               }
               
-              // Calculate penalty for this task
-              if (delayDays > 0) {
-                const penaltyPercentage = delayDays * delayPenaltyRate;
-                const taskPenalty = (totalBudget * penaltyPercentage) / 100;
-                predictedPenaltyAmount += taskPenalty;
-              }
+              // Add to total delay days
+              totalDelayDays += delayDays;
             });
             
-            const deductionPercentage = maxDelay > 0 ? maxDelay * delayPenaltyRate : 0;
+            // Calculate predicted penalty amount using total delay days
+            // Formula: (Total Delay Days × Delay Penalty Rate) × Total Budget / 100
+            const predictedPenaltyAmount = totalDelayDays > 0 
+              ? (totalDelayDays * delayPenaltyRate * totalBudget) / 100 
+              : 0;
+            
+            const deductionPercentage = totalDelayDays > 0 ? totalDelayDays * delayPenaltyRate : 0;
             
             // If no predicted delay and no actual penalty, show "on track"
-            if (maxDelay <= 0 && actualPenalty <= 0) {
+            if (totalDelayDays <= 0 && actualPenalty <= 0) {
               return (
                 <View style={styles.penaltyContent}>
                   <Ionicons name="checkmark-circle" size={48} color={constructionColors.complete} />
@@ -775,11 +779,11 @@ export default function DelayPredictionScreen() {
                     <Paragraph style={styles.penaltyValue}>{activeTasksWithActualDelays.length} tasks</Paragraph>
                   </View>
                 )}
-                {maxDelay > 0 && (
+                {totalDelayDays > 0 && (
                   <>
                     <View style={styles.penaltyRow}>
-                      <Paragraph style={styles.penaltyLabel}>{maxActualDelay > 0 ? 'Max Actual Delay' : 'Max Predicted Delay'}:</Paragraph>
-                      <Paragraph style={styles.penaltyValue}>{maxDelay} days</Paragraph>
+                      <Paragraph style={styles.penaltyLabel}>Total Delay (All Tasks):</Paragraph>
+                      <Paragraph style={styles.penaltyValue}>{totalDelayDays.toFixed(1)} days</Paragraph>
                     </View>
                     <View style={styles.penaltyRow}>
                       <Paragraph style={styles.penaltyLabel}>Delay Penalty Rate:</Paragraph>

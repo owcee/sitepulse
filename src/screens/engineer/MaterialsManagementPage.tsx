@@ -183,8 +183,8 @@ export default function MaterialsManagementPage() {
     setFormData({
       name: material.name || '',
       quantity: material.quantity.toString(),
-      customPrice: '',
-      useDefaultPrice: true,
+      customPrice: material.price?.toString() || '',
+      useDefaultPrice: false, // When editing, allow custom price
       dimensions: '',
     });
     setModalVisible(true);
@@ -205,6 +205,16 @@ export default function MaterialsManagementPage() {
       if (isNaN(quantity) || quantity <= 0) {
         setDialogTitle('Error');
         setDialogMessage('Please enter a valid quantity');
+        setIsError(true);
+        setShowDialog(true);
+        return;
+      }
+
+      // Check if this electrical material is already in inventory
+      const existingMaterial = customMaterials.find(m => (m as any).material_id === selectedElectricalMaterial.material_id);
+      if (existingMaterial) {
+        setDialogTitle('Material Already Exists');
+        setDialogMessage(`${selectedElectricalMaterial.name} is already in inventory. Please edit the existing entry instead.`);
         setIsError(true);
         setShowDialog(true);
         return;
@@ -281,8 +291,43 @@ export default function MaterialsManagementPage() {
         return;
       }
 
+      // Update totalBought: ensure it's always >= quantity
+      // When increasing quantity, add the difference to totalBought
+      const currentTotalBought = (editingMaterial as any).totalBought || currentQuantity;
+      const quantityDifference = quantity - currentQuantity;
+      // Ensure totalBought is always at least equal to quantity (fixes any data inconsistencies)
+      const newTotalBought = Math.max(currentTotalBought + quantityDifference, quantity);
+
+      // Handle price update (only allow increasing price)
+      const currentPrice = editingMaterial.price || 0;
+      let newPrice = currentPrice;
+      
+      if (formData.customPrice.trim()) {
+        const customPriceValue = parseFloat(formData.customPrice);
+        if (isNaN(customPriceValue) || customPriceValue <= 0) {
+          setDialogTitle('Error');
+          setDialogMessage('Please enter a valid price');
+          setIsError(true);
+          setShowDialog(true);
+          return;
+        }
+        
+        // Prevent decreasing price
+        if (customPriceValue < currentPrice) {
+          setDialogTitle('Error');
+          setDialogMessage('Price cannot be decreased. You can only increase the price.');
+          setIsError(true);
+          setShowDialog(true);
+          return;
+        }
+        
+        newPrice = customPriceValue;
+      }
+
       const updates: Record<string, any> = {
         quantity,
+        totalBought: newTotalBought, // Update totalBought when quantity increases
+        price: newPrice, // Update price if changed
       };
 
       if (formData.name.trim()) {
@@ -369,7 +414,15 @@ export default function MaterialsManagementPage() {
     }
   };
 
-  const totalCost = customMaterials.reduce((sum, material) => sum + (material.quantity * material.price), 0);
+  // Calculate total value - match ResourcesScreen calculation exactly
+  // Use the maximum of totalBought and quantity to ensure correct total value
+  const totalCost = customMaterials.reduce((sum, material) => {
+    const totalBought = (material as any).totalBought;
+    // Use the higher value: if totalBought exists, use max(totalBought, quantity), otherwise use quantity
+    // This ensures we always show the correct total value even if totalBought hasn't been updated yet
+    const qty = totalBought !== undefined ? Math.max(totalBought, material.quantity) : material.quantity;
+    return sum + (qty * material.price);
+  }, 0);
 
   // Check if electrical material is already in inventory
   const isElectricalMaterialInInventory = (materialId: string) => {
@@ -491,13 +544,17 @@ export default function MaterialsManagementPage() {
                       isLowStock && styles.materialGridItemLowStock,
                     ]}
                     onPress={() => {
-                      if (materialGroup.hasVariants && materialGroup.variants) {
+                      // If material is already in inventory, open edit modal instead
+                      if (isInInventory && existingMaterial) {
+                        openEditModal(existingMaterial);
+                      } else if (materialGroup.hasVariants && materialGroup.variants) {
                         setSelectedMaterialGroup(materialGroup);
                         setVariantModalVisible(true);
                       } else {
                         openAddElectricalModal(material);
                       }
                     }}
+                    disabled={isInInventory && !existingMaterial}
                   >
                     <View style={styles.materialGridContent}>
                       <Text style={styles.materialGridName} numberOfLines={3}>
@@ -541,15 +598,6 @@ export default function MaterialsManagementPage() {
                     <View style={styles.materialHeader}>
                       <View style={styles.materialNameContainer}>
                         <Text style={styles.materialName}>{material.name}</Text>
-                        {material.category && (
-                          <Chip 
-                            icon="tag" 
-                            style={styles.categoryChip}
-                            textStyle={styles.categoryChipText}
-                          >
-                            {material.category}
-                          </Chip>
-                        )}
                       </View>
                       {isLowStock && (
                         <Chip 
@@ -584,7 +632,7 @@ export default function MaterialsManagementPage() {
                           isLowStock && { color: constructionColors.urgent, fontWeight: 'bold' }
                         ]}>
                           {material.quantity} {material.unit} available
-                          {material.totalBought && ` out of ${material.totalBought}`}
+                          {(material as any).totalBought && (material as any).totalBought >= material.quantity && ` out of ${(material as any).totalBought}`}
                         </Text>
                       </View>
                       <View style={styles.detailRow}>
@@ -594,9 +642,26 @@ export default function MaterialsManagementPage() {
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Total Value:</Text>
                         <Text style={[styles.detailValue, styles.totalCost]}>
-                          ₱{((material.totalBought || material.quantity) * material.price).toFixed(2)}
+                          ₱{(() => {
+                            const totalBought = (material as any).totalBought;
+                            // Use the higher value: max(totalBought, quantity) to ensure correct total
+                            const qty = totalBought !== undefined ? Math.max(totalBought, material.quantity) : material.quantity;
+                            return (qty * material.price).toFixed(2);
+                          })()}
                         </Text>
                       </View>
+                      {material.dateAdded && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Date Added:</Text>
+                          <Text style={styles.detailValue}>
+                            {new Date(material.dateAdded).toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </Text>
+                        </View>
+                      )}
                       {material.supplier && (
                         <View style={styles.detailRow}>
                           <Text style={styles.detailLabel}>Supplier:</Text>
@@ -640,20 +705,35 @@ export default function MaterialsManagementPage() {
               contentContainerStyle={styles.modalScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {selectedMaterialGroup?.variants?.map((variant: ElectricalMaterial) => (
-                <TouchableOpacity
-                  key={variant.material_id}
-                  style={styles.variantItem}
-                  onPress={() => {
-                    setVariantModalVisible(false);
-                    openAddElectricalModal(variant);
-                    setSelectedMaterialGroup(null);
-                  }}
-                >
-                  <Text style={styles.variantItemName}>{variant.name}</Text>
-                  <Text style={styles.variantItemUnit}>{variant.unit}</Text>
-                </TouchableOpacity>
-              ))}
+              {selectedMaterialGroup?.variants?.map((variant: ElectricalMaterial) => {
+                const variantInInventory = isElectricalMaterialInInventory(variant.material_id);
+                const existingVariantMaterial = customMaterials.find(m => (m as any).material_id === variant.material_id);
+                
+                return (
+                  <TouchableOpacity
+                    key={variant.material_id}
+                    style={[
+                      styles.variantItem,
+                      variantInInventory && styles.variantItemInInventory
+                    ]}
+                    onPress={() => {
+                      setVariantModalVisible(false);
+                      if (variantInInventory && existingVariantMaterial) {
+                        openEditModal(existingVariantMaterial);
+                      } else {
+                        openAddElectricalModal(variant);
+                      }
+                      setSelectedMaterialGroup(null);
+                    }}
+                  >
+                    <Text style={styles.variantItemName}>{variant.name}</Text>
+                    <Text style={styles.variantItemUnit}>{variant.unit}</Text>
+                    {variantInInventory && (
+                      <Text style={styles.variantItemInInventoryText}>Already in inventory</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
             <Button 
               onPress={() => {
@@ -774,6 +854,26 @@ export default function MaterialsManagementPage() {
                 </View>
               )}
 
+              {/* Price Field for Editing Materials */}
+              {editingMaterial && (
+                <View style={styles.priceSection}>
+                  <Text style={styles.priceSectionLabel}>Price per {editingMaterial.unit}</Text>
+                  <TextInput
+                    mode="outlined"
+                    label="Price per Unit (₱) *"
+                    value={formData.customPrice}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, customPrice: text }))}
+                    keyboardType="numeric"
+                    style={styles.input}
+                    textColor={theme.colors.text}
+                    placeholder={`Current: ₱${editingMaterial.price.toFixed(2)}`}
+                  />
+                  <Paragraph style={styles.priceHint}>
+                    Current price: ₱{editingMaterial.price.toFixed(2)}. You can only increase the price.
+                  </Paragraph>
+                </View>
+              )}
+
               {/* Custom Material Fields */}
               {!selectedElectricalMaterial && !editingMaterial && (
                 <TextInput
@@ -807,6 +907,18 @@ export default function MaterialsManagementPage() {
                       (formData.useDefaultPrice 
                         ? selectedElectricalMaterial.unit_cost 
                         : (parseFloat(formData.customPrice) || selectedElectricalMaterial.unit_cost))
+                    ).toFixed(2)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Cost Preview for Editing Materials */}
+              {editingMaterial && formData.quantity && formData.customPrice && (
+                <View style={styles.costPreview}>
+                  <Text style={styles.costPreviewText}>
+                    Total Value: ₱{(
+                      parseFloat(formData.quantity) * 
+                      (parseFloat(formData.customPrice) || editingMaterial.price)
                     ).toFixed(2)}
                   </Text>
                 </View>
@@ -1184,6 +1296,16 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     color: theme.colors.onSurfaceVariant,
   },
+  variantItemInInventory: {
+    borderColor: constructionColors.complete,
+    backgroundColor: constructionColors.complete + '10',
+  },
+  variantItemInInventoryText: {
+    fontSize: fontSizes.xs,
+    color: constructionColors.complete,
+    fontWeight: '600',
+    marginTop: spacing.xs / 2,
+  },
   input: {
     marginBottom: spacing.md,
     backgroundColor: theme.colors.background,
@@ -1225,6 +1347,12 @@ const styles = StyleSheet.create({
   },
   priceButtonLabelSmall: {
     fontSize: fontSizes.xs - 2,
+  },
+  priceHint: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
   },
   dialog: {
     backgroundColor: theme.colors.surface,
