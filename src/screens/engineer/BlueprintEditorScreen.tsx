@@ -40,6 +40,10 @@ import { theme, constructionColors, spacing, fontSizes } from '../../utils/theme
 import { useProjectData } from '../../context/ProjectDataContext';
 import {
   getBlueprintByProjectId,
+  getBlueprintsByProjectId,
+  getBlueprintByProjectIdAndFloor,
+  createBlueprint,
+  deleteBlueprint,
   updateBlueprintImage,
   addPinToBlueprint,
   updatePinInBlueprint,
@@ -48,6 +52,8 @@ import {
   BlueprintPin,
   Blueprint,
 } from '../../services/blueprintService';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 import { uploadWithProgress } from '../../services/storageUploadHelperV2';
 import { getProjectWorkers } from '../../services/assignmentService';
 
@@ -86,6 +92,18 @@ export default function BlueprintEditorScreen() {
   const { projectId } = useProjectData();
 
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
+  const [allBlueprints, setAllBlueprints] = useState<Blueprint[]>([]);
+  const [selectedFloor, setSelectedFloor] = useState<string>('Ground Floor');
+  const [showFloorSelector, setShowFloorSelector] = useState(false);
+  const [showCreateFloorModal, setShowCreateFloorModal] = useState(false);
+  const [showRenameFloorModal, setShowRenameFloorModal] = useState(false);
+  const [showDeleteFloorModal, setShowDeleteFloorModal] = useState(false);
+  const [floorToRename, setFloorToRename] = useState<Blueprint | null>(null);
+  const [floorToDelete, setFloorToDelete] = useState<Blueprint | null>(null);
+  const [newFloorName, setNewFloorName] = useState('');
+  const [renameFloorName, setRenameFloorName] = useState('');
+  const [newFloorImageUri, setNewFloorImageUri] = useState<string | null>(null);
+  const [uploadingNewFloorImage, setUploadingNewFloorImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [imageContainerDimensions, setImageContainerDimensions] = useState({ width: 0, height: 0 });
@@ -124,13 +142,6 @@ export default function BlueprintEditorScreen() {
   const [projectWorkers, setProjectWorkers] = useState<any[]>([]);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
 
-  // Load blueprint and workers on mount
-  useEffect(() => {
-    loadBlueprint();
-    loadProjectWorkers();
-  }, [projectId]);
-
-
   const loadProjectWorkers = async () => {
     if (!projectId) return;
     try {
@@ -149,17 +160,37 @@ export default function BlueprintEditorScreen() {
 
     try {
       setLoading(true);
-      const blueprintData = await getBlueprintByProjectId(projectId);
-      // Always use blueprint data if it exists, otherwise use default (null = default image)
-      setBlueprint(blueprintData);
+      
+      // Load all blueprints for the project
+      const blueprints = await getBlueprintsByProjectId(projectId);
+      setAllBlueprints(blueprints);
+      
+      // Load the selected floor's blueprint
+      const blueprintData = await getBlueprintByProjectIdAndFloor(projectId, selectedFloor);
+      
+      if (blueprintData) {
+        setBlueprint(blueprintData);
+      } else if (blueprints.length > 0) {
+        // If selected floor doesn't exist, use first available floor
+        setSelectedFloor(blueprints[0].floor);
+        setBlueprint(blueprints[0]);
+      } else {
+        // No blueprints exist, create default "Ground Floor" if needed
+        setBlueprint(null);
+      }
     } catch (error: any) {
-      // On any error, use default blueprint (null = default image)
-      console.log('Using default blueprint');
+      console.error('Error loading blueprint:', error);
       setBlueprint(null);
     } finally {
       setLoading(false);
     }
   };
+
+  // Load blueprint and workers on mount and when floor/project changes
+  useEffect(() => {
+    loadBlueprint();
+    loadProjectWorkers();
+  }, [projectId, selectedFloor]);
 
   // Handle image load to get dimensions
   const handleImageLoad = (event: any) => {
@@ -391,23 +422,14 @@ export default function BlueprintEditorScreen() {
   const handleCreatePin = async () => {
     if (!selectedPinType || !projectId) return;
 
-    // If no blueprint document exists, create one first
+    // If no blueprint document exists for this floor, create one first
     let blueprintId = blueprint?.id;
     
     if (!blueprintId) {
-      // Create blueprint document if it doesn't exist
+      // Create blueprint document for the selected floor
       try {
-        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-        const { db } = await import('../../firebaseConfig');
-        const blueprintsRef = collection(db, 'blueprints');
-        const blueprintDoc = await addDoc(blueprintsRef, {
-          projectId: projectId,
-          imageUrl: '', // Will be set when user uploads
-          pins: [],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        blueprintId = blueprintDoc.id;
+        const newBlueprint = await createBlueprint(projectId, selectedFloor);
+        blueprintId = newBlueprint.id;
         // Reload blueprint
         await loadBlueprint();
       } catch (error: any) {
@@ -560,26 +582,112 @@ export default function BlueprintEditorScreen() {
         <View style={styles.headerText}>
           <Title style={styles.screenTitle}>Blueprint Editor</Title>
           <Paragraph style={styles.subtitle}>
-            Tap to place pins • {blueprintPins.length} pins placed
+            {blueprint?.floor || selectedFloor} • {blueprintPins.length} pins placed
           </Paragraph>
         </View>
         <IconButton
-          icon="upload"
+          icon="layers"
           size={24}
-          onPress={handleUploadBlueprint}
+          onPress={() => setShowFloorSelector(!showFloorSelector)}
           iconColor={theme.colors.primary}
-          disabled={uploadingImage}
         />
       </View>
 
-      {/* Pin Type Selection - Collapsible */}
-      <Card style={styles.pinTypeCard} theme={{ colors: { surface: theme.colors.surface } }}>
+      {/* Floor Selector - Dark Mode */}
+      {showFloorSelector && (
+        <Card style={[styles.floorSelectorCard, styles.darkFloorSelectorCard]} theme={{ colors: { surface: '#1E1E1E' } }}>
+          <Card.Content>
+            <View style={styles.floorSelectorHeader}>
+              <Paragraph style={styles.darkFloorSelectorTitle}>Select Floor</Paragraph>
+              <IconButton
+                icon="close"
+                size={20}
+                onPress={() => setShowFloorSelector(false)}
+                iconColor="#FFFFFF"
+              />
+            </View>
+            <ScrollView style={styles.floorList} showsVerticalScrollIndicator={false}>
+              {allBlueprints.map((bp) => (
+                <View
+                  key={bp.id}
+                  style={[
+                    styles.floorItem,
+                    styles.darkFloorItem,
+                    selectedFloor === bp.floor && styles.darkFloorItemSelected,
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.floorItemMain}
+                    onPress={() => {
+                      setSelectedFloor(bp.floor);
+                      setShowFloorSelector(false);
+                    }}
+                  >
+                    <Ionicons 
+                      name="business-outline" 
+                      size={20} 
+                      color={selectedFloor === bp.floor ? theme.colors.primary : '#888888'} 
+                    />
+                    <View style={styles.floorItemContent}>
+                      <Paragraph style={[
+                        styles.darkFloorItemName,
+                        selectedFloor === bp.floor && styles.darkFloorItemNameSelected,
+                      ]}>
+                        {bp.floor}
+                      </Paragraph>
+                      <Paragraph style={styles.darkFloorItemPins}>
+                        {bp.pins.length} pins
+                      </Paragraph>
+                    </View>
+                    {selectedFloor === bp.floor && (
+                      <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                  <View style={styles.floorItemActions}>
+                    <IconButton
+                      icon="pencil"
+                      size={18}
+                      iconColor={theme.colors.primary}
+                      onPress={() => {
+                        setFloorToRename(bp);
+                        setRenameFloorName(bp.floor);
+                        setShowRenameFloorModal(true);
+                        setShowFloorSelector(false);
+                      }}
+                    />
+                    <IconButton
+                      icon="delete"
+                      size={18}
+                      iconColor={constructionColors.urgent}
+                      onPress={() => {
+                        setFloorToDelete(bp);
+                        setShowDeleteFloorModal(true);
+                        setShowFloorSelector(false);
+                      }}
+                    />
+                  </View>
+                </View>
+              ))}
+              <TouchableOpacity
+                style={styles.darkAddFloorButton}
+                onPress={() => setShowCreateFloorModal(true)}
+              >
+                <Ionicons name="add-circle-outline" size={24} color={theme.colors.primary} />
+                <Paragraph style={styles.darkAddFloorText}>Add New Floor</Paragraph>
+              </TouchableOpacity>
+            </ScrollView>
+          </Card.Content>
+        </Card>
+      )}
+
+      {/* Pin Type Selection - Collapsible - Dark Mode */}
+      <Card style={[styles.pinTypeCard, styles.darkPinTypeCard]} theme={{ colors: { surface: '#1E1E1E' } }}>
         <Card.Content style={styles.pinTypeCardContent}>
           <TouchableOpacity
             onPress={() => setPinTypeExpanded(!pinTypeExpanded)}
             style={styles.pinTypeHeader}
           >
-            <Paragraph style={styles.pinTypeLabel}>Select Pin Type:</Paragraph>
+            <Paragraph style={styles.darkPinTypeLabel}>Select Pin Type:</Paragraph>
             <IconButton
               icon={pinTypeExpanded ? 'chevron-up' : 'chevron-down'}
               size={18}
@@ -600,15 +708,16 @@ export default function BlueprintEditorScreen() {
                     }}
                     style={[
                       styles.pinTypeButton,
-                      selectedPinType === type.value && styles.pinTypeButtonSelected,
-                      { borderColor: type.color },
+                      styles.darkPinTypeButton,
+                      selectedPinType === type.value && styles.darkPinTypeButtonSelected,
+                      { borderColor: selectedPinType === type.value ? type.color : '#444444' },
                     ]}
                   >
                     <Ionicons name={type.icon as any} size={16} color={type.color} />
                     <Paragraph
                       style={[
-                        styles.pinTypeText,
-                        selectedPinType === type.value && styles.pinTypeTextSelected,
+                        styles.darkPinTypeText,
+                        selectedPinType === type.value && styles.darkPinTypeTextSelected,
                       ]}
                       numberOfLines={2}
                     >
@@ -624,7 +733,8 @@ export default function BlueprintEditorScreen() {
                     setPinPlacementMode(false);
                     setSelectedPinType(null);
                   }}
-                  style={styles.cancelPlacementButton}
+                  style={styles.darkCancelPlacementButton}
+                  textColor="#FFFFFF"
                   compact
                 >
                   Cancel Placement
@@ -1022,6 +1132,361 @@ export default function BlueprintEditorScreen() {
         </Dialog>
       </Portal>
 
+      {/* Create New Floor Modal - Dark Mode */}
+      <Portal>
+        <Dialog
+          visible={showCreateFloorModal}
+          onDismiss={() => {
+            setShowCreateFloorModal(false);
+            setNewFloorName('');
+            setNewFloorImageUri(null);
+          }}
+          style={[styles.dialog, styles.darkDialog]}
+          theme={{
+            colors: {
+              surface: '#1E1E1E',
+              onSurface: '#FFFFFF',
+              primary: theme.colors.primary,
+            },
+          }}
+        >
+          <Dialog.Title style={styles.darkDialogTitle}>Create New Floor</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Floor Name *"
+              value={newFloorName}
+              onChangeText={setNewFloorName}
+              placeholder="e.g., 1st Floor, 2nd Floor, Basement"
+              mode="outlined"
+              style={[styles.input, styles.darkInput]}
+              textColor="#FFFFFF"
+              placeholderTextColor="#888888"
+              theme={{
+                colors: {
+                  onSurface: '#FFFFFF',
+                  onSurfaceVariant: '#888888',
+                  primary: theme.colors.primary,
+                  outline: '#444444',
+                },
+              }}
+            />
+            <Paragraph style={styles.darkFloorHint}>
+              Examples: Ground Floor, 1st Floor, 2nd Floor, Basement, Roof
+            </Paragraph>
+
+            {/* Blueprint Image Upload - Required */}
+            <View style={styles.imageUploadSection}>
+              <Paragraph style={styles.darkSectionLabel}>Blueprint Image *</Paragraph>
+              {!newFloorImageUri && (
+                <Paragraph style={styles.darkRequiredHint}>
+                  A blueprint image is required for each floor
+                </Paragraph>
+              )}
+              {newFloorImageUri ? (
+                <View style={styles.imagePreviewContainer}>
+                  <Image 
+                    source={{ uri: newFloorImageUri }} 
+                    style={styles.imagePreview}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.imagePreviewActions}>
+                    <Button
+                      mode="outlined"
+                      onPress={async () => {
+                        try {
+                          const result = await ImagePicker.launchImageLibraryAsync({
+                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                            allowsEditing: false,
+                            quality: 0.9,
+                          });
+
+                          if (!result.canceled && result.assets[0]) {
+                            setNewFloorImageUri(result.assets[0].uri);
+                          }
+                        } catch (error: any) {
+                          Alert.alert('Error', `Failed to select image: ${error.message}`);
+                        }
+                      }}
+                      textColor="#FFFFFF"
+                      style={styles.imageActionButton}
+                      compact
+                    >
+                      Change
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      onPress={() => setNewFloorImageUri(null)}
+                      textColor={constructionColors.urgent}
+                      style={styles.imageActionButton}
+                      compact
+                    >
+                      Remove
+                    </Button>
+                  </View>
+                </View>
+              ) : (
+                <Button
+                  mode="outlined"
+                  icon="upload"
+                  onPress={async () => {
+                    try {
+                      const result = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        allowsEditing: false,
+                        quality: 0.9,
+                      });
+
+                      if (!result.canceled && result.assets[0]) {
+                        setNewFloorImageUri(result.assets[0].uri);
+                      }
+                    } catch (error: any) {
+                      Alert.alert('Error', `Failed to select image: ${error.message}`);
+                    }
+                  }}
+                  textColor="#FFFFFF"
+                  style={styles.uploadButton}
+                >
+                  Upload Blueprint Image *
+                </Button>
+              )}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions style={styles.darkDialogActions}>
+            <Button
+              onPress={() => {
+                setShowCreateFloorModal(false);
+                setNewFloorName('');
+                setNewFloorImageUri(null);
+              }}
+              textColor="#FFFFFF"
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={async () => {
+                if (!newFloorName.trim()) {
+                  Alert.alert('Error', 'Please enter a floor name');
+                  return;
+                }
+
+                if (!newFloorImageUri) {
+                  Alert.alert('Error', 'Please upload a blueprint image. Each floor requires a unique blueprint.');
+                  return;
+                }
+
+                // Check if floor already exists
+                const existing = allBlueprints.find(bp => bp.floor.toLowerCase() === newFloorName.trim().toLowerCase());
+                if (existing) {
+                  Alert.alert('Error', `Floor "${newFloorName}" already exists`);
+                  return;
+                }
+
+                try {
+                  setUploadingNewFloorImage(true);
+                  await createBlueprint(projectId, newFloorName.trim(), newFloorImageUri);
+                  setSelectedFloor(newFloorName.trim());
+                  setShowCreateFloorModal(false);
+                  setNewFloorName('');
+                  setNewFloorImageUri(null);
+                  await loadBlueprint();
+                  setUploadingNewFloorImage(false);
+                  Alert.alert('Success', `Floor "${newFloorName}" created successfully`);
+                } catch (error: any) {
+                  setUploadingNewFloorImage(false);
+                  Alert.alert('Error', `Failed to create floor: ${error.message}`);
+                }
+              }}
+              mode="contained"
+              buttonColor={theme.colors.primary}
+              disabled={uploadingNewFloorImage || !newFloorImageUri}
+              loading={uploadingNewFloorImage}
+            >
+              {uploadingNewFloorImage ? 'Creating...' : 'Create'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Rename Floor Modal - Dark Mode */}
+      <Portal>
+        <Dialog
+          visible={showRenameFloorModal}
+          onDismiss={() => {
+            setShowRenameFloorModal(false);
+            setFloorToRename(null);
+            setRenameFloorName('');
+          }}
+          style={[styles.dialog, styles.darkDialog]}
+          theme={{
+            colors: {
+              surface: '#1E1E1E',
+              onSurface: '#FFFFFF',
+              primary: theme.colors.primary,
+            },
+          }}
+        >
+          <Dialog.Title style={styles.darkDialogTitle}>Rename Floor</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Floor Name *"
+              value={renameFloorName}
+              onChangeText={setRenameFloorName}
+              placeholder="e.g., 1st Floor, 2nd Floor, Basement"
+              mode="outlined"
+              style={[styles.input, styles.darkInput]}
+              textColor="#FFFFFF"
+              placeholderTextColor="#888888"
+              theme={{
+                colors: {
+                  onSurface: '#FFFFFF',
+                  onSurfaceVariant: '#888888',
+                  primary: theme.colors.primary,
+                  outline: '#444444',
+                },
+              }}
+            />
+            <Paragraph style={styles.darkFloorHint}>
+              Current name: {floorToRename?.floor}
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions style={styles.darkDialogActions}>
+            <Button
+              onPress={() => {
+                setShowRenameFloorModal(false);
+                setFloorToRename(null);
+                setRenameFloorName('');
+              }}
+              textColor="#FFFFFF"
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={async () => {
+                if (!renameFloorName.trim() || !floorToRename) {
+                  Alert.alert('Error', 'Please enter a floor name');
+                  return;
+                }
+
+                if (renameFloorName.trim() === floorToRename.floor) {
+                  Alert.alert('Info', 'Floor name unchanged');
+                  setShowRenameFloorModal(false);
+                  setFloorToRename(null);
+                  setRenameFloorName('');
+                  return;
+                }
+
+                // Check if new name already exists
+                const existing = allBlueprints.find(
+                  bp => bp.id !== floorToRename.id && 
+                  bp.floor.toLowerCase() === renameFloorName.trim().toLowerCase()
+                );
+                if (existing) {
+                  Alert.alert('Error', `Floor "${renameFloorName}" already exists`);
+                  return;
+                }
+
+                try {
+                  const blueprintRef = doc(db, 'blueprints', floorToRename.id);
+                  await updateDoc(blueprintRef, {
+                    floor: renameFloorName.trim(),
+                    updatedAt: serverTimestamp()
+                  });
+
+                  // Update selected floor if it was the renamed one
+                  if (selectedFloor === floorToRename.floor) {
+                    setSelectedFloor(renameFloorName.trim());
+                  }
+
+                  setShowRenameFloorModal(false);
+                  setFloorToRename(null);
+                  setRenameFloorName('');
+                  await loadBlueprint();
+                  Alert.alert('Success', `Floor renamed to "${renameFloorName}" successfully`);
+                } catch (error: any) {
+                  Alert.alert('Error', `Failed to rename floor: ${error.message}`);
+                }
+              }}
+              mode="contained"
+              buttonColor={theme.colors.primary}
+            >
+              Rename
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Delete Floor Modal - Dark Mode */}
+      <Portal>
+        <Dialog
+          visible={showDeleteFloorModal}
+          onDismiss={() => {
+            setShowDeleteFloorModal(false);
+            setFloorToDelete(null);
+          }}
+          style={[styles.dialog, styles.darkDialog]}
+          theme={{
+            colors: {
+              surface: '#1E1E1E',
+              onSurface: '#FFFFFF',
+              primary: theme.colors.primary,
+            },
+          }}
+        >
+          <Dialog.Title style={styles.darkDialogTitle}>Delete Floor</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph style={styles.darkDialogText}>
+              Are you sure you want to delete "{floorToDelete?.floor}"?
+            </Paragraph>
+            {floorToDelete && floorToDelete.pins.length > 0 && (
+              <Paragraph style={styles.darkDialogWarning}>
+                ⚠️ This floor has {floorToDelete.pins.length} pin(s). All pins will be deleted.
+              </Paragraph>
+            )}
+            <Paragraph style={styles.darkDialogText}>
+              This action cannot be undone.
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions style={styles.darkDialogActions}>
+            <Button
+              onPress={() => {
+                setShowDeleteFloorModal(false);
+                setFloorToDelete(null);
+              }}
+              textColor="#FFFFFF"
+            >
+              Cancel
+            </Button>
+            <Button
+              onPress={async () => {
+                if (!floorToDelete) return;
+
+                try {
+                  // If this is the selected floor, switch to another floor first
+                  if (selectedFloor === floorToDelete.floor) {
+                    const otherFloors = allBlueprints.filter(bp => bp.id !== floorToDelete.id);
+                    if (otherFloors.length > 0) {
+                      setSelectedFloor(otherFloors[0].floor);
+                    }
+                  }
+
+                  await deleteBlueprint(floorToDelete.id);
+                  setShowDeleteFloorModal(false);
+                  setFloorToDelete(null);
+                  await loadBlueprint();
+                  Alert.alert('Success', `Floor "${floorToDelete.floor}" deleted successfully`);
+                } catch (error: any) {
+                  Alert.alert('Error', `Failed to delete floor: ${error.message}`);
+                }
+              }}
+              mode="contained"
+              buttonColor={constructionColors.urgent}
+            >
+              Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       {/* Upload Progress */}
       {uploadingImage && (
         <View style={styles.uploadOverlay}>
@@ -1095,6 +1560,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     elevation: 1,
   },
+  darkPinTypeCard: {
+    backgroundColor: '#1E1E1E',
+  },
   pinTypeCardContent: {
     backgroundColor: theme.colors.surface,
     paddingVertical: spacing.xs,
@@ -1114,6 +1582,11 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     fontWeight: '600',
     color: theme.colors.text,
+  },
+  darkPinTypeLabel: {
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   pinTypeGrid: {
     flexDirection: 'row',
@@ -1135,9 +1608,17 @@ const styles = StyleSheet.create({
     minHeight: 65,
     backgroundColor: theme.colors.background,
   },
+  darkPinTypeButton: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#444444',
+  },
   pinTypeButtonSelected: {
     borderWidth: 3,
     backgroundColor: theme.colors.primaryContainer,
+  },
+  darkPinTypeButtonSelected: {
+    borderWidth: 3,
+    backgroundColor: '#2A3A4A',
   },
   pinTypeText: {
     marginTop: spacing.xs / 3,
@@ -1147,12 +1628,28 @@ const styles = StyleSheet.create({
     lineHeight: 13,
     paddingHorizontal: 2,
   },
+  darkPinTypeText: {
+    marginTop: spacing.xs / 3,
+    fontSize: fontSizes.xs - 2,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 13,
+    paddingHorizontal: 2,
+  },
   pinTypeTextSelected: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  darkPinTypeTextSelected: {
     color: theme.colors.primary,
     fontWeight: '600',
   },
   cancelPlacementButton: {
     marginTop: spacing.md,
+  },
+  darkCancelPlacementButton: {
+    marginTop: spacing.md,
+    borderColor: '#444444',
   },
   content: {
     flex: 1,
@@ -1367,6 +1864,212 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     marginBottom: spacing.sm,
     textAlign: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  floorSelectorCard: {
+    margin: spacing.sm,
+    marginBottom: spacing.xs,
+    backgroundColor: theme.colors.surface,
+    elevation: 2,
+  },
+  darkFloorSelectorCard: {
+    backgroundColor: '#1E1E1E',
+  },
+  floorSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  floorSelectorTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  darkFloorSelectorTitle: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  floorList: {
+    maxHeight: 200,
+  },
+  floorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    marginVertical: spacing.xs / 2,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  darkFloorItem: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#444444',
+  },
+  floorItemSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryContainer,
+  },
+  darkFloorItemSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: '#2A3A4A',
+  },
+  floorItemContent: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  floorItemName: {
+    fontSize: fontSizes.md,
+    fontWeight: '500',
+    color: theme.colors.text,
+  },
+  darkFloorItemName: {
+    fontSize: fontSizes.md,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  floorItemNameSelected: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  darkFloorItemNameSelected: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  floorItemPins: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    marginTop: spacing.xs / 2,
+  },
+  darkFloorItemPins: {
+    fontSize: fontSizes.xs,
+    color: '#888888',
+    marginTop: spacing.xs / 2,
+  },
+  addFloorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderStyle: 'dashed',
+    backgroundColor: theme.colors.primaryContainer + '20',
+  },
+  darkAddFloorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderStyle: 'dashed',
+    backgroundColor: '#2A3A4A20',
+  },
+  addFloorText: {
+    fontSize: fontSizes.md,
+    fontWeight: '500',
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
+  },
+  darkAddFloorText: {
+    fontSize: fontSizes.md,
+    fontWeight: '500',
+    color: theme.colors.primary,
+    marginLeft: spacing.sm,
+  },
+  floorHint: {
+    fontSize: fontSizes.xs,
+    color: theme.colors.onSurfaceVariant,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+  },
+  floorItemMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  floorItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  darkDialog: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: theme.roundness,
+  },
+  darkDialogTitle: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.lg,
+    fontWeight: 'bold',
+  },
+  darkDialogText: {
+    color: '#FFFFFF',
+    fontSize: fontSizes.md,
+    marginBottom: spacing.sm,
+  },
+  darkDialogWarning: {
+    color: constructionColors.urgent,
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+  },
+  darkDialogActions: {
+    backgroundColor: '#1E1E1E',
+  },
+  darkInput: {
+    backgroundColor: '#2A2A2A',
+  },
+  darkFloorHint: {
+    fontSize: fontSizes.xs,
+    color: '#888888',
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
+  },
+  imageUploadSection: {
+    marginTop: spacing.md,
+  },
+  darkSectionLabel: {
+    fontSize: fontSizes.md,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: spacing.sm,
+  },
+  darkRequiredHint: {
+    fontSize: fontSizes.xs,
+    color: '#FFA07A',
+    fontStyle: 'italic',
+    marginBottom: spacing.sm,
+  },
+  imagePreviewContainer: {
+    marginTop: spacing.sm,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: theme.roundness,
+    marginBottom: spacing.sm,
+  },
+  imagePreviewActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  imageActionButton: {
+    flex: 1,
+    borderColor: '#444444',
+  },
+  uploadButton: {
+    marginTop: spacing.sm,
+    borderColor: '#444444',
   },
 });
 

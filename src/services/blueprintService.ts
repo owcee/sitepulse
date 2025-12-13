@@ -50,6 +50,7 @@ export interface BlueprintPin {
 export interface Blueprint {
   id: string;
   projectId: string;
+  floor: string; // Floor identifier: "Ground Floor", "1st Floor", "2nd Floor", etc.
   imageUrl: string;
   pins: BlueprintPin[];
   createdAt: Date;
@@ -57,15 +58,88 @@ export interface Blueprint {
 }
 
 /**
- * Get blueprint by project ID
+ * Get all blueprints for a project
  */
-export async function getBlueprintByProjectId(projectId: string): Promise<Blueprint | null> {
+export async function getBlueprintsByProjectId(projectId: string): Promise<Blueprint[]> {
   try {
     const blueprintsRef = collection(db, 'blueprints');
-    const q = query(blueprintsRef, where('projectId', '==', projectId));
+    const q = query(
+      blueprintsRef, 
+      where('projectId', '==', projectId),
+      orderBy('floor', 'asc') // Sort by floor name
+    );
     const snapshot = await getDocs(q);
 
-    // If no blueprint found, return null (will use default image in UI)
+    if (snapshot.empty) {
+      return [];
+    }
+
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        projectId: data.projectId,
+        floor: data.floor || 'Ground Floor', // Default for backward compatibility
+        imageUrl: data.imageUrl,
+        pins: (data.pins || []).map((pin: any) => ({
+          ...pin,
+          createdAt: pin.createdAt?.toDate() || new Date(),
+          updatedAt: pin.updatedAt?.toDate() || new Date(),
+        })),
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      };
+    });
+  } catch (error) {
+    console.error('Error getting blueprints:', error);
+    // If orderBy fails (index missing), try without it
+    try {
+      const blueprintsRef = collection(db, 'blueprints');
+      const q = query(blueprintsRef, where('projectId', '==', projectId));
+      const snapshot = await getDocs(q);
+      
+      const blueprints = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          projectId: data.projectId,
+          floor: data.floor || 'Ground Floor',
+          imageUrl: data.imageUrl,
+          pins: (data.pins || []).map((pin: any) => ({
+            ...pin,
+            createdAt: pin.createdAt?.toDate() || new Date(),
+            updatedAt: pin.updatedAt?.toDate() || new Date(),
+          })),
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        };
+      });
+      
+      // Sort by floor in memory
+      return blueprints.sort((a, b) => a.floor.localeCompare(b.floor));
+    } catch (fallbackError) {
+      console.error('Error getting blueprints (fallback):', fallbackError);
+      return [];
+    }
+  }
+}
+
+/**
+ * Get blueprint by project ID and floor
+ */
+export async function getBlueprintByProjectIdAndFloor(
+  projectId: string, 
+  floor: string
+): Promise<Blueprint | null> {
+  try {
+    const blueprintsRef = collection(db, 'blueprints');
+    const q = query(
+      blueprintsRef, 
+      where('projectId', '==', projectId),
+      where('floor', '==', floor)
+    );
+    const snapshot = await getDocs(q);
+
     if (snapshot.empty) {
       return null;
     }
@@ -76,6 +150,7 @@ export async function getBlueprintByProjectId(projectId: string): Promise<Bluepr
     return {
       id: blueprintDoc.id,
       projectId: data.projectId,
+      floor: data.floor || floor, // Use provided floor if missing in data
       imageUrl: data.imageUrl,
       pins: (data.pins || []).map((pin: any) => ({
         ...pin,
@@ -86,8 +161,29 @@ export async function getBlueprintByProjectId(projectId: string): Promise<Bluepr
       updatedAt: data.updatedAt?.toDate() || new Date(),
     };
   } catch (error) {
+    console.error('Error getting blueprint by floor:', error);
+    throw new Error('Failed to get blueprint by floor');
+  }
+}
+
+/**
+ * Get blueprint by project ID (backward compatibility - returns first blueprint or specific floor)
+ * @deprecated Use getBlueprintByProjectIdAndFloor() or getBlueprintsByProjectId() instead
+ */
+export async function getBlueprintByProjectId(projectId: string): Promise<Blueprint | null> {
+  try {
+    // Try to get "Ground Floor" first (most common)
+    const groundFloor = await getBlueprintByProjectIdAndFloor(projectId, 'Ground Floor');
+    if (groundFloor) {
+      return groundFloor;
+    }
+    
+    // If no ground floor, get all and return first
+    const blueprints = await getBlueprintsByProjectId(projectId);
+    return blueprints.length > 0 ? blueprints[0] : null;
+  } catch (error) {
     console.error('Error getting blueprint:', error);
-    throw new Error('Failed to get blueprint');
+    return null;
   }
 }
 
@@ -108,6 +204,7 @@ export async function getBlueprint(blueprintId: string): Promise<Blueprint | nul
     return {
       id: blueprintDoc.id,
       projectId: data.projectId,
+      floor: data.floor || 'Ground Floor', // Default for backward compatibility
       imageUrl: data.imageUrl,
       pins: (data.pins || []).map((pin: any) => ({
         ...pin,
@@ -135,12 +232,26 @@ export async function updateBlueprintImage(
       throw new Error('User not authenticated');
     }
 
-    // Upload new image
-    const storagePath = `blueprints/${blueprintId}/electrical_plan.jpg`;
+    // Get blueprint to find projectId and floor
+    const blueprintRef = doc(db, 'blueprints', blueprintId);
+    const blueprintDoc = await getDoc(blueprintRef);
+    
+    if (!blueprintDoc.exists()) {
+      throw new Error('Blueprint not found');
+    }
+
+    const blueprintData = blueprintDoc.data();
+    const projectId = blueprintData.projectId;
+    const floor = blueprintData.floor || 'Ground Floor';
+    
+    // Sanitize floor name for storage path (replace spaces with underscores)
+    const sanitizedFloor = floor.replace(/\s+/g, '_').toLowerCase();
+
+    // Upload new image with floor-based path
+    const storagePath = `blueprints/${projectId}/${sanitizedFloor}/electrical_plan.jpg`;
     const imageUrl = await uploadWithProgress(storagePath, imageUri);
 
     // Update blueprint document
-    const blueprintRef = doc(db, 'blueprints', blueprintId);
     await updateDoc(blueprintRef, {
       imageUrl: imageUrl,
       updatedAt: serverTimestamp()
@@ -209,6 +320,9 @@ export async function addPinToBlueprint(
     // Get updated blueprint to return the new pin with proper ID
     const updatedDoc = await getDoc(blueprintRef);
     const updatedData = updatedDoc.data();
+    if (!updatedData) {
+      throw new Error('Failed to retrieve updated blueprint');
+    }
     const pins = updatedData.pins || [];
     const createdPin = pins[pins.length - 1]; // Last pin is the one we just added
 
@@ -385,6 +499,91 @@ export async function linkTaskToPin(
   } catch (error) {
     console.error('Error linking task to pin:', error);
     throw new Error('Failed to link task to pin');
+  }
+}
+
+/**
+ * Create a new blueprint for a project and floor
+ */
+export async function createBlueprint(
+  projectId: string,
+  floor: string,
+  imageUri?: string
+): Promise<Blueprint> {
+  try {
+    if (!auth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    if (!floor || floor.trim() === '') {
+      throw new Error('Floor name is required');
+    }
+
+    // Check if blueprint for this floor already exists
+    const existing = await getBlueprintByProjectIdAndFloor(projectId, floor);
+    if (existing) {
+      throw new Error(`Blueprint for ${floor} already exists`);
+    }
+
+    let imageUrl = '';
+    
+    // Upload image if provided
+    if (imageUri) {
+      const sanitizedFloor = floor.replace(/\s+/g, '_').toLowerCase();
+      const storagePath = `blueprints/${projectId}/${sanitizedFloor}/electrical_plan.jpg`;
+      imageUrl = await uploadWithProgress(storagePath, imageUri);
+    }
+
+    // Create blueprint document
+    const blueprintsRef = collection(db, 'blueprints');
+    const blueprintDoc = await addDoc(blueprintsRef, {
+      projectId: projectId,
+      floor: floor.trim(),
+      imageUrl: imageUrl,
+      pins: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    const blueprint: Blueprint = {
+      id: blueprintDoc.id,
+      projectId: projectId,
+      floor: floor.trim(),
+      imageUrl: imageUrl,
+      pins: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    console.log('✅ Blueprint created:', blueprintDoc.id, 'Floor:', floor);
+    return blueprint;
+  } catch (error: any) {
+    console.error('Error creating blueprint:', error);
+    throw new Error(`Failed to create blueprint: ${error.message}`);
+  }
+}
+
+/**
+ * Delete a blueprint
+ */
+export async function deleteBlueprint(blueprintId: string): Promise<void> {
+  try {
+    if (!auth.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const blueprintRef = doc(db, 'blueprints', blueprintId);
+    const blueprintDoc = await getDoc(blueprintRef);
+    
+    if (!blueprintDoc.exists()) {
+      throw new Error('Blueprint not found');
+    }
+
+    await deleteDoc(blueprintRef);
+    console.log('✅ Blueprint deleted:', blueprintId);
+  } catch (error) {
+    console.error('Error deleting blueprint:', error);
+    throw new Error('Failed to delete blueprint');
   }
 }
 

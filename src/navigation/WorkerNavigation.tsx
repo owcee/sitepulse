@@ -14,9 +14,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 // Worker Screens
-import WorkerTasksScreen from '../screens/worker/WorkerTasksScreen';
-import WorkerTaskDetailScreen from '../screens/worker/WorkerTaskDetailScreen';
-import InventoryUseScreen from '../screens/worker/InventoryUseScreen';
+import WorkerBlueprintScreen from '../screens/worker/WorkerBlueprintScreen';
 import ChatScreen from '../screens/shared/ChatScreen';
 import NotificationsScreen from '../screens/worker/NotificationsScreen';
 import SettingsScreen from '../screens/worker/SettingsScreen';
@@ -171,13 +169,7 @@ const WorkerHeader = ({ user, project, onLogout, onProjectChange }: Props & { on
   );
 };
 
-// Stack navigator for Tasks to handle task detail navigation
-const TasksStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="WorkerTasksList" component={WorkerTasksScreen} />
-    <Stack.Screen name="WorkerTaskDetail" component={WorkerTaskDetailScreen} />
-  </Stack.Navigator>
-);
+// Blueprint screen doesn't need a stack navigator
 
 // Stack navigator for Settings to handle legal documents
 const SettingsStack = () => (
@@ -446,11 +438,8 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
             let iconName: keyof typeof Ionicons.glyphMap;
 
             switch (route.name) {
-              case 'Tasks':
-                iconName = focused ? 'checkmark-circle' : 'checkmark-circle-outline';
-                break;
-              case 'Inventory Use':
-                iconName = focused ? 'cube' : 'cube-outline';
+              case 'Blueprint':
+                iconName = focused ? 'map' : 'map-outline';
                 break;
               case 'Chat':
                 iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
@@ -484,14 +473,9 @@ export default function WorkerNavigation({ user, project, onLogout, onRefresh }:
         })}
       >
         <Tab.Screen 
-          name="Tasks" 
-          component={TasksStack}
-          options={{ tabBarLabel: 'Tasks' }}
-        />
-        <Tab.Screen 
-          name="Inventory Use" 
-          component={InventoryUseScreen}
-          options={{ tabBarLabel: 'Inventory' }}
+          name="Blueprint" 
+          component={WorkerBlueprintScreen}
+          options={{ tabBarLabel: 'Blueprint' }}
         />
         <Tab.Screen 
           name="Chat" 

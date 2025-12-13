@@ -118,22 +118,23 @@ export async function createProject(projectData: {
       blueprintImageUrl: finalBlueprintUrl
     });
 
-    // Create blueprint document
+    // Create blueprint document with default "Ground Floor"
     const blueprintsRef = collection(db, 'blueprints');
     const blueprintDoc = await addDoc(blueprintsRef, {
       projectId: projectDoc.id,
-      imageUrl: projectData.blueprintImageUrl,
+      floor: 'Ground Floor', // Default floor for new projects
+      imageUrl: finalBlueprintUrl,
       pins: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
-    // Update project with blueprint ID
+    // Update project with blueprint ID (for backward compatibility)
     await updateDoc(projectDoc, {
       blueprintId: blueprintDoc.id
     });
 
-    console.log('✅ Blueprint document created:', blueprintDoc.id);
+    console.log('✅ Blueprint document created:', blueprintDoc.id, 'Floor: Ground Floor');
 
     // Create initial budget document in budgets collection with the same structure as BudgetLogsManagementPage
     const { saveBudget } = await import('./firebaseDataService');
